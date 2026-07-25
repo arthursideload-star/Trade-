@@ -80,12 +80,73 @@ gelten nicht automatisch für die nächste.
 
 ---
 
+---
+
+## 2026-07-25 (Nachtrag) — Auswertung des Beispiel-Bots
+
+### E5: "EasyTrading AI Assistant" wird nicht als Vorbild verwendet
+
+Der Nutzer stellte eine Telegram-Mini-App als Beispiel vor. Auswertung der Screenshots:
+
+| Beobachtung | Einordnung |
+|---|---|
+| "Auszahlung 92 %" | Binäre Optionen, kein Handel. Break-Even-Trefferquote 100/192 = **52,08 %**; bei 50 % Trefferquote liegt der Hausvorteil bei 4 % pro Wette |
+| Instrumente "AUD/CAD OTC", "EUR/RUB OTC" | OTC-Paare existieren an keiner Börse. Kursfeed wird vom Anbieter selbst erzeugt |
+| Zeitrahmen 1 s / 5 s / 10 s | Keine handelbare Marktinformation auf dieser Auflösung |
+| Einsatzfolge 10,00 → 21,96 → 48,22 $ | **Martingale**, konstanter Faktor ~2,196 |
+| Demo-Guthaben 50.172 $ | Absorbiert ~12 Verluste in Folge — die Progression wirkt dort sicher |
+
+**Die entscheidende Rechnung:** Bei 30 € Realkapital ist bereits Schritt 2 der Progression
+(10,00 $ + 21,96 $ = 31,96 $) nicht mehr finanzierbar. Zwei Fehlschläge in Folge — Wahrschein-
+lichkeit ~25 % — beenden das Konto. Die Strategie, die im Demo unfehlbar aussieht, ist auf dem
+Realkonto mathematisch nicht durchführbar.
+
+**Konsequenz:** Kein Vorbild für dieses Projekt. Martingale-Progressionen sind im Risk-Layer
+ausdrücklich ausgeschlossen (siehe V7 unten). Der Nutzer hat dort einen kleinen Betrag
+eingezahlt und wurde zur Auszahlung und Dokumentation beraten.
+
+### E6: Plattform — Krypto + Freqtrade, Perpetuals mit 1× Hebel
+
+**Entscheidung** nach quantitativem Vergleich (siehe `PLATTFORM-VERGLEICH.md`).
+
+MetaTrader 5 scheidet aus einem harten Grund aus: Die kleinstmögliche Position (0,01 Lot
+EUR/USD) erfordert unter ESMA-Hebelgrenze 1:30 rund **33 € Margin** — mehr als das gesamte
+Startkapital von 30 €. Dazu kommt, dass das offizielle `MetaTrader5`-Python-Paket nur unter
+Windows läuft und Forex am Wochenende ruht, was dem 24/7-Ziel widerspricht.
+
+Krypto Spot funktioniert mit 30 € (Mindestordergröße 5 USDT), ist für den gewünschten
+Handelsstil aber zu teuer: 0,16 % pro Roundtrip ergeben bei 5 Trades/Tag rund 200 % Kostenlast
+pro Jahr.
+
+**Gewählt: USDT-Perpetuals mit hart auf 1× begrenztem Hebel.** Gebührenstruktur der Futures
+(0,02 % Maker je Seite = 0,04 % Roundtrip, Faktor 4 günstiger als Spot), Risikoprofil einer
+Spot-Position (Liquidation ~100 % entfernt). Funding fällt bei Haltedauern unter 8 Stunden
+meist nicht an.
+
+MT5 bleibt als spätere Ergänzung offen, sobald das Konto 300–500 € erreicht — Forex und Krypto
+sind schwach korreliert und wären echte Diversifikation.
+
+### E7: Zusätzliche harte Vorgaben aus dem Vergleich
+
+| # | Vorgabe |
+|---|---|
+| V1 | Post-Only-Limit-Orders sind Pflicht; Market-Orders nur bei Stop-Auslösung |
+| V2 | Hebel hart auf 1× begrenzt — im Code, nicht in der Börsenoberfläche |
+| V3 | Maximal 3 Trades pro Tag und Symbol |
+| V4 | Mindest-Zielbewegung 0,5 % (≈ 10× Roundtrip-Kosten) |
+| V5 | Nicht-Ausführung von Post-Only-Orders muss im Backtest simuliert werden |
+| V6 | Funding-Kosten werden mitgerechnet |
+| **V7** | **Keine Martingale-, Grid- oder Averaging-Down-Logik.** Positionsgrößen werden bei Verlusten nie erhöht |
+
+---
+
 ## Offene Punkte
 
 | # | Frage | Status |
 |---|---|---|
 | O1 | Welche Börse ist die primäre Handelsbörse — Binance oder Bybit? | offen |
-| O2 | Zielhaltedauer bei "kurzen Trades" — Minuten, Stunden oder Intraday? Bestimmt Zeitrahmen, Datenauflösung und Infrastrukturanforderungen | offen |
-| O3 | Konkrete Kapitalstufen (Start und Erhöhungsschritte) | offen |
-| O4 | Läuft der Bot auf einem eigenen VPS? Falls ja, welcher Standort (Börsennähe)? | offen |
-| O5 | Beispiel-Bot des Nutzers — wird noch bereitgestellt und ausgewertet | wartend |
+| O2 | Zielhaltedauer konkret — Minuten oder Stunden? Bestimmt Zeitrahmen und Datenauflösung | offen |
+| O3 | Konkrete Kapitalstufen (Erhöhungsschritte ab 30 €) | offen |
+| O4 | VPS-Anbieter und Standort (Börsennähe) | zugesagt, sobald Ergebnisse stimmen |
+| O5 | Auswertung des Beispiel-Bots | ✅ erledigt (E5) |
+| O6 | Plattformentscheidung | ✅ erledigt (E6) |
