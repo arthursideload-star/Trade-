@@ -1,0 +1,32 @@
+{
+  "name": "trading-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for comprehensive stock analysis and trading insights",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node --esm src/server.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mcp", "trading", "stocks", "analysis", "finviz", "reddit", "openai"],
+  "author": "Trading MCP Server",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "zod": "^3.22.0",
+    "dotenv": "^16.3.0",
+    "openai": "^4.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 
