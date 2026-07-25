@@ -340,6 +340,26 @@ hinzugefuegt): weltweite **Nachrichten** und **Disclosure-/"Insider"-Daten**.
 
 | # | Frage | Status |
 |---|---|---|
-| O10 | Marktscope: nur Forex, oder auch US-Aktien/Krypto (nutzt News/Disclosure voll)? | offen |
-| O11 | Spaetere Autonomie: Halbautomat behalten oder Vollautomat (braucht API/Kosten)? | offen |
+| O10 | Marktscope | ✅ Phase A nur Forex (E17) |
+| O11 | Spaetere Autonomie | ✅ Vollautomat als Ziel, sobald Startkapital da ist (E17) |
 | O12 | Konkrete Namen/Autorisierung der beiden MCP-Server (News, Disclosure) | offen |
+| O13 | Broker fuer echtes Geld | vertagt (spaeter entscheiden) |
+
+### E17: Roadmap bestaetigt (Nutzer-Antworten 2026-07-25)
+
+**Entscheidung** aus vier Nutzer-Antworten:
+
+1. **Marktscope Phase A:** nur **Forex** (Halbautomat). Aktien/Krypto spaeter.
+2. **Architektur:** Der **Chat** (Claude-Code-Skills-Projekt) reicht fuer den Halbautomaten, bei
+   dem der Nutzer die Trades selbst klickt. Ein **gehostetes Dashboard/Website** ist ein
+   Nice-to-have jetzt und **Pflicht spaetestens beim Vollautomaten** (Ueberblick uebers System).
+3. **Broker:** spaeter entscheiden (Demo laeuft auf PuPrime).
+4. **Autonomie-Ziel:** Sobald ein gutes **Startkapital** vorhanden ist, ein **Vollautomat**, der
+   moeglichst taeglich automatisch handelt. Braucht dann Anthropic-API (Claude im Loop) oder einen
+   deterministischen Bot ohne Claude im Loop — Entscheidung bei Phase-B-Start.
+
+**Konkrete Phasen daraus:**
+- **Phase A (jetzt):** Forex-Halbautomat als Chat/Skills-Projekt. Du klickst die Trades.
+- **Phase A.5 (optional):** kleines gehostetes Dashboard fuer den Ueberblick.
+- **Phase B (mit Kapital):** Vollautomat 24/7 + Website/Dashboard. Autonomie-Technik und Kosten
+  werden zu Phase-B-Start entschieden.

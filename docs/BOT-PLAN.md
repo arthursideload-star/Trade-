@@ -168,9 +168,19 @@ Bester Zeitpunkt: **London/NY-Overlap (ca. 12–16 Uhr UTC)** — engste Spreads
 
 ---
 
-## 8. Offene Punkte für den neuen Chat
+## 8. Bestätigte Roadmap (Nutzer-Entscheidungen)
 
-- Marktscope: nur Forex, oder auch US-Aktien/Krypto (dann werden News/Disclosure voll nutzbar)?
-- Broker für echtes Geld später (Empfehlung: IC Markets, Tier-1) — Demo läuft vorerst auf PuPrime.
-- Konkrete MCP-Namen/Autorisierung der beiden hinzugefügten Server (News, Disclosure).
+- **Phase A (jetzt):** **nur Forex**, Halbautomat als **Chat/Skills-Projekt**. Du klickst die
+  Trades selbst in MT5. Kein echtes Geld, PuPrime-Demo.
+- **Phase A.5 (optional):** kleines **gehostetes Dashboard** für den Überblick, wenn gewünscht.
+- **Phase B (mit Startkapital):** **Vollautomat** 24/7, der möglichst täglich automatisch handelt,
+  **plus Website/Dashboard**. Braucht dann Anthropic-API (Claude im Loop) oder einen
+  deterministischen Bot — Entscheidung zu Phase-B-Start. Broker für echtes Geld dann festlegen
+  (Empfehlung: IC Markets, Tier-1).
+
+## 9. Offene Punkte für den neuen Chat
+
 - Twelve-Data-API-Key (kostenlos) anlegen.
+- Konkrete MCP-Namen/Autorisierung der beiden hinzugefügten Server (News, Disclosure) — in der
+  interaktiven Sitzung freigeben.
+- Aktien/Krypto-Marktscope erst nach bewährtem Forex-Halbautomaten.
