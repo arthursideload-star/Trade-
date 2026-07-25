@@ -126,9 +126,9 @@ Direkt aus TRADING-WISSEN.md und den Projektgrundsätzen (CLAUDE.md: Risikolimit
 | Sprint | Inhalt | Ergebnis | Stand |
 |---|---|---|---|
 | **B1** | Projektgerüst als Claude-Code-Skills-Projekt; Twelve-Data-Anbindung; erste Kerzen | Daten fließen | **fertig** — `skills/forex-data/` |
-| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen | offen |
-| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt | offen |
-| **B4** | Top-Down-Orchestrierung durch Claude + Empfehlungskarte (Teil XXVI.3) | Erste echte Empfehlung | offen |
+| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen | **fertig** — `skills/forex-analysis/` |
+| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt | **fertig** — `skills/forex-analysis/patterns.py` |
+| **B4** | Top-Down-Orchestrierung durch Claude + Empfehlungskarte (Teil XXVI.3) | Erste echte Empfehlung | **fertig** — `skills/forex-signal/` |
 | **B5** | News-MCP-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz | offen |
 | **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit | offen |
 | **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale | offen |
@@ -140,7 +140,18 @@ adaptiert statt neu gebaut werden.
 **Gefunden in B1:** Der Vorlage-Branch heißt hier `claude/trading-skills-repo-4q0qo9` und enthält
 70 Skills. Übernommene Konventionen: `skills/<name>/SKILL.md` mit `scripts/`, `scripts/tests/` und
 `references/`; Skripte nur mit Standardbibliothek; JSON nach stdout, Diagnose nach stderr.
-Für B2 sind dort `position-sizer`, `technical-analyst` und `backtest-expert` die nächsten Vorlagen.
+
+**Umgesetzt in B2–B4:** Alle Rechner in reinem Python (kein `ta-lib` — die C-Bibliothek wäre in
+der iPad-Sitzung nicht da). Struktur:
+- `skills/forex-analysis/` (B2+B3): `indicators.py` (EMA/RSI/MACD/ATR/ADX/Bollinger/Stochastik,
+  Wilder-Glättung), `regime.py`, `levels.py`, `patterns.py` (Muster **nur am Level** + Fehlausbruch),
+  `position_sizing.py` (R1/R3/R7/R8), `risk_rules.py` (R1–R8 als Gate), `analyze.py` (CLI).
+- `skills/forex-signal/` (B4): `signal_score.py` (Gewichte aus PLAN.md A5, Volumen-Gewicht
+  umverteilt statt genullt), `recommend.py` (Empfehlungskarte).
+- Stop und Ziel kommen aus der Struktur; R:R ist gemessen und kann R3 verletzen.
+- R2 (Tagesverlust) und R4 (News) bleiben `need_input`, bis B5 den News-Feed anbindet — bewusst
+  **nicht** „ok", damit eine ungeprüfte Regel nie wie eine bestandene aussieht.
+- 252 Tests grün.
 
 ---
 

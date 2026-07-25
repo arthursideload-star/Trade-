@@ -3,7 +3,8 @@
 Trading-Assistent für Forex. Claude analysiert auf Anfrage ein Währungspaar und gibt eine
 begründete Empfehlung — gehandelt wird manuell auf einem MT5-Demokonto.
 
-**Aktueller Stand:** Phase A, Sprint B1 abgeschlossen — die Datenanbindung steht.
+**Aktueller Stand:** Phase A, Sprints B1–B4 abgeschlossen — von der Datenanbindung bis zur
+Empfehlungskarte. Es fehlen nur noch News-Veto (B5) und Trade-Journal (B6).
 
 ## Zwei Phasen
 
@@ -17,25 +18,28 @@ begründete Empfehlung — gehandelt wird manuell auf einem MT5-Demokonto.
 | Sprint | Inhalt | Stand |
 |---|---|---|
 | **B1** | Projektgerüst als Skills-Projekt, Twelve-Data-Anbindung, erste Kerzen | fertig |
-| **B2** | Deterministische Rechner: Trend/Regime, Indikatoren, Level, ATR, Größe, R:R | offen |
-| **B3** | Kerzen-, Muster- und Fehlausbruch-Erkennung, ausschließlich am Level | offen |
-| **B4** | Top-Down-Orchestrierung durch Claude, Empfehlungskarte | offen |
+| **B2** | Deterministische Rechner: Trend/Regime, Indikatoren, Level, ATR, Größe, R:R | fertig |
+| **B3** | Kerzen-, Muster- und Fehlausbruch-Erkennung, ausschließlich am Level | fertig |
+| **B4** | Top-Down-Orchestrierung durch Claude, Empfehlungskarte | fertig |
 | **B5** | News-Anbindung und News-Veto, Wirtschaftskalender | offen |
 | **B6** | Trade-Journal und wöchentliche Auswertung | offen |
 
 ## Aufbau
 
 ```
-skills/forex-data/       Kerzendaten von Twelve Data (Sprint B1)
-  SKILL.md               Wann und wie Claude den Skill nutzt
-  scripts/               Standardbibliothek, keine Installation nötig
-  references/            API-Referenz, Limits, Fallstricke
-backend/                 Optionales Dashboard (Phase A.5), nutzt denselben Client
-docs/                    Pläne und Wissensbasis
+skills/forex-data/       Kerzendaten von Twelve Data (B1)
+skills/forex-analysis/    Indikatoren, Regime, Level, Muster, Sizing, R1–R8 (B2+B3)
+skills/forex-signal/      Signal-Score und Empfehlungskarte (B4)
+backend/                  Optionales Dashboard (Phase A.5), nutzt denselben Client
+docs/                     Pläne und Wissensbasis
 ```
 
+Jeder Skill folgt derselben Form: `SKILL.md` (wann/wie Claude ihn nutzt), `scripts/` (reine
+Standardbibliothek, keine Installation nötig), `scripts/tests/` und `references/`.
+
 Es gibt genau **eine** Stelle mit API-Zugriff: `skills/forex-data/scripts/twelvedata_client.py`.
-Das Dashboard greift darauf zu, statt eine zweite Anbindung zu pflegen.
+Alles andere rechnet auf den Kerzen, die von dort kommen. Die Risikoregeln R1–R8 stehen als
+Konstanten im Code (`skills/forex-analysis/scripts/risk_rules.py`), nicht in Konfigurationsdateien.
 
 ## Einrichtung
 
@@ -48,6 +52,12 @@ Kerzen holen — ohne jede Installation:
 
 ```bash
 python skills/forex-data/scripts/fetch_candles.py --symbol EUR/USD --interval 5m,15m,1h,4h
+```
+
+Vollständige Empfehlung für ein Paar:
+
+```bash
+python skills/forex-signal/scripts/recommend.py --symbol EUR/USD --account 10000 --format text
 ```
 
 Tests:
