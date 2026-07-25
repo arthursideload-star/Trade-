@@ -5,7 +5,13 @@ selbstständig.
 
 **Aktueller Stand:** Architektur und Roadmap stehen. Implementierung beginnt mit Sprint 1.
 
-👉 Vollständiger Plan: **[PLAN.md](./PLAN.md)**
+## Dokumente
+
+| Dokument | Inhalt |
+|---|---|
+| **[PLAN.md](./PLAN.md)** | Architektur und Umsetzungs-Roadmap (Sprints S1–S10) |
+| **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Recherchierte Wissensbasis: Gewinn- und Verlustmechanik, Kerzen, Charts, Setups, Krypto-Signale, Validierung, Risiko, Datenquellen |
+| **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 
 ## Systemüberblick
 
