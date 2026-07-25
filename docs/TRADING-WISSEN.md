@@ -1,11 +1,20 @@
 # Trading-Wissensbasis
 
 Rechercheergebnis für das Trading-Bot-Projekt.
-Stand: 2026-07-25
+Stand: 2026-07-25 (Recherche-Runde 2 — auf mehr als das Doppelte erweitert)
 
-Dieses Dokument sammelt, was für den Bau des Bots inhaltlich relevant ist: wie im Markt Geld
-entsteht, wie man es schnell verliert, was Kerzen und Charts wirklich aussagen, wie man
-Gelegenheiten maschinell erkennt und welche Datenquellen angebunden werden sollten.
+Dieses Dokument sammelt, was für den Bau des Bots und des Trading-Assistenten inhaltlich relevant
+ist: wie im Markt Geld entsteht, wie man es schnell verliert, was Kerzen und Charts wirklich
+aussagen, wie man Gelegenheiten maschinell erkennt und welche Datenquellen angebunden werden
+sollten.
+
+**Aufbau:** Teile I–XII sind die Grundlage aus Runde 1 (marktmechanik-, krypto- und
+validierungsorientiert). Teile XIII–XXVI kamen in Runde 2 hinzu, mit Fokus auf **Forex** (Phase A,
+Trading-Assistent), eine **vollständige Kerzen- und Chartmuster-Enzyklopädie**, **konkrete
+Handelsstrategien mit vollständigen Regeln**, die vertieften Schulen (**SMC/ICT, Wyckoff, Elliott,
+Fibonacci, harmonische Muster**), **Methodiken bekannter Trader** (Minervini, O'Neil, Stockbee,
+Shapiro, PEAD, Druckenmiller, Turtles), **Trade-Management**, **Handelspsychologie** und die
+konkrete **Abbildung des Wissens auf die Analyse-Engine des Assistenten**.
 
 **Zur Belastbarkeit der Zahlen:** Quellen sind unterschiedlich hart. Ich kennzeichne sie:
 - 🎓 **peer-reviewed / akademisch** — belastbar
@@ -29,6 +38,32 @@ Gelegenheiten maschinell erkennt und welche Datenquellen angebunden werden sollt
 - [Teil X — Was du verknüpfen solltest](#teil-x--was-du-verknüpfen-solltest)
 - [Teil XI — Alpha-Zerfall](#teil-xi--alpha-zerfall-warum-strategien-sterben)
 - [Teil XII — Die wichtigsten Erkenntnisse](#teil-xii--die-wichtigsten-erkenntnisse-kompakt)
+
+**Erweiterung 2026-07-25 (Recherche-Runde 2 — Forex-Fokus & Strategie-Tiefe):**
+- [Teil XIII — Forex-Grundlagen und Marktmechanik](#teil-xiii--forex-grundlagen-und-marktmechanik)
+- [Teil XIV — Kerzenmuster-Enzyklopädie](#teil-xiv--kerzenmuster-enzyklopädie)
+- [Teil XV — Chartmuster-Enzyklopädie](#teil-xv--chartmuster-enzyklopädie)
+- [Teil XVI — Konkrete Handelsstrategien mit vollständigen Regeln](#teil-xvi--konkrete-handelsstrategien-mit-vollständigen-regeln)
+- [Teil XVII — Smart Money Concepts / ICT vertieft](#teil-xvii--smart-money-concepts--ict-vertieft)
+- [Teil XVIII — Wyckoff vertieft](#teil-xviii--wyckoff-vertieft)
+- [Teil XIX — Elliott Wave, Fibonacci, Harmonische Muster](#teil-xix--elliott-wave-fibonacci-harmonische-muster)
+- [Teil XX — Methodiken bekannter Trader](#teil-xx--methodiken-bekannter-trader)
+- [Teil XXI — Multi-Timeframe Top-Down-Workflow](#teil-xxi--multi-timeframe-top-down-workflow)
+- [Teil XXII — Trade-Management vertieft](#teil-xxii--trade-management-vertieft)
+- [Teil XXIII — Handelspsychologie und Prozessdisziplin](#teil-xxiii--handelspsychologie-und-prozessdisziplin)
+- [Teil XXIV — News- und Event-Trading](#teil-xxiv--news--und-event-trading)
+- [Teil XXV — Muster aus echten Trades](#teil-xxv--muster-aus-echten-trades)
+- [Teil XXVI — Umsetzung im Trading-Assistenten](#teil-xxvi--umsetzung-im-trading-assistenten)
+- [Teil XXVII — Indikatoren im Detail](#teil-xxvii--indikatoren-im-detail)
+- [Teil XXVIII — Order-Typen, Spread, Slippage und Ausführung](#teil-xxviii--order-typen-spread-slippage-und-ausführung)
+- [Teil XXIX — Risiko-Rechenbeispiele](#teil-xxix--risiko-rechenbeispiele)
+- [Teil XXX — Backtest- und Journal-Metriken](#teil-xxx--backtest--und-journal-metriken)
+- [Teil XXXI — Setup-Steckbriefe (Kurzreferenz)](#teil-xxxi--setup-steckbriefe-kurzreferenz)
+- [Teil XXXII — Glossar A–Z](#teil-xxxii--glossar-az)
+- [Teil XXXIII — Instrumentenprofile: der Charakter der Paare](#teil-xxxiii--instrumentenprofile-der-charakter-der-paare)
+- [Teil XXXIV — Der schriftliche Handelsplan (Vorlage)](#teil-xxxiv--der-schriftliche-handelsplan-vorlage)
+- [Teil XXXV — Zusätzliche Kernerkenntnisse (Runde 2)](#teil-xxxv--zusätzliche-kernerkenntnisse-runde-2)
+- [Teil XXXVI — Einen Chart lesen: durchgerechnetes Beispiel](#teil-xxxvi--einen-chart-lesen-durchgerechnetes-beispiel)
 - [Quellen](#quellen)
 
 ---
@@ -1543,6 +1578,1590 @@ Architektur muss auf Strategiewechsel ausgelegt sein, nicht auf eine perfekte St
 
 ---
 
+# Teil XIII — Forex-Grundlagen und Marktmechanik
+
+Dieser Teil kam mit dem Strategiewechsel zu Phase A (Trading-Assistent, Forex auf MT5-Demo)
+hinzu. Der Krypto-Teil (Teil VII) bleibt für Phase B gültig. Forex und Krypto teilen die
+Technik der Analyse, unterscheiden sich aber in Mechanik, Handelszeiten und Kostenstruktur.
+
+## 13.1 Die Bausteine: Pip, Punkt, Lot, Spread
+
+| Begriff | Definition | Beispiel |
+|---|---|---|
+| **Pip** | Kleinste "normale" Kursänderung; bei den meisten Paaren die 4. Nachkommastelle | EUR/USD 1,0842 → 1,0843 = 1 Pip |
+| **Pip bei JPY-Paaren** | 2. Nachkommastelle | USD/JPY 148,52 → 148,53 = 1 Pip |
+| **Pipette / Point** | Zehntel-Pip, 5. Nachkommastelle (bzw. 3. bei JPY) | 1,08425 → 1,08426 = 1 Point |
+| **Lot (Standard)** | 100.000 Einheiten der Basiswährung | 1 Lot EUR/USD ≈ 108.420 $ Positionswert |
+| **Mini-Lot** | 10.000 Einheiten (0,1 Lot) | Pip-Wert ≈ 1 $ |
+| **Micro-Lot** | 1.000 Einheiten (0,01 Lot) | Pip-Wert ≈ 0,10 $ |
+| **Spread** | Differenz Ask − Bid, die sofortige Kostenlast | EUR/USD oft 0,1–1,0 Pip |
+
+**Pip-Wert-Formel** (für Paare mit USD als Notierungswährung, z. B. EUR/USD):
+
+```
+Pip-Wert = Lot-Größe × 0,0001
+1 Standard-Lot: 100.000 × 0,0001 = 10 $ pro Pip
+1 Micro-Lot:      1.000 × 0,0001 = 0,10 $ pro Pip
+```
+
+Für den Assistenten wichtig: **Alle Ziel-/Stop-Angaben werden zusätzlich in Pip und in Prozent
+ausgegeben**, weil der Nutzer auf MT5 in Lot denkt, die Risiko-Rechnung aber in Prozent des
+Kontos läuft. Ein Stop von 32 Pips bei EUR/USD ≈ 0,30 % Kursbewegung.
+
+## 13.2 Die drei Handelssitzungen und warum die Uhrzeit alles ist 🔶
+
+Forex läuft 24/5. Aber Volatilität und Liquidität sind extrem tageszeitabhängig. Kernzeiten
+(UTC, Sommerzeit; im Winter jeweils −1 h beachten):
+
+| Sitzung | Zeit (UTC) | Charakter |
+|---|---|---|
+| **Sydney** | 21:00–06:00 | Dünn, geringe Bewegung, weite Spreads |
+| **Tokio (Asien)** | 00:00–09:00 | JPY-, AUD-, NZD-Paare aktiver; oft Range-Bildung |
+| **London** | 07:00–16:00 | Höchstes Volumen der Welt; Trends starten hier |
+| **New York** | 12:00–21:00 | USD-Nachrichten, zweite Volumenwelle |
+
+**Das London–New-York-Overlap (ca. 12:00–16:00 UTC) ist das wichtigste Fenster.** Beide
+größten Zentren sind gleichzeitig offen: engste Spreads, höchste Liquidität, größte Bewegungen
+in EUR/USD, GBP/USD, USD/JPY. Für einen Assistenten, der kurze Trades vorschlägt, ist dieses
+Fenster der ergiebigste Zeitraum. (Quelle: OANDA, FBS, Maven Trading — 🔶 Branchenkonsens.)
+
+**Praktische Konsequenz für den Assistenten:**
+- Ein Signal während des Asien-Nachmittags (dünnes Volumen) bekommt einen **Zeit-Malus** auf
+  die Konfidenz.
+- Die "London-Eröffnung" (07:00–09:00 UTC) und der Overlap-Beginn (12:00–13:00 UTC) sind die
+  beiden häufigsten Zeitpunkte für saubere Ausbrüche.
+- Freitagnachmittag (nach 19:00 UTC) und Sonntagabend-Eröffnung: dünn, sprunghaft, meiden.
+
+## 13.3 Währungskorrelationen — Diversifikation ist oft eine Illusion 🔶
+
+Korrelationen zwischen Paaren sind hoch und relativ stabil. Wer drei stark korrelierte Paare
+gleichzeitig long ist, hat **eine** Position in dreifacher Größe, nicht drei Positionen.
+
+| Paar-Beziehung | Typische Korrelation | Grund |
+|---|---|---|
+| EUR/USD ↔ GBP/USD | **+0,90 bis +0,95** | Eng verbundene Volkswirtschaften, beide gegen USD |
+| EUR/USD ↔ USD/CHF | **−0,90 bis −0,95** | CHF läuft wie EUR, aber USD steht vorne → invers |
+| AUD/USD ↔ NZD/USD | **+0,90+** | Beide Rohstoff-/China-getrieben |
+| USD/CAD ↔ WTI-Öl | **stark negativ** | Kanada ist Ölexporteur |
+| AUD/USD ↔ Gold/Kupfer | positiv | Australien ist Rohstoffexporteur |
+| XAU/USD (Gold) ↔ DXY | **negativ** | Gold in USD notiert; starker USD = billigeres Gold |
+
+(Quellen: Dukascopy, Mataf, DefcoFX — 🔶. Korrelationen driften; als Momentaufnahme, nicht als
+Konstante behandeln. Der Assistent sollte sie rollierend über z. B. 20–60 Tage berechnen.)
+
+**Regel für den Risk-Layer:** Wenn zwei offene/vorgeschlagene Trades |ρ| > 0,7 haben, zählen sie
+gemeinsam auf das Risikobudget. Zwei gleichgerichtete Longs in EUR/USD und GBP/USD = 1,8-fache
+Positionsgröße, nicht 2 × 1 %.
+
+## 13.4 Der US-Dollar-Index (DXY) als übergeordneter Taktgeber
+
+Der DXY misst den USD gegen einen Korb (EUR 57,6 %, JPY, GBP, CAD, SEK, CHF). Weil EUR/USD über
+die Hälfte des Index ausmacht, ist DXY ↑ fast gleichbedeutend mit EUR/USD ↓. Für den Assistenten
+ist der DXY-Trend ein **Kontextfilter**: Ein Long-Signal in EUR/USD gegen einen starken
+DXY-Aufwärtstrend wird abgewertet.
+
+## 13.5 Carry, Swap und Rollover
+
+Wer eine Position über 22:00 UTC hält, zahlt oder erhält **Swap** — die Zinsdifferenz der beiden
+Währungen. Long in einem Hochzinspaar gegen eine Niedrigzinswährung bringt positiven Carry, umgekehrt
+Kosten. Für sehr kurze Trades (Intraday-Schließung) irrelevant; für Halten über Nacht ein realer
+Posten, der ins Kostenmodell gehört (analog zu Funding in Krypto, Teil VII).
+
+## 13.6 Was Forex von Krypto unterscheidet (Zusammenfassung)
+
+| Dimension | Forex | Krypto-Perp |
+|---|---|---|
+| Handelszeit | 24/5, sitzungsabhängig | 24/7 |
+| Wochenend-Gap | Ja (So-Eröffnung springt) | Nein |
+| Zentrale Treiber | Zinsen, Makrodaten, Zentralbanken | Funding, OI, Liquidationen, On-Chain |
+| Volatilität | niedriger (Majors ~0,5–0,8 %/Tag) | höher (BTC ~2–4 %/Tag) |
+| Beste Zeit | London/NY-Overlap | rund um die Uhr, aber US-Handelszeit aktiver |
+| Kostentreiber | Spread + Swap | Maker/Taker-Fee + Funding |
+
+---
+
+# Teil XIV — Kerzenmuster-Enzyklopädie
+
+Ergänzt Teil III um eine vollständige, einzeln aufgeschlüsselte Musterliste. **Grundhaltung
+bleibt (Teil III):** Isolierte Muster liegen bei 48–55 % Trefferquote; der Sprung auf 58–70 %
+kommt ausschließlich aus Kontext (Ort im Chart, Trend, Volumen, Bestätigungskerze). Die
+folgenden Prozentzahlen stammen aus Anbieter-/Blog-Backtests (🔶, u. a. LiberatedStockTrader
+mit ~56.680 Trades, QuantifiedStrategies mit 75 Mustern) und sind als Rangordnung, nicht als
+garantierte Erwartung zu lesen.
+
+## 14.1 Anatomie-Wiederholung: die vier Zahlen
+
+Jede Kerze kodiert Open, High, Low, Close. Daraus abgeleitet:
+- **Körper** = |Close − Open| → Richtungsstärke der Periode
+- **Oberer Docht** = High − max(Open, Close) → abgewiesene Aufwärtsbewegung
+- **Unterer Docht** = min(Open, Close) − Low → abgewiesene Abwärtsbewegung
+- **Range** = High − Low → Gesamtaktivität
+
+Ein Muster ist nie mehr als eine bestimmte Kombination dieser Verhältnisse — deshalb ist die
+Feature-Kodierung (Teil III, 3.8) der Mustererkennung überlegen: Sie erfasst dieselbe Information
+kontinuierlich statt in willkürlichen Schwellen.
+
+## 14.2 Einzelkerzen-Muster
+
+| Muster | Form | Bedeutung im Kontext | Rohe Reliabilität 🔶 |
+|---|---|---|---|
+| **Hammer** | kleiner Körper oben, langer unterer Docht (≥ 2× Körper) | Am Support nach Abwärtstrend: Umkehr hoch | ~48 % roh, ~58 % mit Bestätigung, ~65 % am Support |
+| **Hanging Man** | identisch zum Hammer | Am Widerstand nach Aufwärtstrend: Umkehr runter | schwächer als Hammer, braucht Bestätigung |
+| **Inverted Hammer** | kleiner Körper unten, langer oberer Docht | Nach Abwärtstrend: mögliche Bodenbildung | mittel, Bestätigung nötig |
+| **Shooting Star** | kleiner Körper unten, langer oberer Docht | Nach Aufwärtstrend am Widerstand: Umkehr runter | mittel-hoch am Widerstand |
+| **Doji** | Open ≈ Close, Dochte beidseitig | Unentschlossenheit; nur an Extremen relevant | ~52 % (praktisch Zufall isoliert) |
+| **Dragonfly Doji** | Open=Close oben, langer unterer Docht | Bullisch an Support | mittel |
+| **Gravestone Doji** | Open=Close unten, langer oberer Docht | Bärisch an Widerstand | mittel |
+| **Marubozu** | großer Körper, (fast) keine Dochte | Starke Fortsetzung in Körperrichtung | Fortsetzungssignal |
+| **Spinning Top** | kleiner Körper, beide Dochte mittel | Momentumverlust, Vorstufe zur Wende | schwach allein |
+
+**Der zentrale Kontextsatz (aus Teil III, hier vertieft):** Hammer und Hanging Man sind
+**dieselbe Kerze**. Inverted Hammer und Shooting Star sind **dieselbe Kerze**. Was aus derselben
+Form ein Kauf- oder Verkaufssignal macht, ist ausschließlich der vorausgegangene Trend und der
+Ort (Support vs. Widerstand). Ein Bot, der Formen ohne Ort erkennt, erkennt nichts Handelbares.
+
+## 14.3 Zwei-Kerzen-Muster
+
+| Muster | Aufbau | Kontext | Reliabilität 🔶 |
+|---|---|---|---|
+| **Bullish Engulfing** | grüne Kerze umschließt vorherige rote vollständig | Am Support/nach Abwärtstrend | **60–65 %** mit Volumen & Level (Top-Rang) |
+| **Bearish Engulfing** | rote Kerze umschließt vorherige grüne | Am Widerstand/nach Aufwärtstrend | **60–65 %** |
+| **Bullish Harami** | kleine grüne Kerze im Körper der vorherigen großen roten | Trendabschwächung, Frühwarnung | schwächer als Engulfing |
+| **Bearish Harami** | kleine rote im Körper der großen grünen | Trendabschwächung oben | mittel |
+| **Tweezer Bottom** | zwei Kerzen mit fast identischem Low | Doppelte Abweisung nach unten | mittel, am Level stark |
+| **Tweezer Top** | zwei Kerzen mit fast identischem High | Doppelte Abweisung nach oben | mittel |
+| **Piercing Line** | rote Kerze, dann grüne schließt > 50 % in deren Körper | bullische Umkehr | mittel-hoch |
+| **Dark Cloud Cover** | grüne Kerze, dann rote schließt > 50 % in deren Körper | bärische Umkehr | mittel-hoch |
+
+**Warum Engulfing zuverlässiger ist:** Es kodiert einen echten Kräftewechsel — die neue Kerze
+macht die gesamte Arbeit der vorherigen und mehr rückgängig. Das ist eine stärkere Aussage als
+ein Docht. Deshalb rangiert es in fast allen Backtests oben.
+
+## 14.4 Drei-Kerzen-Muster
+
+| Muster | Aufbau | Bedeutung | Reliabilität 🔶 |
+|---|---|---|---|
+| **Morning Star** | große rote → kleine Kerze (Gap) → große grüne | starke bullische Umkehr am Boden | **~65–68 %** am Support (Spitzenrang) |
+| **Evening Star** | große grüne → kleine Kerze (Gap) → große rote | starke bärische Umkehr oben | ~65 % |
+| **Three White Soldiers** | drei aufeinanderfolgende große grüne Kerzen mit höheren Schlüssen | Starke Aufwärtsdynamik | **~61 %**, aber Vorsicht: oft schon überdehnt |
+| **Three Black Crows** | drei große rote Kerzen mit tieferen Schlüssen | Starke Abwärtsdynamik | ~61 % |
+| **Three Inside Up** | Bearish-Harami-Struktur + Bestätigungskerze | bullische Umkehr | mittel-hoch |
+| **Rising/Falling Three Methods** | Trendkerze, drei kleine Gegenkerzen, Trendkerze | **Fortsetzung**, nicht Umkehr | Fortsetzungsmuster |
+
+**Ranking-Konsens der Backtests 🔶** (bei Handel am relevanten Level, mit Volumenbestätigung):
+
+1. Morning Star / Evening Star an Support/Widerstand — ~68 %
+2. Bullish/Bearish Engulfing am Level mit Volumen — ~65 %
+3. Hammer am Support im Aufwärtstrend — ~63 %
+4. Three White Soldiers / Three Black Crows — ~61 %
+5. Doji an Trendextremen — ~57 %
+
+**Immer im Kopf behalten:** Diese Zahlen gelten *mit* Kontext. Dieselben Muster mitten in einer
+Range oder ohne Volumen fallen auf ~50 % — Münzwurf minus Kosten.
+
+## 14.5 Die drei Kontextfilter, die jedes Muster brauchen
+
+Aus Teil III (3.7) übernommen und als Checkliste formuliert, die der Assistent pro Signal prüft:
+
+1. **Ort:** Tritt das Muster an einem vorab markierten Level auf (Support/Widerstand, EMA,
+   Bollinger-Band, POC/VWAP, Fib-Zone)? Ohne Level → kein Signal.
+2. **Trendkontext:** Passt die implizierte Richtung zum übergeordneten Trend (Umkehrmuster nur
+   am Ende eines Gegentrends, Fortsetzungsmuster mit dem Trend)?
+3. **Bestätigung:** Schließt die Folgekerze in Signalrichtung? Ist das Volumen der Signalkerze
+   über dem Durchschnitt? Erst dann gilt das Muster als bestätigt.
+
+---
+
+# Teil XV — Chartmuster-Enzyklopädie
+
+Ergänzt Teil IV (4.3). Klassische Chartmuster sind größere Formationen über viele Kerzen. Die
+Statistik stammt überwiegend aus Thomas Bulkowskis "Encyclopedia of Chart Patterns" (die einzige
+groß angelegte, systematische Auswertung — 🔶, aber methodisch am seriösesten) und aus
+Anbieter-Backtests. **Wichtige Ehrlichkeit vorweg:** Die im Netz kursierenden "89 %-Erfolgsquoten"
+sind fast immer Rosinenpickerei. Bulkowskis eigene, nüchternere Kernzahl lautet: **nur etwa 51 %
+der Muster erreichen ihr gemessenes Kursziel**, und Ausbrüche ohne Volumenbestätigung scheitern
+fast doppelt so häufig. Die Muster sind nützliche Struktur, keine Wahrsagerei.
+
+## 15.1 Umkehrmuster
+
+| Muster | Aufbau | Signal | Kernzahlen 🔶 |
+|---|---|---|---|
+| **Head & Shoulders (Top)** | linke Schulter, höherer Kopf, rechte Schulter, Nackenlinie | bärische Umkehr bei Bruch der Nackenlinie | eines der zuverlässigsten Umkehrmuster; Bulkowski: ~14 % Fehlrate, Ø-Rückgang ~22 % |
+| **Inverse H&S (Bottom)** | gespiegelt | bullische Umkehr | niedrigste Fehlrate der bullischen Muster (~11 %), Ø-Anstieg hoch |
+| **Double Top ("M")** | zwei Hochs auf ähnlichem Niveau | bärisch bei Bruch des Zwischentiefs | ~88 % "Erfolg" in Blog-Zählungen, real: gemessenes Ziel seltener |
+| **Double Bottom ("W")** | zwei Tiefs auf ähnlichem Niveau | bullisch bei Bruch des Zwischenhochs | eines der beliebtesten, robusten Bodenmuster |
+| **Triple Top / Bottom** | drei Tests desselben Niveaus | Umkehr bei Bruch | Triple Bottom ~87 % in Blog-Statistik |
+| **Rounding Bottom (Untertasse)** | langsame, runde Bodenbildung | bullisch, langsam | selten, aber verlässlich wenn sauber |
+
+**Messregel (gemessenes Ziel / measured move):** Bei H&S ist das Kursziel die Höhe vom Kopf zur
+Nackenlinie, projiziert vom Bruchpunkt nach unten. Bei Double Top/Bottom: Höhe der Formation,
+projiziert vom Ausbruchspunkt. Der Assistent setzt daraus einen ersten Take-Profit-Vorschlag —
+mit dem Hinweis, dass laut Bulkowski nur ~51 % dieses Ziel voll erreichen.
+
+## 15.2 Fortsetzungsmuster
+
+| Muster | Aufbau | Signal | Kernzahlen 🔶 |
+|---|---|---|---|
+| **Bull Flag** | steiler Anstieg (Pole), dann leichte Abwärts-Konsolidierung | Fortsetzung hoch bei Ausbruch | Flaggen gelten als sehr zuverlässig (Blog-Statistik teils > 80 %), kurze Muster |
+| **Bear Flag** | steiler Fall, dann leichte Aufwärts-Konsolidierung | Fortsetzung runter | analog |
+| **Pennant / Wimpel** | kleines symmetrisches Dreieck nach starkem Impuls | Fortsetzung | ähnlich Flagge, kurzlebig |
+| **Ascending Triangle** | flache obere Linie, steigende Tiefs | meist bullischer Ausbruch | Fehlrate < 15 % in guten Trends |
+| **Descending Triangle** | flache untere Linie, fallende Hochs | meist bärischer Ausbruch | Spiegelbild |
+| **Symmetrical Triangle** | konvergierende Linien | Ausbruch in Trendrichtung wahrscheinlicher | richtungsneutral, Trend entscheidet |
+| **Cup & Handle** | runde Basis + kleiner Rücksetzer (Henkel) | bullische Fortsetzung | O'Neil-/Minervini-Favorit, Fehlrate < 15 % |
+| **Rising/Falling Wedge** | beide Linien geneigt, konvergierend | Rising Wedge meist bärisch, Falling meist bullisch | Umkehr *oder* Fortsetzung je nach Ort |
+
+## 15.3 Die drei Fehlerquellen bei Chartmustern
+
+1. **Bestätigungsfehler (Confirmation Bias) beim Zeichnen.** Ein Mensch (und ein schlecht
+   gebauter Detektor) findet Muster, weil er sie sucht. Gegenmittel: objektive, testbare
+   Definitionen (Pivot-Hochs/-Tiefs mit N Kerzen Abstand, Mindest-/Maximalhöhe, maximale
+   Schulter-Asymmetrie in %).
+2. **Ausbruch ohne Volumen.** Bulkowskis wichtigster Einzelbefund: Volumenbestätigung halbiert
+   die Fehlrate. Ein Ausbruch bei unterdurchschnittlichem Volumen ist ein Verdachtsfall auf
+   Fehlausbruch (siehe Teil VI, Liquidity Sweep).
+3. **Der Fehlausbruch als eigenes Signal.** Ein gescheiterter Ausbruch aus einem Muster (Preis
+   bricht, kehrt sofort zurück) ist oft ein stärkeres Signal in die *Gegenrichtung* als das
+   Muster selbst — die gefangenen Trader müssen ihre Positionen glattstellen.
+
+---
+
+# Teil XVI — Konkrete Handelsstrategien mit vollständigen Regeln
+
+Dieser Teil ist der praktischste des Dokuments: Jede Strategie ist als vollständiges Regelwerk
+mit Einstieg, Stop, Ziel und Regime formuliert, sodass der Assistent (und später der Bot) sie
+direkt umsetzen kann. Alle Strategien folgen der Grundregel aus Teil VI: **Setup + Trigger +
+Invalidierung + Ziel**, nichts wird ohne definierten Stop gehandelt.
+
+Legende: **TF** = Zeitrahmen, **SL** = Stop-Loss, **TP** = Take-Profit, **R** = Risiko-Einheit
+(Abstand Einstieg↔Stop).
+
+## 16.1 Trendfolge-Rücksetzer (das Arbeitspferd) 🎓-fundiert
+
+Beste empirische Grundlage (Jegadeesh & Titman, Teil I). Kauft Stärke nach gesundem Rücksetzer.
+
+- **Regime:** Aufwärtstrend. Filter: EMA 21 > 55 > 200 auf 1h und 4h; ADX(14) > 20.
+- **Setup:** Preis zieht auf 15m in die EMA-21/55-Zone oder in die 38,2–61,8-%-Fib-Zone des
+  letzten Impulses zurück.
+- **Trigger:** Bullische Bestätigungskerze (Hammer/Bullish Engulfing) in der Zone, idealerweise
+  mit RSI-Dreh aus < 40.
+- **SL:** unter das Rücksetzer-Tief bzw. 1,5× ATR(14) unter Einstieg.
+- **TP:** letzter Swing-High (1. Ziel), dann Trailing per Chandelier Exit (Teil XVI.10).
+- **Mindest-R:R:** 1:2. Long-Spiegelbild im Abwärtstrend für Shorts.
+
+## 16.2 Trendfolge-Ausbruch (Donchian / Range-Break)
+
+- **Regime:** Kompression, die in Expansion übergeht. Bollinger-Bandbreite im unteren Perzentil.
+- **Setup:** Klare horizontale Range oder Donchian-Kanal (20 Perioden) über mehrere Kerzen.
+- **Trigger:** Schlusskurs außerhalb der Range **mit** Volumen über Durchschnitt.
+- **SL:** zurück in die Range (unter die Ausbruchskante) oder 1,5× ATR.
+- **TP:** Range-Höhe projiziert (measured move), Rest per Trailing.
+- **Kritischer Filter:** Ausbruch ohne Volumen = Verdacht auf Fehlausbruch → nicht handeln oder
+  auf Rücksetzer-Retest der Kante warten.
+
+## 16.3 Moving-Average-Crossover (Trendfilter, kein Solo-Signal) 🔶
+
+- **Klassik:** Golden Cross (50 über 200) bullisch, Death Cross bärisch. **Backtest-Realität
+  (QuantifiedStrategies, 65 Jahre):** Als reines Ein-/Ausstiegssignal liefert es ungefähr
+  Marktrendite bei deutlich reduziertem Drawdown — der Wert liegt in der Glättung, nicht in
+  Überrendite. Ein getesteter Sweet Spot über 300 Jahre / 16 Märkte war **13/48-EMA**.
+- **Bessere Verwendung:** Als **Regimefilter**, nicht als Trigger. Der 200-EMA trennt "nur Longs"
+  von "nur Shorts"; der eigentliche Einstieg kommt aus 16.1/16.2.
+- **Warnung:** In Seitwärtsphasen produziert jedes Crossover eine Serie von Fehlsignalen
+  (Whipsaws). Deshalb immer mit ADX-Trendfilter kombinieren.
+
+## 16.4 RSI/MACD-Divergenz (Umkehr-Frühwarnung) 🔶
+
+- **Regular Bullish Divergence:** Preis macht tieferes Tief, RSI/MACD macht höheres Tief →
+  Verkaufsdruck lässt nach → mögliche Umkehr **hoch**.
+- **Regular Bearish Divergence:** Preis höheres Hoch, Indikator tieferes Hoch → Umkehr **runter**.
+- **Hidden Bullish:** Preis höheres Tief, Indikator tieferes Tief → Trendfortsetzung hoch.
+- **Hidden Bearish:** Preis tieferes Hoch, Indikator höheres Hoch → Fortsetzung runter.
+- **Regel:** Divergenz **nie allein** handeln. Warten auf Preis-Bestätigung (Umkehrkerze am
+  Level) + Volumen über 10-Perioden-Schnitt. Am zuverlässigsten am **Ende ausgedehnter,
+  sauberer Trends** — je länger und klarer der Trend, desto aussagekräftiger die Divergenz.
+
+## 16.5 Supply- & Demand-Zonen 🔶
+
+- **Demand-Zone (Kaufzone):** Basis vor einem starken Anstieg (Drop-Base-Rally oder Rally-Base-
+  Rally). **Supply-Zone (Verkaufszone):** Basis vor starkem Fall (Rally-Base-Drop).
+- **Frische Zonen zählen.** Eine unberührte Zone hat die höchste Wahrscheinlichkeit; mit jedem
+  Test werden Orders absorbiert und die Zone schwächt sich ab.
+- **Einstieg:** Limit-Order an der **proximalen** Kante (die dem Preis zugewandte). Bei Demand:
+  Buy-Limit an der Oberkante. Bei Supply: Sell-Limit an der Unterkante.
+- **SL:** knapp hinter die **distale** Kante der Zone.
+- **Top-Down-Pflicht:** Zone muss zum übergeordneten Trend passen (im Aufwärtstrend nur
+  Demand-Zonen für Longs).
+
+## 16.6 VWAP-Strategien (institutioneller Referenzpreis)
+
+- **VWAP-Mean-Reversion (Range-Tag):** In ruhigen Sitzungen kehrt der Preis zum VWAP zurück.
+  Abweichung > 2 Standardabweichungen (VWAP-Bänder) → Rückkehr zum VWAP als Ziel.
+- **VWAP-Trend-Ride (Trend-Tag):** An Trendtagen ist der VWAP dynamischer Support/Widerstand;
+  Rücksetzer an den VWAP von oben = Long-Chance im Aufwärtstrend.
+- **Institutionelle Logik:** Große Adressen messen ihre Ausführung am VWAP; deshalb ist er ein
+  echtes Ordermagnet-Niveau, kein geglätteter Indikator.
+
+## 16.7 London-Breakout (Session-Strategie, forex-spezifisch) 🔶
+
+- **Idee:** Die Asien-Sitzung bildet eine enge Range; die London-Eröffnung (07:00 UTC) bricht sie.
+- **Setup:** Markiere Hoch/Tief der letzten Asien-Stunden (z. B. 00:00–07:00 UTC).
+- **Trigger:** Buy-Stop knapp über dem Range-Hoch, Sell-Stop knapp unter dem Range-Tief.
+- **SL:** die gegenüberliegende Range-Kante (oder Range-Hälfte). **TP:** 1–2× Range-Höhe.
+- **Bestes Paar:** GBP/USD, EUR/USD. **Harte Warnung:** An Tagen mit Hochimpakt-News (NFP, CPI,
+  Zinsentscheid) **nicht** anwenden — die Range bricht dann durch News, nicht durch Struktur, und
+  reversed oft (siehe Teil XXIV).
+
+## 16.8 Turtle-Trading (historisches Trendfolge-Regelwerk)
+
+Das dokumentierte Regelwerk von Richard Dennis' "Turtles" — historisch bedeutsam, weil es zeigt,
+dass ein **rein mechanisches** System profitabel sein kann:
+
+- **System 1:** Kaufe bei 20-Tage-Hoch-Ausbruch, verkaufe bei 10-Tage-Tief.
+- **System 2:** 55-Tage-Ausbruch, Ausstieg bei 20-Tage-Gegentief.
+- **Positionsgröße:** über "N" (= ATR) volatilitätsnormiert; Einheit = 1 % Konto / (N × Punktwert).
+- **Pyramiding:** Aufstocken alle ½N zugunsten des Trends, bis max. 4 Einheiten.
+- **Lehre für uns:** Volatilitätsnormierte Größe + Ausbruch + strikter Ausstieg. Nicht 1:1
+  kopieren (die Edge ist längst zerfallen, Teil XI), aber die **Struktur** ist vorbildlich.
+
+## 16.9 Liquidity-Sweep / Stop-Hunt-Reversal (fortgeschritten)
+
+- **Setup:** Klar sichtbares Swing-Hoch/-Tief, unter/über dem viele Stops liegen.
+- **Trigger:** Preis schießt kurz über das Level (nimmt Liquidität), **schließt aber wieder
+  zurück** in die Range (Fehlausbruch). Einstieg in Gegenrichtung des Sweeps.
+- **SL:** knapp jenseits des Sweep-Extrems. **TP:** gegenüberliegende Liquidität / POC.
+- **Logik:** Deckt sich mit ICT (Teil XVII) und Wyckoff-Spring (Teil XVIII) — dieselbe Mechanik
+  unter drei Namen.
+
+## 16.10 Ausstiegs-/Trailing-Bausteine für alle Strategien
+
+- **Break-Even:** Stop auf Einstieg ziehen, wenn +1R erreicht — aber nicht reflexartig
+  ("risikofreier Trade" ≠ Ziel); besser hinter Struktur ziehen.
+- **Chandelier Exit (Chuck LeBeau):** Trailing-Stop = höchstes Hoch der letzten 22 Perioden − 3×
+  ATR(22). Bleibt im Trend, steigt nur mit, fällt nie. Ideal für Trendfolge.
+- **Partielles Schließen:** ⅓ bei 1. Ziel, ⅓ bei 2. Ziel, ⅓ mit Trailing laufen lassen.
+  **Ehrlichkeitshinweis:** Zu frühes Teilschließen senkt den Erwartungswert des Systems — es
+  fühlt sich sicher an, kostet aber die großen Gewinner, die das System tragen.
+
+---
+
+# Teil XVII — Smart Money Concepts / ICT vertieft
+
+Ergänzt Teil IV (4.7). SMC/ICT ("Inner Circle Trader") ist die populärste Preisaktions-Schule
+der letzten Jahre. **Ehrliche Einordnung vorweg (gilt für den ganzen Teil):** Vieles daran ist
+umbenannte, altbekannte Marktstruktur (Support/Widerstand, Fehlausbruch, Angebot/Nachfrage). Es
+gibt **keine** belastbare akademische Evidenz für eine eigenständige ICT-Edge; die Community-
+"Backtests" sind selektiv. Trotzdem ist das Vokabular nützlich, weil es beschreibt, *wo Stops
+liegen und wie sie geräumt werden* — und das ist reale Mechanik. Wir übernehmen die Konzepte als
+**Struktur-Features**, nicht als Glaubenssystem.
+
+## 17.1 Marktstruktur: BOS und CHoCH
+
+- **BOS (Break of Structure):** Preis bricht ein vorheriges Swing-Hoch (im Aufwärtstrend) bzw.
+  -Tief (im Abwärtstrend) → **Trendfortsetzung** bestätigt.
+- **CHoCH (Change of Character):** Der erste Bruch **gegen** die bisherige Struktur (im
+  Aufwärtstrend wird erstmals ein Swing-Tief gebrochen) → mögliche **Trendwende**. Frühwarnung.
+- **Umsetzung:** algorithmisch über Pivot-Erkennung (Swing-Hoch/-Tief mit N Kerzen Bestätigung).
+  Das ist dieselbe Marktstruktur-Logik wie in Teil IV.1, nur benannt.
+
+## 17.2 Order Blocks
+
+- **Definition:** Die letzte gegenläufige Kerze **vor** einem impulsiven Move. Ein bullischer
+  Order Block ist die letzte rote Kerze vor einem starken Anstieg — dort haben (angeblich)
+  Institutionen positioniert.
+- **Handel:** Beim Retest des Order Blocks Einstieg in Impulsrichtung, SL hinter den Block.
+- **Realität:** Funktional identisch zu einer frischen Demand-/Supply-Zone (Teil XVI.5). Der
+  Mehrwert liegt in der präzisen Kerzen-Definition, nicht in Magie.
+
+## 17.3 Fair Value Gap (FVG) / Imbalance
+
+- **Definition:** Drei-Kerzen-Muster, bei dem der Docht der 1. und der 3. Kerze sich nicht
+  überlappen — die mittlere (Impuls-)Kerze hinterlässt eine "Lücke", in der der Preis zu schnell
+  war, um alle Orders zu füllen.
+- **Erwartung:** Der Preis kehrt oft zurück, um die Lücke zu "füllen", bevor er weiterläuft →
+  Einstiegszone auf dem Rücklauf.
+- **Umsetzung:** einfach algorithmisch erkennbar (High[1] < Low[3] für bullische FVG). Als
+  Feature: "Abstand des aktuellen Preises zur nächsten unfilled FVG".
+
+## 17.4 Liquidität und Killzones
+
+- **Liquidität:** Cluster von Stop-Orders über Swing-Hochs (buy-side liquidity) und unter
+  Swing-Tiefs (sell-side liquidity). Institutionen brauchen diese Gegenorders, um große
+  Positionen zu füllen.
+- **Liquidity Sweep / Stop Hunt:** Preis läuft gezielt über/unter das Level, löst die Stops aus,
+  dreht dann. Identisch zur Strategie in Teil XVI.9 und zum Wyckoff-Spring (Teil XVIII).
+- **Killzones (Zeitfenster):** ICT betont bestimmte Zeitfenster (London-Open, NY-Open). Das
+  überschneidet sich mit den realen Volatilitätsfenstern aus Teil XIII.2 — der handfeste Kern
+  hinter dem Mystizismus.
+
+## 17.5 Das idealtypische SMC-Setup (Konfluenz)
+
+Ein "A+-Setup" nach SMC vereint mehrere Elemente: **Liquidity Sweep** eines Swing-Tiefs → **CHoCH**
+(Strukturbruch nach oben) → Rücklauf in einen **Order Block**, der innerhalb einer **FVG** liegt,
+im **Discount**-Bereich (untere Hälfte der Range). Vier Konfluenzen auf einem Trade. Für uns
+übersetzt: Das ist ein hochbewertetes Konfluenz-Signal im Sinne von Teil VI.2 — mehrere
+unabhängige Faktoren zeigen in dieselbe Richtung. Genau so soll es der Ensemble-Score erfassen,
+ohne dass wir an eine geheime institutionelle Formel glauben müssen.
+
+---
+
+# Teil XVIII — Wyckoff vertieft
+
+Ergänzt Teil IV (4.6). Die Wyckoff-Methode (Richard D. Wyckoff, 1930er) ist der **beste
+verfügbare Rahmen für Marktphasen**, weil sie Volumen und Preis zusammen liest und eine
+testbare Ereignisabfolge liefert. Der volle Zyklus: **Akkumulation → Markup → Distribution →
+Markdown**.
+
+## 18.1 Die drei Gesetze
+
+1. **Angebot und Nachfrage:** Steigt Nachfrage über Angebot, steigt der Preis — und das zeigt
+   sich zuerst im Volumen, dann im Preis.
+2. **Ursache und Wirkung:** Die Größe der Handelsspanne (die "Ursache", gemessen über Volume
+   Profile/Point&Figure) bestimmt die Reichweite der Folgebewegung (die "Wirkung").
+3. **Aufwand und Ergebnis:** Großes Volumen (Aufwand) mit kleiner Preisbewegung (Ergebnis) =
+   Absorption durch eine große Gegenpartei = Warnsignal für baldige Wende.
+
+## 18.2 Akkumulations-Schema (Boden) — Phasen A–E
+
+| Ereignis | Bedeutung |
+|---|---|
+| **PS (Preliminary Support)** | Erste Käufe nach langem Fall, Volumen zieht an |
+| **SC (Selling Climax)** | Panik-Tief mit riesigem Volumen; Angebot erschöpft sich |
+| **AR (Automatic Rally)** | Scharfe Erholung, da kaum Verkäufer übrig → definiert Range-Oberkante |
+| **ST (Secondary Test)** | Rücktest des SC-Bereichs bei geringerem Volumen |
+| **Spring / Shakeout** | **Fehlausbruch nach unten** unter die Range — räumt Stops schwacher Hände, dann schnelle Rückkehr. Das zentrale Kaufsignal, wenn mit niedrigem Volumen bestätigt |
+| **Test** | Erneuter Test des Spring-Tiefs mit noch geringerem Volumen |
+| **SOS (Sign of Strength)** | Breite Aufwärtskerze mit steigendem Volumen bricht die Range |
+| **LPS (Last Point of Support)** | Höheres Tief nach dem SOS → Einstieg mit definiertem Stop |
+
+Phasen: **A** = Stoppen des Abwärtstrends (PS, SC, AR, ST) · **B** = Aufbau der Ursache
+(Absorption, längste Phase) · **C** = Test (Spring) · **D** = Markup-Beginn (SOS, LPS) ·
+**E** = Ausbruch/Trend.
+
+## 18.3 Distributions-Schema (Top) — das Spiegelbild
+
+| Ereignis | Bedeutung |
+|---|---|
+| **PSY (Preliminary Supply)** | Erste großen Verkäufe nach langem Anstieg |
+| **BC (Buying Climax)** | Euphorie-Hoch, riesiges Volumen, breite Kerze |
+| **AR (Automatic Reaction)** | Scharfer Abverkauf → definiert Range-Unterkante |
+| **UT / UTAD (Upthrust After Distribution)** | **Fehlausbruch nach oben** über die Range — fängt Ausbruchskäufer, dreht innerhalb 1–3 Kerzen. Das zentrale Verkaufssignal |
+| **SOW (Sign of Weakness)** | Breite Abwärtskerze auf hohem Volumen bricht die Range → Markdown |
+
+## 18.4 Die praktische Wyckoff-Regel für den Assistenten
+
+Zwei Signaturen sind maschinell erfassbar und hochwertig:
+- **Spring:** Preis unter das jüngste Range-Tief, Schluss aber wieder in der Range, **bei
+  fallendem** Volumen → bullisch.
+- **UTAD:** Preis über das jüngste Range-Hoch, Schluss wieder in der Range → bärisch.
+- **Absorption:** hohes Volumen + kleine Range am Widerstand → verdächtig auf Distribution.
+
+Diese decken sich mit Liquidity Sweep (Teil XVI.9/XVII.4) — der Assistent kann sie als **ein**
+robustes Feature "Fehlausbruch mit Volumendivergenz" implementieren.
+
+---
+
+# Teil XIX — Elliott Wave, Fibonacci, Harmonische Muster
+
+Diese drei gehören zusammen: Sie sind populär, optisch überzeugend und **methodisch am
+schwächsten belegt** aller Werkzeuge in diesem Dokument. Sie kommen hier vollständig hinein,
+weil der Nutzer sie in Videos sehen wird — aber mit klarer Warnung.
+
+## 19.1 Elliott Wave
+
+- **Grundstruktur:** Trends laufen in **5 Wellen** (Impuls: 1-2-3-4-5), Korrekturen in **3 Wellen**
+  (A-B-C).
+- **Die drei unverrückbaren Regeln:**
+  1. Welle 2 läuft nie unter den Start von Welle 1 zurück.
+  2. Welle 3 ist nie die kürzeste der Wellen 1/3/5 (meist die längste).
+  3. Welle 4 überlappt nicht das Kursgebiet von Welle 1 (außer bei Diagonalen).
+  Wird eine Regel verletzt, ist die Zählung falsch.
+- **Fibonacci-Bezug:** Welle 2 korrigiert oft 50–61,8 % von Welle 1; Welle 3 ist oft 161,8 % von
+  Welle 1; Welle 4 korrigiert oft 38,2 % von Welle 3.
+- **Ehrliche Kritik 🔶:** Die Theorie ist **subjektiv und nicht mathematisch validierbar** —
+  zwei Analysten zählen dieselbe Bewegung unterschiedlich. Zuverlässiger auf Tages-/Wochenchart
+  als intraday (zu viel Rauschen). Lernkurve 1–2 Jahre. **Verwendung bei uns:** höchstens als
+  grober Kontext ("stehen wir eher in einem Impuls oder einer Korrektur?"), niemals als Trigger.
+
+## 19.2 Fibonacci-Retracements und -Extensions
+
+- **Retracement-Level:** 23,6 % · 38,2 % · **50 %** · **61,8 %** (Golden Ratio) · 78,6 %.
+- **Golden Pocket:** die Zone 50–61,8 %. Gesunde Korrekturen enden oft dort → bevorzugte
+  Einstiegszone im Trend (deckt sich mit Teil XVI.1).
+- **Extension-Level (Ziele):** 127,2 % · **161,8 %** · 261,8 % — für Take-Profit-Projektionen.
+- **Stop-Platzierung:** knapp jenseits des nächsten Fib-Levels (z. B. bei Einstieg an 61,8 %
+  Stop unter 78,6 %).
+- **Wahrheit über Fibonacci 🔶:** Die Zahlen sind **keine Magie**. Sie funktionieren teils als
+  selbsterfüllende Prophezeiung (viele schauen darauf) und sind **nur mit Konfluenz** brauchbar —
+  ein Fib-Level, das mit einem Support, einer EMA oder einem POC zusammenfällt, ist wertvoll; ein
+  isoliertes Fib-Level ist Dekoration.
+
+## 19.3 Harmonische Muster (Gartley, Bat, Butterfly, Crab) 🔶
+
+Präzise Fibonacci-Formationen mit den Punkten X-A-B-C-D; Einstieg bei D auf eine Umkehr.
+
+| Muster | Kern-Ratio (D-Punkt) |
+|---|---|
+| **Gartley** | D bei 78,6 % Retracement von XA; B bei 61,8 % |
+| **Bat** | D bei 88,6 % von XA; B bei 38,2–50 % |
+| **Butterfly** | D bei 127,2 % **Extension** von XA (über X hinaus) |
+| **Crab** | D bei 161,8 % Extension von XA — die extremste Variante |
+
+- **Behauptete Trefferquote 🔶:** "> 70 %" — das stammt aus Anbieterquellen und ist **nicht
+  unabhängig belegt**. Realistisch als "Zone erhöhter Umkehrwahrscheinlichkeit" behandeln, mit
+  Bestätigung und engem Stop hinter D.
+- **Verwendung bei uns:** optional, niedrig gewichtet, nur als zusätzlicher Konfluenzpunkt in
+  einer bereits stimmigen Zone. Kein eigenständiges Signal.
+
+**Gemeinsame Warnung für Teil XIX:** Alle drei Systeme sind **prognosestark im Rückblick,
+schwach im Vorlauf**. Sie eignen sich, um Zonen zu markieren, nicht um allein Trades auszulösen.
+Wir gewichten sie im Ensemble deutlich unter den evidenzbasierten Faktoren (Trend, Momentum,
+Volumen, Level).
+
+---
+
+# Teil XX — Methodiken bekannter Trader
+
+Konkrete, benannte Systeme erfolgreicher Trader. Ein Teil dieser Beschreibungen stammt aus einer
+umfangreichen Trading-Skills-Sammlung, die im selben Git-Repository liegt (Branch
+`claude-trading-skills`, 64 dokumentierte Skills mit Rechnern und Playbooks) — dort sind diese
+Methodiken bereits als ausführbare Screener implementiert. Sie sind überwiegend für Aktien
+entwickelt, ihre **Struktur** ist aber auf Forex/Krypto übertragbar.
+
+## 20.1 Mark Minervini — VCP (Volatility Contraction Pattern) & SEPA
+
+- **Kernidee:** Vor einem starken Ausbruch zieht sich die Volatilität in **immer engeren**
+  Rücksetzern zusammen (z. B. −25 % → −12 % → −6 %). Das Angebot versiegt, eine kleine Nachfrage
+  genügt für den Ausbruch.
+- **Trend-Template (Vorfilter, alle müssen gelten):** Preis über 150- und 200-Tage-MA;
+  150 > 200; 200-MA seit ≥ 1 Monat steigend; Preis ≥ 30 % über 52-Wochen-Tief; innerhalb 25 %
+  des 52-Wochen-Hochs; relative Stärke hoch.
+- **Einstieg:** Ausbruch über den **Pivot** (Hoch der letzten, engsten Kontraktion) mit
+  Volumenschub.
+- **Stop:** knapp unter den Pivot / die letzte Kontraktion — typisch eng (5–8 %), weil der
+  Ausbruchspunkt per Definition nah am Tief liegt.
+- **Übertragung:** "Enge Basis + Volumenkontraktion + Ausbruch mit Volumen" ist auch auf
+  Intraday-Forex ein valides Setup (= Teil XVI.2, präzisiert).
+
+## 20.2 William O'Neil — CANSLIM
+
+Wachstums-Aktienmethode; als **Kontext-Checkliste** lehrreich (7 Komponenten):
+
+| Buchstabe | Bedeutung |
+|---|---|
+| **C** | Current earnings — aktuelles Quartalsgewinnwachstum stark |
+| **A** | Annual earnings — Jahresgewinnwachstum stark |
+| **N** | New — neues Produkt/Management/Hoch |
+| **S** | Supply & demand — kleine Streuung + Volumen im Ausbruch |
+| **L** | Leader — relativer-Stärke-Führer, kein Nachzügler |
+| **I** | Institutional sponsorship — steigende institutionelle Beteiligung |
+| **M** | Market direction — nur kaufen, wenn der Gesamtmarkt im Aufwärtstrend ist |
+| Zusatz | **Follow-Through Day** und **Distribution Days** zur Markttiming-Bestätigung |
+
+**Lehre für uns (das "M"):** Nie gegen den übergeordneten Markt handeln. Für Forex heißt das:
+DXY-/Index-Kontext beachten, bevor ein Einzelpaar gehandelt wird.
+
+## 20.3 Stockbee — Momentum Burst (Kurzfrist-Swing)
+
+Aus dem Playbook der Skills-Sammlung, ein 2–5-Tage-Swing:
+
+- **Trigger (einer von drei):** 4-%-Ausbruch, Dollar-Ausbruch oder Range-Expansion — **immer
+  über einer Liquiditätsschwelle**; der 4-%-Ausbruch und die Range-Expansion verlangen zusätzlich
+  Volumen über dem Vortag.
+- **Basis:** vorherige enge, range-kontrahierte Basis (dieselbe Idee wie VCP).
+- **Wichtige Disziplin aus dem Playbook:** Ein bloßer 4-%-Move ist **nie** allein ein Kauf. Es
+  folgt zwingend ein Chart-Check und eine Risiko-Distanz-Prüfung; ist der Stop zu weit für die
+  Risikopolitik, ist es **kein Trade** (nicht: kleiner sizen).
+- **Nicht verwechseln:** mit PEAD (Earnings-Drift, 2–6 Wochen) — anderes Zeithorizont-Kohort.
+
+## 20.4 Post-Earnings Announcement Drift (PEAD) 🎓
+
+- **Akademische Basis:** Ball & Brown (1968), Bernard & Thomas (1989) — Aktien, die auf positive
+  Gewinnüberraschung hochspringen, driften **wochenlang weiter**. Eine der am besten
+  dokumentierten Marktanomalien (Unterreaktion).
+- **Handelbares Muster (Wochenkerzen):** Nicht den Gap-Tag jagen, sondern warten auf einen
+  geordneten **roten Wochenrücksetzer** nach dem Gap, dann Einstieg, wenn eine **grüne
+  Wochenkerze über dem Hoch der roten schließt**. Halten 2–6 Wochen.
+- **Übertragung:** Das Prinzip "auf Überraschung folgt gerichteter Drift, aber kaufe den
+  Rücksetzer, nicht die Spitze" gilt auch für Krypto nach großen Katalysatoren.
+
+## 20.5 Jason Shapiro — COT-Contrarian (antizyklisch)
+
+Aus dem `shapiro-contrarian`-Playbook — ein diszipliniertes Fade-System:
+
+- **Idee:** Überfülltes spekulatives Positioning **faden** — aber Crowding allein ist **nie** ein
+  Trade. Drei Bedingungen müssen zusammenkommen:
+  1. **Crowding-Extrem** im COT-Report (3-Jahres-COT-Index-Extrem der Großspekulanten).
+  2. **News-Reaction-Failure:** Der Markt reagiert **nicht** auf Nachrichten, die der überfüllten
+     Seite helfen sollten → die Crowd liegt falsch.
+  3. **Wochen-Preisaktion** dreht bereits gegen die Crowd (Key Reversal / Fehlausbruch).
+- **Gate:** fail-closed — nur wenn **alle drei** bestätigt sind, wird überhaupt gesized.
+- **Lehre für uns:** Das Muster "Sentiment-Extrem + ausbleibende Reaktion auf passende News +
+  beginnende Gegenbewegung" ist ein starkes Umkehr-Konfluenzsignal. In Krypto ist das Pendant:
+  extreme Funding Rate + Preis reagiert nicht mehr auf gute News + erste Gegenbewegung (Teil VII).
+
+## 20.6 Stanley Druckenmiller — Makro & asymmetrische Größe
+
+- **Liquiditätsanalyse** vor Fundamentaldaten: "Erst das Geld, dann die Kurse."
+- **Konzentration statt Streuung:** wenige Trades mit hoher Überzeugung, groß gesized — aber mit
+  striktem Verlust-Schnitt. "It's not whether you're right or wrong, but how much you make when
+  right and how much you lose when wrong."
+- **Lehre:** Erwartungswert wird von wenigen großen Gewinnern getragen; entscheidend ist, klein
+  zu verlieren und die Gewinner laufen zu lassen — genau die Asymmetrie aus Teil I.
+
+## 20.7 Was diese Methodiken gemeinsam haben
+
+1. **Kontraktion vor Expansion** (VCP, Stockbee, Turtle): Enge Basen brechen sauberer aus.
+2. **Nur mit dem übergeordneten Markt/Trend** (CANSLIM "M", Minervini Trend-Template).
+3. **Definierte Invalidierung vor Einstieg** (alle) — ohne Stop kein Trade.
+4. **Volumen bestätigt den Ausbruch** (alle Ausbruchssysteme).
+5. **Erwartungswert aus Asymmetrie**, nicht aus hoher Trefferquote (Druckenmiller, Turtles).
+
+Diese fünf Punkte sind die belastbarste Essenz aller erfolgreichen Systeme — sie decken sich mit
+Teil VI und sind der Kern dessen, was der Assistent bewerten soll.
+
+---
+
+# Teil XXI — Multi-Timeframe Top-Down-Workflow
+
+Der konkrete Analyse-Ablauf, den der Assistent bei jeder Anfrage durchläuft — von der großen zur
+kleinen Zeitebene. Das ist die praktische Umsetzung von Teil IV.8 (Konfluenz) und die
+Verdrahtung aller vorherigen Teile.
+
+## 21.1 Die drei Ebenen und ihre Rollen
+
+| Ebene | Zeitrahmen (Forex) | Frage | Werkzeuge |
+|---|---|---|---|
+| **Kontext** | 4h (+ 1d) | *Wohin darf ich überhaupt handeln?* | EMA-Fächer, ADX, Marktstruktur (BOS/CHoCH), große S/R-Zonen |
+| **Setup** | 1h / 15m | *Wo ist eine konkrete Zone?* | Supply/Demand, Fib-Golden-Pocket, Volume Profile, Order Block |
+| **Trigger** | 15m / 5m | *Wann genau steige ich ein?* | Kerzenmuster, RSI-Dreh, Mikro-BOS, Volumen |
+
+**Eiserne Regel:** Die Trigger-Ebene darf nur in die Richtung feuern, die die Kontext-Ebene
+erlaubt. Ein perfektes 5m-Kaufsignal gegen einen intakten 4h-Abwärtstrend wird **verworfen oder
+stark abgewertet**, nicht gehandelt.
+
+## 21.2 Der Ablauf Schritt für Schritt
+
+```
+1. KONTEXT (4h): Trend bestimmen (EMA-Fächer + ADX) → Regime setzen
+   → erlaubte Richtung: nur Long / nur Short / kein Handel (Seitwärts)
+2. KONTEXT (4h): große S/R-Zonen und offene Liquidität markieren
+3. SETUP (1h/15m): konkrete Zone im erlaubten Bereich suchen
+   (Demand/Supply, Golden Pocket, POC, Order Block) — muss "frisch" sein
+4. KONFLUENZ prüfen: Wie viele unabhängige Faktoren zeigen zusammen?
+   (Trend + Zone + Fib + Volumen + Struktur) → Score aus Teil VI.2
+5. TRIGGER (15m/5m): auf Bestätigung in der Zone warten
+   (Umkehrkerze + Momentum-Dreh + Volumen)
+6. RISIKO: Stop hinter die Zone/Struktur, Größe aus 1 % Kontorisiko (Teil IX)
+   → Mindest-R:R 1:2, sonst kein Trade
+7. AUSGABE: Richtung, Konfidenz (aus Konfluenz-Score), Einstieg, SL, TP, R:R,
+   Begründung (welche Faktoren) + Zeit-/News-Warnung
+```
+
+## 21.3 Warum Top-Down und nicht Bottom-Up
+
+Wer auf dem 5m-Chart anfängt, sieht überall Signale — die meisten sind Rauschen innerhalb einer
+größeren Struktur. Top-Down filtert das Rauschen weg, **bevor** es Konfidenz aufbaut. Das ist der
+wichtigste Einzelhebel gegen Fehlsignale und deckt sich mit der Erkenntnis aus Teil XII.7 (höherer
+Zeitrahmen filtert, niedrigerer triggert).
+
+---
+
+# Teil XXII — Trade-Management vertieft
+
+Ergänzt Teil IX und Teil XVI.10. Der Einstieg ist der am meisten überschätzte Teil eines Trades;
+**Management und Ausstieg** entscheiden über den Erwartungswert. 🔶
+
+## 22.1 Die Einstiegsarten
+
+| Art | Wann | Vor-/Nachteil |
+|---|---|---|
+| **Limit an der Zone** | Preis läuft in die geplante Zone | Bester Preis, aber Nicht-Ausführung möglich |
+| **Stop-Einstieg (Breakout)** | Ausbruch bestätigen lassen | Verpasst keinen Move, aber schlechterer Preis |
+| **Bestätigungskerze abwarten** | Umkehr-Setups | Weniger Fehlsignale, etwas später dran |
+
+Der Assistent gibt eine **konkrete Einstiegsmethode** aus, nicht nur "kaufen" — inklusive der
+Warnung, dass Limit-Orders in der Zone nicht garantiert gefüllt werden (analog Post-Only in Krypto).
+
+## 22.2 Stop-Loss: die vier Typen
+
+1. **Struktur-Stop:** hinter das letzte Swing-Hoch/-Tief oder die Zonenkante. **Bevorzugt** —
+   folgt der Marktlogik.
+2. **Volatilitäts-Stop (ATR):** 1,5–3× ATR je nach Zeitrahmen (Scalp 1,0–1,5× · Day 1,5–2,5× ·
+   Swing 2,0–3,0×). Passt sich der Marktaktivität an.
+3. **Prozent-Stop:** fester %-Abstand. Einfach, aber ignoriert Struktur — nur als Notnagel.
+4. **Zeit-Stop:** Wenn das Setup nach X Kerzen nicht in Gewinn läuft, schließen. Fängt "tote"
+   Trades, die Kapital binden.
+
+**Regel:** Der Stop wird aus der **Struktur** bestimmt, dann wird die **Größe** so gewählt, dass
+der Stop 1 % Konto kostet — nie umgekehrt. Den Stop an eine gewünschte Größe anzupassen ("ich
+will größer rein, also enger Stop") ist einer der häufigsten Kontokiller.
+
+## 22.3 Break-Even, Trailing, Teilverkäufe — die Erwartungswert-Falle
+
+- **Break-Even:** Stop auf Einstieg bei +1R ist verlockend ("risikofrei"), **schneidet aber
+  Gewinner ab**, die kurz zurückkommen, bevor sie laufen. Besser: hinter die nächste Struktur
+  ziehen, nicht mechanisch auf Einstieg.
+- **Trailing:** verbessert das R:R im Trend, killt es aber, wenn zu eng — ein geplantes 1:3 wird
+  real oft 1:1. Chandelier Exit (Teil XVI.10) ist der beste Kompromiss.
+- **Teilverkäufe:** ⅓/⅓/⅓ fühlt sich gut an, **senkt aber den Erwartungswert**, weil die
+  großen Gewinner (die das System tragen) beschnitten werden. Nur einsetzen, wenn die
+  Psychologie es sonst nicht aushält — bewusst als Komfort-, nicht als Optimierungs-Maßnahme.
+
+## 22.4 Risiko-Ertrags-Verhältnis und nötige Trefferquote
+
+Der Zusammenhang, den jeder Trade-Vorschlag zeigen sollte:
+
+| R:R | Break-Even-Trefferquote | Kommentar |
+|---|---|---|
+| 1:1 | 50 % | plus Kosten → real > 52 % nötig |
+| 1:1,5 | 40 % | |
+| **1:2** | **34 %** | Standardziel des Assistenten |
+| 1:3 | 25 % | selten sauber erreichbar (Trailing kollabiert oft) |
+
+**Erwartungswert (das Fundament, Wiederholung aus Teil I):**
+```
+E = (Trefferquote × Ø-Gewinn) − (Verlustquote × Ø-Verlust) − Kosten
+```
+Ein System mit 40 % Treffern und 1:2 R:R hat positiven Erwartungswert; ein System mit 70 %
+Treffern und 1:0,5 R:R kann negativ sein. **Der Assistent optimiert auf E, nicht auf Trefferquote.**
+
+---
+
+# Teil XXIII — Handelspsychologie und Prozessdisziplin
+
+Auch bei einem halbautomatischen Assistenten trifft am Ende **ein Mensch** die Klick-Entscheidung.
+Und selbst beim späteren Vollautomaten ist der Mensch das schwächste Glied — er greift ein,
+übersteuert den Bot, dreht das Risiko hoch nach Verlusten. Deshalb gehört Psychologie in die
+Wissensbasis. 🔶/📊
+
+## 23.1 Die harte Zahl
+
+70–90 % der Privattrader verlieren über die Zeit Geld; ESMA nennt 74–89 % für CFD-Konten (📊,
+deckt sich mit Teil II). **Der entscheidende Befund der Verhaltensforschung:** Die meisten
+verlieren **nicht wegen einer falschen Strategie, sondern weil sie eine funktionierende Strategie
+nicht konsequent umsetzen.** Angst, Gier, Selbstüberschätzung und Rache übersteuern den Plan —
+oft innerhalb von Minuten nach einem Gewinn oder Verlust.
+
+## 23.2 Die teuersten Denkfehler
+
+| Fehler | Mechanik | Gegenmittel im System |
+|---|---|---|
+| **Revenge Trading** | Nach Verlust sofort neuer Trade ohne Setup, nur um zurückzuholen | Tages-Verlust-Limit (−3 %) → Handelssperre; der Bot verweigert nach Limit weitere Einstiege |
+| **Overtrading** | Aus Langeweile/Aufregung zu viele Trades → Kosten fressen alles | Max. 3 Trades/Tag/Symbol (V3); Konfidenzschwelle |
+| **Verluste laufen lassen** | Hoffnung statt Stop; "wird schon zurückkommen" | Stop als **echte Order**, nicht im Kopf |
+| **Gewinner zu früh nehmen** | Angst, den Gewinn zu verlieren → Erwartungswert sinkt | Trailing statt fixem Frühausstieg; Teil XXII.3 |
+| **Selbstüberschätzung nach Gewinnserie** | Größe hochdrehen, Regeln lockern | Feste Größenregel im Code (Teil IX), nicht diskretionär |
+| **FOMO** | Einem Move hinterherspringen, der schon gelaufen ist | Nur an geplanten Zonen einsteigen, nie mitten im Move |
+| **Anchoring** | Am Einstiegspreis kleben ("erst wenn ich wieder bei 0 bin") | Entscheidung nur nach Setup-Status, nicht nach P&L |
+
+**Eine Studie (2024, 🔶):** Trader mit fester Vor-Trade-Routine (inkl. emotionalem Check) hatten
+**34 % höhere Plan-Treue**. Zahl "78 % der Revenge-Trader verlieren binnen 6 Monaten mehr als
+ihre Einzahlung" ist plausibel, aber Blog-Quelle — als Warnung, nicht als Fakt.
+
+## 23.3 Warum ein Bot hier hilft — und wo er selbst gefährdet ist
+
+**Vorteil Automatisierung:** Ein Bot kennt keine Angst, keine Rache, keine Langeweile. Er setzt
+die Regeln stur um. Das ist der eigentliche Grund, warum systematischer Handel dem
+diskretionären im Durchschnitt überlegen ist — nicht bessere Prognose, sondern **konsequente
+Ausführung**.
+
+**Restrisiko Mensch:** Der Nutzer kann den Bot übersteuern (Position manuell vergrößern, Stop
+wegnehmen, "nur dieses eine Mal" gegen die Regel). Deshalb: Risikolimits **im Code** (CLAUDE.md-
+Grundsatz), Änderungen brauchen einen Commit. Das ist bewusst unbequem — Unbequemlichkeit ist
+hier ein Feature.
+
+## 23.4 Prozess über Ergebnis
+
+Der wichtigste mentale Rahmen: **Ein guter Trade ist ein regelkonformer Trade — unabhängig vom
+Ergebnis.** Ein Gewinn aus Regelbruch ist ein schlechter Trade (er verstärkt schlechtes
+Verhalten). Ein Verlust aus einem korrekt ausgeführten, positiv-Erwartungswert-Setup ist ein
+guter Trade. Über viele Trades zahlt der Prozess, nicht das Einzelergebnis. Das Trade-Journal
+(Phase A, Sprint A5) bewertet deshalb **Prozesstreue**, nicht nur P&L.
+
+---
+
+# Teil XXIV — News- und Event-Trading
+
+Makro-Ereignisse bewegen Forex stärker und schneller als jedes Chartmuster. Der Assistent muss
+sie **kennen**, um zu warnen — nicht unbedingt, um sie zu handeln. 🔶
+
+## 24.1 Die Ereignisse mit dem größten Impact
+
+| Ereignis | Was | Wirkung auf Majors |
+|---|---|---|
+| **NFP** (Non-Farm Payrolls) | US-Arbeitsmarkt, 1. Freitag/Monat, 12:30 UTC | 80–150+ Pips in Minuten, **berüchtigt für Reversals** |
+| **CPI** (Inflation) | monatlich | sehr hoch, treibt Zinserwartung |
+| **FOMC / Zinsentscheid** | Fed, 8×/Jahr, + Pressekonferenz | 100–400 Pips möglich, oft in der Pressekonferenz mehr als in der Zahl |
+| **EZB / BoE / BoJ** | Zinsentscheide | analog für EUR/GBP/JPY |
+| **GDP, PMI, Retail Sales** | Konjunktur | mittel |
+
+## 24.2 Der Kernmechanismus: Überraschung, nicht Niveau
+
+**Der Markt bewegt sich nicht, weil eine Zahl hoch oder niedrig ist, sondern weil sie von der
+Erwartung abweicht.** Kommt CPI exakt wie erwartet, passiert oft fast nichts ("priced in").
+Weicht die Zahl stark ab, springt der Preis über mehrere Paare gleichzeitig. Das ist dasselbe
+Prinzip wie "what's priced in" im Quant-Framework (Teil XXV) und wie die News-Reaction-Failure
+bei Shapiro (Teil XX.5).
+
+## 24.3 Zwei legitime Umgangsweisen
+
+1. **Meiden (Standard für den Anfänger-Assistenten):** In den ~30 Minuten um ein Hochimpakt-
+   Ereignis **keine** Signale ausgeben bzw. mit dickem Warnhinweis. Spreads explodieren, Stops
+   werden gerissen, Slippage ist massiv. Für kurze, technische Trades ist das der sicherste Weg.
+2. **Straddle/Breakout (fortgeschritten, riskant):** Vor der Zahl Buy-Stop über und Sell-Stop
+   unter die enge Vor-News-Range, um die erste Bewegung zu fangen. **Gefahr:** NFP reversed oft
+   80 Pips in einer Richtung und komplett zurück binnen 15 Min → beide Seiten können ausgelöst und
+   gestoppt werden. Nur mit reduzierter Größe und weitem Verständnis.
+
+## 24.4 Regel für den Assistenten
+
+Der Assistent zieht einen **Wirtschaftskalender** (Forex Factory / Twelve Data / Finnhub) und
+markiert Hochimpakt-Ereignisse für das gewählte Paar. Standardverhalten: **Signale um solche
+Ereignisse mit einem roten Warnbanner versehen und die Konfidenz auf "handle nicht" setzen.**
+Der London-Breakout (Teil XVI.7) und alle technischen Setups werden an News-Tagen ausgesetzt.
+
+---
+
+# Teil XXV — Muster aus echten Trades
+
+Was das Beobachten vieler echter Trading-Sessions (Videos, Journale, die Skills-Sammlung) immer
+wieder zeigt — die wiederkehrenden Wahrheiten jenseits der Theorie.
+
+## 25.1 Der 7-Schichten-Signal-Stack (aus dem Quant-Framework der Skills-Sammlung)
+
+Ein Trade verdient nur dann Kapital, wenn die Schichten 1–5 **übereinstimmen**:
+
+```
+1. Makro-Regime      → Risk-on / Risk-off / Übergang
+2. Thema / Sektor    → läuft der übergeordnete Kontext mit?
+3. Screener/Setup    → konkretes Muster (Trend, Ausbruch, Umkehr)
+4. Setup-Bestätigung → Chart/Trigger stimmt visuell
+5. Was ist eingepreist? → Abweichung von der Erwartung = Chance
+6. Sizing            → R-Multiples, Positionsgröße
+7. Postmortem        → Journal, was hat funktioniert
+```
+
+Die **Kill-Regel** dazu: Jeder Trade braucht **vor** dem Einstieg (a) eine schriftliche These,
+(b) ein Invalidierungskriterium ("was macht diese These falsch") und (c) nach dem Ausstieg einen
+Journaleintrag. Keine Ausnahmen. Das *ist* das manuelle Review-Gate.
+
+## 25.2 Die zehn wiederkehrenden Beobachtungen
+
+1. **Die großen Gewinner sind wenige.** Ein Großteil des Jahresertrags kommt aus einer Handvoll
+   Trades. Wer diese früh abschneidet (Teil XXII.3), zerstört das System.
+2. **Die meisten Verluste kommen aus wenigen Fehlern**, oft demselben (Regelbruch nach Verlust).
+3. **Fehlausbrüche sind allgegenwärtig.** Der erste Ausbruch aus einer Range scheitert häufig;
+   der Retest ist oft der bessere Einstieg.
+4. **Volumen verrät die Wahrheit.** Ausbruch ohne Volumen = Misstrauen. Absorption (viel Volumen,
+   wenig Bewegung) = bevorstehende Wende.
+5. **Der Trend ist zäher, als man denkt.** Trendfolge verliert die meisten Trader, weil sie zu
+   früh gegen den Trend wetten ("das muss doch mal drehen").
+6. **Enge Basen brechen sauber aus** (VCP, Stockbee, Turtle). Weite, wilde Basen brechen unsauber.
+7. **Die erste Stunde einer Sitzung** (London-Open, NY-Open) trägt einen Großteil der Bewegung.
+8. **Runde Zahlen und Vortageshoch/-tief** sind reale Magnete (Stops liegen dort).
+9. **Nach starken Trendtagen folgt oft eine Range** — Regime wechselt, Strategie muss mitwechseln.
+10. **Die meisten "Signale" sind Rauschen.** Nichtstun ist die häufigste korrekte Entscheidung.
+    Ein gutes System handelt selten.
+
+## 25.3 Die Anti-Muster (woran man Scharlatanerie erkennt)
+
+Direkt aus der Auswertung des EasyTrading-Bots (Teil-Entscheidungen E5/E5b) verallgemeinert:
+
+- **Wechselnde Richtung ohne neue Information** = keine Analyse.
+- **Einsatz nach Verlust erhöhen** (Martingale) = eingebauter Totalverlust (Teil II.4).
+- **Sekunden-"Zeitrahmen"** = keine handelbare Marktinformation, nur Rauschen.
+- **"OTC"-Instrumente / anbietergenerierte Kurse** = kein echter Markt.
+- **Gewinn-Screenshots ohne Verlust-Kontext** = Überlebenden-Verzerrung.
+- **"Signal"-Anzeigen ohne Funktion für die Entscheidung** = Dekoration zum Verkauf von Credits.
+
+Wenn ein "Bot" oder eine "Challenge" eines dieser Merkmale zeigt, ist es kein Trading.
+
+---
+
+# Teil XXVI — Umsetzung im Trading-Assistenten
+
+Wie das gesamte Wissen dieses Dokuments konkret in die Analyse-Engine des Assistenten (Phase A,
+PLAN.md) einfließt. Das schließt den Kreis von Theorie zu Code.
+
+## 26.1 Von Wissen zu Feature — die Abbildung
+
+| Wissensteil | Feature im Assistenten |
+|---|---|
+| Trend (Teil V, XVI.1/3) | EMA-Fächer-Ausrichtung + ADX + Regressionssteigung, je TF |
+| Regime (Teil IV.1, VI.2) | ADX-Schwelle + Volatilitäts-Perzentil → Trend/Range/Volatil |
+| Kerzen (Teil III, XIV) | kontinuierliche Körper-/Docht-Features + benannte Muster **nur am Level** |
+| Chartmuster (Teil XV) | objektive Pivot-Definitionen, Volumen-Bestätigung erzwungen |
+| S/R, Zonen (IV.2, XVI.5, XVII.2) | horizontale Level-Cluster, frische Demand/Supply-Zonen |
+| Volume Profile / VWAP (IV.4/5, XVI.6) | POC/HVN/LVN, VWAP-Abweichung in σ |
+| Fehlausbruch/Spring (XVI.9, XVIII, XVII.4) | ein Feature "Sweep + Rückschluss + Volumendivergenz" |
+| Fibonacci (XIX.2) | Golden-Pocket-Zone, **nur** als Konfluenz mit anderem Level |
+| News (XXIV) | Wirtschaftskalender-Flag → Konfidenz-Veto |
+| Sitzungen/Zeit (XIII.2) | Zeit-Gewichtung der Konfidenz (Overlap = voll, Asien-Nachmittag = Malus) |
+| Korrelation (XIII.3) | rollierende Korrelationsmatrix → Risikobudget-Bündelung |
+
+## 26.2 Der Konfidenz-Score (Zusammenführung)
+
+Der Ausgabe-Konfidenzwert ist ein gewichteter Konfluenz-Score (Teil VI.2), **regime-abhängig**
+umgewichtet, plus harte Vetos:
+
+```
+Konfidenz-Basis = Σ (Faktor_Score × Regime_Gewicht)
+  Faktoren: Trend-Ausrichtung (Multi-TF), Momentum, Kerze-am-Level,
+            Volumen, Zonen-/S-R-Nähe, Fehlausbruch-Signatur
+
+Vetos (setzen Konfidenz → "nicht handeln"):
+  - Signal gegen den 4h-Trend (außer klares Umkehr-Regime)
+  - Hochimpakt-News in < 30 Min
+  - dünne Sitzung (Asien-Nachmittag, Freitagabend)
+  - R:R < 1:2 nicht erreichbar
+  - Zone bereits mehrfach getestet (nicht mehr frisch)
+```
+
+## 26.3 Die Ausgabe-Karte (was der Nutzer sieht)
+
+Jede Empfehlung enthält verbindlich: **Richtung** (Long/Short/Abwarten), **Konfidenz %**,
+**Einstiegsmethode** (Limit an Zone / Stop-Breakout / Bestätigung abwarten), **Stop-Loss**
+(in Preis, Pip und %), **Take-Profit** (in Preis, Pip, % und R:R), **Regime**, **Begründung**
+(welche Faktoren zusammenkamen) und **Warnungen** (News, Zeit, Korrelation). Nie nur "kaufen" —
+immer das vollständige, nachvollziehbare Bild, damit der Nutzer lernt statt blind zu folgen.
+
+## 26.4 Was der Assistent bewusst NICHT tut
+
+- **Keine Sekunden-Trades.** Untergrenze ist der 5m-Trigger, geplant für Halten über Minuten bis
+  Stunden — nicht die 1-Sekunden-Wetten der Binäroptionen-Apps (Teil XXV.3).
+- **Keine Prognose als Sicherheit.** Konfidenz ist Wahrscheinlichkeit, nicht Vorhersage.
+- **Keine Größenerhöhung nach Verlusten.** Nie Martingale/Grid (V7).
+- **Kein Handel ohne Stop.** Jede Empfehlung hat eine definierte Invalidierung.
+
+Damit ist der Assistent die praktische, entschärfte, ehrliche Umsetzung genau dessen, was der
+Nutzer in den Videos gesehen hat — nur auf einem echten Markt, mit echten Positionen, echtem
+Stop-Loss und ohne die eingebauten Verlustmechaniken.
+
+---
+
+# Teil XXVII — Indikatoren im Detail
+
+Ergänzt Teil V um die konkrete Mechanik jedes wichtigen Indikators: Formel, Standardeinstellung,
+Signal und — am wichtigsten — die typische Fehlanwendung. **Grundsatz aus Teil V bleibt:** Kein
+Indikator ist ein Signal, jeder ist nur eine Umformung des Preises. Wert entsteht durch
+Kombination *unkorrelierter* Indikatoren, nicht durch das Stapeln von fünf Trendindikatoren, die
+alle dasselbe sagen.
+
+## 27.1 Trendindikatoren
+
+**Gleitende Durchschnitte (SMA/EMA)**
+- **Formel EMA:** `EMA_t = Preis_t × k + EMA_{t-1} × (1−k)`, mit `k = 2/(N+1)`. EMA reagiert
+  schneller als SMA, weil jüngere Kerzen stärker gewichtet werden.
+- **Übliche Perioden:** 21 (kurz), 50 (mittel), 200 (lang). Der EMA-Fächer (8/21/55/200) zeigt
+  Trend + Trendstärke auf einen Blick: sauber gestaffelt = starker Trend, verschlungen = Range.
+- **Fehler:** In Seitwärtsphasen produziert jedes Crossover Whipsaws. Immer mit ADX-Trendfilter
+  kombinieren (Teil XVI.3).
+
+**ADX / DMI (Average Directional Index)**
+- Misst **Trendstärke**, nicht Richtung. +DI und −DI zeigen die Richtung, ADX die Kraft.
+- **Lesart:** ADX < 20 = kein Trend (Range) · 20–25 = Trend beginnt · > 25 = starker Trend · > 40
+  = sehr stark, evtl. überdehnt.
+- **Zentrale Rolle:** ADX ist der beste einzelne **Regime-Schalter** — er entscheidet, ob
+  Trendfolge- oder Mean-Reversion-Strategien laufen dürfen.
+
+**Ichimoku Kinko Hyo ("Ein-Blick-Gleichgewicht")** 🔶
+- Sechs Komponenten aus Hoch/Tief-Mittelwerten (Goichi Hosoda, 1930er):
+  - **Tenkan-sen** (Wandlung) = (9-Perioden-Hoch + 9-Tief)/2 — kurzfristig
+  - **Kijun-sen** (Basis) = (26-Hoch + 26-Tief)/2 — mittelfristig, dynamischer Support
+  - **Senkou Span A** = (Tenkan + Kijun)/2, 26 Perioden **in die Zukunft** projiziert
+  - **Senkou Span B** = (52-Hoch + 52-Tief)/2, 26 Perioden vorprojiziert
+  - **Kumo (Wolke)** = Fläche zwischen Span A und B — Support/Widerstand-Zone
+  - **Chikou Span** = Schlusskurs, 26 Perioden **zurück** versetzt — Bestätigungsfilter
+- **Signale:** Preis über der Wolke = Aufwärtstrend; Tenkan/Kijun-Kreuzung = Trigger; Kumo-Twist
+  (Span A kreuzt B) = vorausschauender Trendwechsel; Kumo-Breakout = Ausbruchsstrategie.
+- **Fehler:** überladen auf niedrigen Zeitrahmen; am besten auf 1h+ und als Trendfilter, nicht
+  als alleiniges Signal.
+
+## 27.2 Momentum-Indikatoren
+
+**RSI (Relative Strength Index)**
+- **Formel:** `RSI = 100 − 100/(1+RS)`, `RS = Ø-Gewinn / Ø-Verlust` über N (Standard 14).
+- **Lesart:** > 70 überkauft, < 30 überverkauft — **aber:** in starken Trends bleibt RSI lange
+  überkauft/überverkauft. Überkauft ist **kein** Verkaufssignal im Aufwärtstrend.
+- **Beste Nutzung:** (a) **Divergenz** (Teil XVI.4), (b) RSI-Dreh aus dem Extrem *am Level* als
+  Bestätigung, (c) 40/60 als Trend-Bias-Grenze (im Aufwärtstrend hält RSI über 40).
+
+**MACD (Moving Average Convergence Divergence)**
+- **Formel:** MACD-Linie = EMA(12) − EMA(26); Signallinie = EMA(9) der MACD-Linie; Histogramm =
+  MACD − Signal.
+- **Signale:** MACD kreuzt Signallinie (Trigger); Nulllinien-Kreuzung (Trendwechsel); Histogramm-
+  Divergenz (Momentumverlust, Frühwarnung).
+- **Fehler:** nachlaufend; in Ranges viele Fehlsignale. Stärke liegt in der Divergenz.
+
+**Stochastik (%K / %D)**
+- Misst, wo der Schluss innerhalb der jüngsten Hoch-Tief-Range liegt. %K schnell, %D geglättet.
+- **Lesart:** > 80 überkauft, < 20 überverkauft; %K/%D-Kreuzung im Extrem als Trigger.
+- **Beste Nutzung:** in Range-Regimen für Mean-Reversion; im Trend unbrauchbar allein.
+
+## 27.3 Volatilitäts-Indikatoren
+
+**ATR (Average True Range)**
+- **Formel:** True Range = max(Hoch−Tief, |Hoch−Vorschluss|, |Tief−Vorschluss|); ATR = Ø(TR) über
+  N (Standard 14). Erfasst auch Gaps.
+- **Nutzung:** **Stop-Abstand** (1,5–3× ATR je Stil) und **Positionsgröße** (Teil IX/XXII).
+  Formel: `Größe = (Konto × Risiko%) / (ATR × Multiplikator)`. Die Position schrumpft automatisch,
+  wenn die Volatilität steigt — gleiches Geldrisiko bei ruhigem wie bei wildem Markt.
+- **Kein Richtungssignal**, reines Maß für "wie weit bewegt sich das hier normal".
+
+**Bollinger Bands**
+- **Formel:** Mittelband = SMA(20); obere/untere Bänder = ± 2 Standardabweichungen.
+- **Signale:** Preis am oberen Band = relativ hoch; **Squeeze** (Bänder eng) = niedrige
+  Volatilität vor Ausbruch; **Band-Walking** (Preis läuft am Band entlang) = starker Trend, kein
+  Umkehrsignal.
+- **Fehler:** "Band berührt = Umkehr" ist falsch im Trend. Bollinger misst *relative* Lage, nicht
+  Richtung.
+
+**Keltner Channel + der Squeeze**
+- Keltner = EMA(20) ± 1,5× ATR. Nutzt ATR statt Standardabweichung.
+- **BB/KC-Squeeze (John Carter):** Wenn die Bollinger Bands **komplett innerhalb** des Keltner
+  Channels liegen, ist die Volatilität außergewöhnlich niedrig → **Kompression vor Expansion**.
+  Der Ausbruch (mit Volumen) aus dem Squeeze ist ein hochwertiges Setup (deckt sich mit Teil
+  XVI.2). Standard: BB(20; 2σ) + KC(20; 1,5× ATR).
+
+## 27.4 Volumen-Indikatoren
+
+**OBV (On-Balance Volume)**
+- Kumuliert Volumen: +Volumen an grünen Kerzen, −Volumen an roten. Steigender OBV bestätigt
+  Aufwärtstrend; OBV-Divergenz zum Preis = Warnung.
+- **Forex-Einschränkung:** Echtes Volumen fehlt im dezentralen Spot-Forex; MT5 zeigt nur
+  **Tick-Volumen** (Anzahl Kursänderungen) als Näherung. Für Krypto/Perp ist echtes Volumen
+  verfügbar und aussagekräftiger.
+
+**VWAP** — siehe Teil IV.5 und XVI.6 (institutioneller Referenzpreis, Ordermagnet).
+
+## 27.5 Pivot Points (Intraday-Level) 🔶
+
+Vorab berechnete Support/Widerstand-Level aus den Vortageswerten — beliebt bei Daytradern, weil
+viele darauf schauen (teils selbsterfüllend).
+
+- **Standard-Pivot:** `P = (Hoch + Tief + Schluss) / 3`; darum R1/S1, R2/S2, R3/S3.
+- **Camarilla (Nick Scott, 1989):** acht Level aus der Vortages-Range mit Fibonacci-Multiplikatoren
+  (0,0916 · 0,183 · 0,275 · 0,55). Wichtigste Level: **R3/S3** (Ausbruchszone) und **R4/S4**
+  (Extrem-Umkehrzone).
+- **Fibonacci-Pivot:** klassischer Pivot ± 38,2/61,8/100 % der Vortages-Range.
+- **Nutzung:** Als zusätzliche horizontale Konfluenz-Level, nicht als eigenständiges Signal.
+
+## 27.6 Der Redundanz-Test (aus Teil V, hier als Regel)
+
+Vor Aufnahme eines Indikators ins Ensemble: **Liefert er Information, die die vorhandenen nicht
+schon haben?** RSI, Stochastik und Williams %R sind fast dieselbe Information (Momentum-Oszillator)
+— drei davon sind nicht dreimal so gut, sondern einmal mit dreifachem Rechenaufwand. Ein gutes
+Set kombiniert je einen aus Trend / Momentum / Volatilität / Volumen / Struktur — fünf
+*unkorrelierte* Blickwinkel.
+
+---
+
+# Teil XXVIII — Order-Typen, Spread, Slippage und Ausführung
+
+Die beste Analyse ist wertlos, wenn die Order schlecht ausgeführt wird. Ergänzt Teil VI.5 (Krypto)
+um die allgemeine und forex-spezifische Ausführung. 🔶
+
+## 28.1 Die Order-Typen
+
+| Typ | Was | Garantie |
+|---|---|---|
+| **Market** | sofort zum besten verfügbaren Preis | Ausführung garantiert, **Preis nicht** |
+| **Limit** | nur zu Preis X oder besser | Preis garantiert, **Ausführung nicht** |
+| **Stop (Market)** | wird bei Preis X zur Market-Order | fängt Ausbruch/Stop-Loss, **Slippage-Risiko** |
+| **Stop-Limit** | wird bei X zur Limit-Order zu Y | Preis kontrolliert, kann leer ausgehen bei schnellem Move |
+| **Trailing Stop** | Stop läuft im Gewinn mit | sichert Gewinn, kann bei Rücksetzer früh auslösen |
+| **OCO (One-Cancels-Other)** | zwei Orders verknüpft, eine löscht die andere | für gleichzeitiges TP + SL |
+| **OTO (One-Triggers-Other)** | Ausführung der einen aktiviert die andere | für automatisches Setzen von SL/TP nach Einstieg |
+
+## 28.2 Spread — die stille Dauerkost
+
+Der Spread (Ask − Bid) wird bei **jedem** Ein- und Ausstieg bezahlt. Bei EUR/USD oft 0,1–1,0 Pip,
+bei exotischen Paaren und in dünnen Zeiten deutlich mehr. **Konsequenz:** Der Trade startet immer
+im Minus (um den Spread). Für kurze Trades ist der Spread relativ zur Zielbewegung groß — deshalb
+gehört er ins Signal-Filter (Teil VI.4): Ziel muss ein Vielfaches des Spreads sein.
+
+## 28.3 Slippage — wann die Ausführung wehtut
+
+Slippage = Differenz zwischen erwartetem und tatsächlichem Fill-Preis. **Drei Szenarien mit
+extremer Slippage:**
+1. **Geplante News** (NFP, FOMC, CPI): Spreads weiten sich um das 5–20-fache für 30–60 Sekunden.
+2. **Gap-Eröffnungen** (Forex Sonntagabend, Aktien-Open): Preis springt über die angezeigten Level.
+3. **Dünne Liquidität** (Off-Session, exotische Paare): schon kleine Orders bewegen den Preis.
+
+Ein Stop-Loss als Market-Order kann in diesen Momenten weit jenseits des geplanten Niveaus
+gefüllt werden — der Grund, warum News-Zeiten gemieden werden (Teil XXIV).
+
+## 28.4 Die Ausführungsregeln für den Assistenten/Bot
+
+- **Einstieg:** bevorzugt Limit an der Zone (bester Preis), mit dem ehrlichen Hinweis, dass er
+  nicht gefüllt werden könnte. Für Ausbrüche: Stop-Einstieg mit einkalkulierter Slippage.
+- **Stop-Loss:** immer als **echte Order an der Börse/beim Broker**, nie nur im Speicher (Teil
+  XII.18). Ein Stop im Bot-Kopf schützt nicht, wenn der Bot abstürzt.
+- **TP + SL zusammen:** als OCO setzen, damit nie eine offene Position ohne Absicherung existiert.
+- **Slippage messen:** jeden Fill mit dem erwarteten Preis vergleichen und die Differenz ins
+  Kostenmodell zurückspeisen (Teil VI.5) — der Backtest wird dadurch mit der Zeit realistischer.
+
+---
+
+# Teil XXIX — Risiko-Rechenbeispiele
+
+Ergänzt Teil IX mit konkreten Zahlen, damit der Nutzer die Mathematik greifen kann. Alle
+Beispiele mit dem realistischen Startkapital des Projekts.
+
+## 29.1 Positionsgröße aus 1 % Kontorisiko
+
+**Gegeben:** Konto 30 €, Risiko 1 % = 0,30 € pro Trade. EUR/USD, Einstieg 1,0850, Stop 1,0820
+(30 Pips).
+
+```
+Risiko in Pip     = 30 Pips
+Erlaubter Verlust = 0,30 €
+Erlaubter €/Pip   = 0,30 € / 30 = 0,01 €/Pip
+Micro-Lot bringt  = 0,10 €/Pip → nötig: 0,01/0,10 = 0,1 Micro-Lot
+```
+
+**Ergebnis:** Bei 30 € Konto ist selbst ein Micro-Lot (0,01 Lot) für 1 % Risiko bei 30-Pip-Stop
+**zu groß** — das Konto ist zu klein für sauberes Risikomanagement in Forex. Genau der Befund aus
+PLATTFORM-VERGLEICH.md. **Konsequenz:** Auf MT5-Demo mit größerem virtuellem Konto üben; echtes
+Geld erst bei ausreichender Kapitalbasis. Der Assistent rechnet die Größe trotzdem korrekt aus und
+sagt ehrlich, wenn die Mindestgröße das Risikolimit sprengt → **kein Trade** (nicht: Limit erhöhen).
+
+## 29.2 Dieselbe Rechnung mit 1.000 € (Demo/Ziel)
+
+```
+Risiko 1 % = 10 €; Stop 30 Pips → erlaubt 0,333 €/Pip → ~3 Micro-Lot (0,03 Lot). Sauber machbar.
+```
+
+Das zeigt, warum Kapital schrittweise aufgebaut wird: Erst ab einer gewissen Größe erlaubt die
+Mindestordergröße überhaupt diszipliniertes Risiko.
+
+## 29.3 Drawdown-Erholung (die Asymmetrie in Zahlen)
+
+| Verlust | Nötiger Gewinn zur Erholung |
+|---|---|
+| −10 % | +11,1 % |
+| −20 % | +25 % |
+| −33 % | +50 % |
+| **−50 %** | **+100 %** |
+| −75 % | +300 % |
+| −90 % | +900 % |
+
+`Erholung = 1/(1−Verlust) − 1`. Deshalb ist Kapitalerhalt keine Vorsicht, sondern Arithmetik
+(Teil I.4). Ein Konto, das man halbiert, muss sich verdoppeln — das schafft kaum jemand.
+
+## 29.4 Verlustserien — was normal ist
+
+Bei 50 % Trefferquote ist die Wahrscheinlichkeit für **N Verluste in Folge** irgendwann in einer
+Serie von 100 Trades:
+
+| Serie | Einzelwahrscheinlichkeit | In 100 Trades fast sicher? |
+|---|---|---|
+| 5 in Folge | 3,1 % | ja, kommt vor |
+| 7 in Folge | 0,8 % | wahrscheinlich |
+| 10 in Folge | 0,1 % | selten, aber möglich |
+
+**Konsequenz:** Bei 10 % Risiko pro Trade halbiert eine 7er-Serie das Konto (Teil XII.15). Bei
+1 % kostet dieselbe Serie 7 % — unangenehm, aber überlebbar. Die Serie **kommt**; die Frage ist
+nur, ob das Konto sie übersteht.
+
+## 29.5 Erwartungswert eines Systems durchgerechnet
+
+**System A:** 40 % Treffer, Ø-Gewinn 2R, Ø-Verlust 1R.
+```
+E = 0,40 × 2R − 0,60 × 1R = 0,80R − 0,60R = +0,20R pro Trade  → profitabel
+```
+**System B:** 70 % Treffer, Ø-Gewinn 0,5R, Ø-Verlust 1R.
+```
+E = 0,70 × 0,5R − 0,30 × 1R = 0,35R − 0,30R = +0,05R pro Trade  → kaum profitabel
+```
+Nach Kosten (z. B. 0,1R/Trade) ist System B **negativ**, System A klar positiv — obwohl B
+"öfter recht hat". Das ist der Kern von Teil I: **Trefferquote täuscht, Erwartungswert zählt.**
+
+---
+
+# Teil XXX — Backtest- und Journal-Metriken
+
+Wie der Assistent misst, ob seine Signale funktionieren. Ergänzt Teil VIII. Das Trade-Journal
+(Phase A, Sprint A5) ist das wichtigste Werkzeug, um aus Meinung Evidenz zu machen.
+
+## 30.1 Die Kennzahlen, die zählen
+
+| Metrik | Formel / Bedeutung | Zielrichtung |
+|---|---|---|
+| **Trefferquote (Win Rate)** | Gewinner / alle Trades | allein irreführend (Teil I) |
+| **Erwartungswert / Expectancy** | (WR × Ø-Gewinn) − (LR × Ø-Verlust) | **> 0 nach Kosten** — die Kernmetrik |
+| **Profit Factor** | Bruttogewinn / Bruttoverlust | > 1,3 brauchbar, > 1,7 gut |
+| **Ø-R-Multiple** | mittleres Ergebnis in R pro Trade | > 0,1R solide |
+| **Max Drawdown** | größter Peak-to-Trough-Rückgang | so klein wie möglich |
+| **Sharpe / Sortino** | Rendite pro Risikoeinheit (Sortino nur Abwärtsrisiko) | > 1 ordentlich |
+| **MAE (Max Adverse Excursion)** | tiefster Punkt gegen dich während des Trades | zeigt, ob Stops zu weit/eng |
+| **MFE (Max Favorable Excursion)** | bester Punkt für dich während des Trades | zeigt, ob Ziele zu nah (Geld liegen gelassen) |
+
+**MAE/MFE-Analyse** ist der praktischste Journal-Hebel: Wenn viele Gewinner erst weit ins Minus
+liefen (hohe MAE), ist der Einstieg zu früh. Wenn viele Trades den TP knapp verfehlten und
+zurückkamen (hohe MFE, kleiner Realgewinn), sind die Ziele zu weit.
+
+## 30.2 Die Validierungsregeln (aus Teil VIII, verdichtet)
+
+1. **Out-of-Sample oder nichts.** Auf Fenster A optimieren, auf Fenster B messen (Walk-Forward).
+2. **Versuche zählen.** Wer 100 Varianten testet, findet zufällig eine gute — Deflated Sharpe.
+3. **Realistisches Kostenmodell.** Spread + Slippage + (Krypto) Funding immer einrechnen.
+4. **Selbsttest der Engine.** Eine Zufallsstrategie muss exakt die Kosten als Verlust zeigen;
+   zeigt sie Gewinn, hat die Backtest-Engine einen Bug (Look-Ahead).
+5. **Parameter-Robustheit.** Bricht das Ergebnis bei ±20 % Parameteränderung zusammen, ist es an
+   die Vergangenheit angepasst und live wertlos.
+
+## 30.3 Das Journal-Schema (was pro Trade festgehalten wird)
+
+```
+Datum/Zeit (UTC) · Paar · Richtung · Setup-Typ · Regime ·
+Einstieg · Stop · Ziel · geplantes R:R · Positionsgröße ·
+Konfidenz-Score des Assistenten · These (1 Satz) · Invalidierung ·
+Ergebnis (R) · MAE · MFE · Ausstiegsgrund · Prozess-Note (regelkonform ja/nein)
+```
+
+Die **Prozess-Note** ist bewusst getrennt vom Ergebnis: Ein regelkonformer Verlust ist ein guter
+Trade, ein Gewinn aus Regelbruch ein schlechter (Teil XXIII.4). So misst das Journal Disziplin,
+nicht nur Glück.
+
+## 30.4 Shadow-Mode als Brücke zum Bot (Phase B)
+
+Bevor der spätere Vollautomat echtes Geld bewegt, läuft er im **Shadow-Mode**: erzeugt Signale
+live, führt aber keine Orders aus. Diese "Papier-Signale" werden mit denselben Metriken bewertet
+wie echte Trades. Erst wenn die Shadow-Performance über genug Trades stimmt, wird scharf
+geschaltet (Teil VIII / IX). Für Phase A ist das Trade-Journal des Nutzers das Äquivalent.
+
+---
+
+# Teil XXXI — Setup-Steckbriefe (Kurzreferenz)
+
+Die handelbaren Setups aus Teil XVI als kompakte "Handelskarten" — eine schnelle Nachschlagliste
+für den Assistenten und den Nutzer. Jeder Steckbrief: Regime · Trigger · Stop · Ziel.
+
+**S1 — Trendfolge-Rücksetzer (Long)**
+Regime: Aufwärtstrend (EMA 21>55>200, ADX>20) · Trigger: Umkehrkerze in EMA-21/55- oder
+Golden-Pocket-Zone + RSI-Dreh aus <40 · Stop: unter Rücksetzer-Tief / 1,5× ATR · Ziel: letzter
+Swing-High, dann Chandelier-Trailing · R:R ≥ 1:2.
+
+**S2 — Range-Ausbruch**
+Regime: Kompression (Bollinger-Squeeze / niedrige Bandbreite) · Trigger: Schluss außerhalb der
+Range **mit Volumen** · Stop: zurück in die Range · Ziel: Range-Höhe projiziert · Fehlausbruch-
+Filter: ohne Volumen nicht handeln.
+
+**S3 — Divergenz-Umkehr**
+Regime: Ende eines ausgedehnten, sauberen Trends · Trigger: RSI/MACD-Divergenz + Preis-
+Bestätigungskerze am Level + Volumen · Stop: hinter das Extrem · Ziel: erste Gegen-Struktur.
+
+**S4 — Supply/Demand-Zone**
+Regime: passend zum HTF-Trend · Trigger: frische, unberührte Zone; Limit an proximaler Kante ·
+Stop: hinter distale Kante · Ziel: gegenüberliegende Zone / POC.
+
+**S5 — Liquidity Sweep / Wyckoff-Spring**
+Regime: Range mit klarem Extrem · Trigger: Docht über/unter das Level, Schluss zurück in Range,
+Volumendivergenz · Stop: knapp jenseits des Sweep-Extrems · Ziel: gegenüberliegende Liquidität.
+
+**S6 — London-Breakout (Forex)**
+Regime: ruhige Asien-Range, kein News-Tag · Trigger: Buy-/Sell-Stop an Range-Kanten zur
+London-Eröffnung · Stop: gegenüberliegende Kante · Ziel: 1–2× Range-Höhe · **Veto bei
+Hochimpakt-News.**
+
+**S7 — VWAP-Rücksetzer (Trendtag)**
+Regime: Trendtag · Trigger: Rücklauf an den VWAP von der Trendseite · Stop: jenseits VWAP ± 1σ ·
+Ziel: Tageshoch/-tief.
+
+**S8 — BB/KC-Squeeze-Breakout**
+Regime: Bollinger komplett im Keltner (Squeeze) · Trigger: Ausbruch + Band-Expansion + Volumen ·
+Stop: Squeeze-Mitte · Ziel: Trailing.
+
+Für jeden Steckbrief gilt der Rahmen aus Teil VI: **Ohne definierten Stop und R:R ≥ 1:2 kein
+Trade.**
+
+---
+
+# Teil XXXII — Glossar A–Z
+
+Kompaktes Nachschlagewerk der wichtigsten Begriffe aus diesem Dokument. Damit der Nutzer Videos
+und Charts versteht, ohne alles neu suchen zu müssen.
+
+- **ADX** — Average Directional Index; misst Trendstärke (nicht Richtung). Regime-Schalter.
+- **Ask / Bid** — Kaufpreis (Ask) / Verkaufspreis (Bid); Differenz = Spread.
+- **ATR** — Average True Range; Volatilitätsmaß für Stops und Positionsgröße.
+- **Backtest** — Test einer Strategie auf historischen Daten. Nur out-of-sample aussagekräftig.
+- **BOS** — Break of Structure; Bruch eines Swing-Hochs/-Tiefs, Trendfortsetzung.
+- **Breakout** — Ausbruch aus einer Range/einem Muster.
+- **CHoCH** — Change of Character; erster Strukturbruch gegen den Trend, Wendewarnung.
+- **Chandelier Exit** — ATR-Trailing-Stop (Höchsthoch − 3× ATR).
+- **Confluence / Konfluenz** — Zusammentreffen mehrerer unabhängiger Signale am selben Ort.
+- **Divergenz** — Preis und Momentum-Indikator laufen auseinander; Umkehr- oder Fortsetzungssignal.
+- **Drawdown** — Rückgang vom Kapital-Höchststand; asymmetrisch zu erholen.
+- **DXY** — US-Dollar-Index; übergeordneter Taktgeber für USD-Paare.
+- **EMA** — Exponential Moving Average; jüngere Kerzen stärker gewichtet.
+- **Engulfing** — Zwei-Kerzen-Umkehrmuster; eine Kerze umschließt die vorherige.
+- **Erwartungswert (Expectancy)** — durchschnittliches Ergebnis pro Trade; die Kernmetrik.
+- **FVG** — Fair Value Gap; Drei-Kerzen-Imbalance, oft "gefüllt".
+- **Funding Rate** — periodische Zahlung zwischen Long/Short in Perpetual-Futures (Krypto).
+- **Golden Cross / Death Cross** — 50-MA kreuzt über/unter 200-MA.
+- **Golden Pocket** — Fibonacci-Zone 50–61,8 %, bevorzugte Rücksetzer-Einstiegszone.
+- **Head & Shoulders** — Umkehrmuster mit drei Gipfeln; Kopf höher als die Schultern.
+- **HTF / LTF** — Higher / Lower Timeframe; höherer filtert, niedrigerer triggert.
+- **Ichimoku** — japanisches All-in-one-Trendsystem mit "Wolke" (Kumo).
+- **Kelly-Kriterium** — mathematisch optimale Positionsgröße; praktisch nur fraktional (¼–½).
+- **Killzone** — von ICT betontes Zeitfenster (deckt sich mit Sitzungs-Overlaps).
+- **Liquidität / Liquidity Sweep** — Stop-Cluster; Preis läuft sie ab und dreht (Stop Hunt).
+- **Lot / Pip / Point** — Positionsgröße / kleinste Kursänderung / Zehntel-Pip (Forex).
+- **MACD** — Momentum-Indikator aus EMA-Differenz + Signallinie + Histogramm.
+- **MAE / MFE** — Max Adverse / Favorable Excursion; schlechtester/bester Punkt im Trade.
+- **Marktstruktur** — Abfolge von höheren Hochs/Tiefs (Trend) bzw. deren Bruch.
+- **Martingale** — Einsatz nach Verlust erhöhen; eingebauter Totalverlust. **Verboten (V7).**
+- **Mean Reversion** — Strategie auf Rückkehr zum Mittelwert; nur im Range-Regime.
+- **Order Block** — letzte Gegenkerze vor Impuls (SMC); ~ frische Angebots-/Nachfragezone.
+- **Overtrading** — zu viele Trades; Kosten und Fehler steigen.
+- **PEAD** — Post-Earnings Announcement Drift; Kursdrift nach Gewinnüberraschung.
+- **Pip-Wert** — Geldwert einer Pip-Bewegung, abhängig von der Lot-Größe.
+- **Pivot Points** — vorab berechnete Intraday-Support/Widerstand-Level.
+- **POC** — Point of Control; Preis mit dem höchsten gehandelten Volumen (Volume Profile).
+- **Post-Only** — Limit-Order, die nur als Maker ausgeführt wird (günstigere Gebühr, Krypto).
+- **Profit Factor** — Bruttogewinn / Bruttoverlust.
+- **R / R-Multiple** — Risiko-Einheit (Abstand Einstieg↔Stop); Ergebnisse in R gemessen.
+- **Range** — Seitwärtsphase zwischen Support und Widerstand.
+- **Regime** — Marktzustand (Trend / Range / volatil); bestimmt die erlaubte Strategie.
+- **RSI** — Relative Strength Index; Momentum-Oszillator 0–100.
+- **R:R** — Risk-Reward-Ratio; Verhältnis Risiko zu Zielgewinn.
+- **Sharpe / Sortino** — risikoadjustierte Rendite (Sortino nur Abwärtsrisiko).
+- **Slippage** — Differenz zwischen erwartetem und tatsächlichem Fill-Preis.
+- **SMC / ICT** — Smart Money Concepts / Inner Circle Trader; Preisaktions-Schule.
+- **Spread** — Ask−Bid; sofortige Kostenlast bei jedem Ein-/Ausstieg.
+- **Spring / Upthrust (UTAD)** — Wyckoff-Fehlausbruch nach unten (bullisch) / oben (bärisch).
+- **Stop-Loss** — Order, die den Verlust begrenzt; muss real an der Börse liegen.
+- **Support / Widerstand (S/R)** — Preiszonen mit erhöhter Kauf-/Verkaufsreaktion.
+- **Swap / Rollover** — Zinsdifferenz-Kosten/-Ertrag beim Halten über Nacht (Forex).
+- **Take-Profit** — Order, die den Gewinn realisiert.
+- **Tick-Volumen** — Anzahl Kursänderungen; Volumen-Näherung im Forex (kein echtes Volumen).
+- **Trailing Stop** — Stop, der im Gewinn mitläuft.
+- **Trend** — gerichtete Abfolge höherer Hochs/Tiefs (auf) bzw. tieferer (ab).
+- **VCP** — Volatility Contraction Pattern (Minervini); enger werdende Basen vor Ausbruch.
+- **VWAP** — Volume Weighted Average Price; institutioneller Referenzpreis / Ordermagnet.
+- **Walk-Forward** — rollierende Optimierung/Validierung; einzig valide Backtest-Methode.
+- **Whipsaw** — Fehlsignal-Serie in Seitwärtsmärkten (v. a. bei MA-Crossovers).
+- **Wyckoff** — Methode der Marktphasen (Akkumulation/Distribution) über Preis + Volumen.
+
+---
+
+# Teil XXXIII — Instrumentenprofile: der Charakter der Paare
+
+Jedes Paar hat einen eigenen "Charakter" — typische Tagesbewegung, beste Sitzung, Haupttreiber.
+Der Assistent sollte das kennen, um Signale realistisch zu bewerten. Angaben sind grobe
+Größenordnungen (🔶, driften über Zeit) und dienen der Einordnung, nicht als exakte Prognose.
+
+## 33.1 Die Majors
+
+| Paar | Ø-Tagesrange | Beste Sitzung | Haupttreiber | Charakter |
+|---|---|---|---|---|
+| **EUR/USD** | ~50–90 Pips | London/NY-Overlap | Fed vs. EZB, DXY | liquidestes Paar, engste Spreads, "sauberste" Technik |
+| **GBP/USD ("Cable")** | ~80–130 Pips | London | BoE, UK-Daten, Risk-Sentiment | volatiler, impulsiver, gut für Breakouts |
+| **USD/JPY** | ~50–90 Pips | Tokio + NY | Fed vs. BoJ, US-Renditen, Risk-on/off | rendite- und risikogetrieben, oft trendstark |
+| **USD/CHF ("Swissy")** | ~50–80 Pips | London | SNB, Safe-Haven-Flüsse | invers zu EUR/USD, ruhiger |
+| **AUD/USD ("Aussie")** | ~50–80 Pips | Asien/Tokio | China, Rohstoffe, Risk-Sentiment | rohstoff-/China-gekoppelt |
+| **USD/CAD ("Loonie")** | ~60–100 Pips | NY | WTI-Öl, Fed vs. BoC | stark ölgetrieben (invers zu WTI) |
+| **NZD/USD ("Kiwi")** | ~50–80 Pips | Asien | Milchpreise, China, RBNZ | ähnlich AUD, dünner |
+
+## 33.2 Cross-Paare und Gold
+
+- **EUR/GBP:** ruhig, range-lastig, kleiner Tagesrange (~30–50 Pips); gut für Mean-Reversion,
+  schlecht für Breakouts. Beste Zeit London.
+- **EUR/JPY, GBP/JPY ("Beast"):** sehr volatil, große Ranges (GBP/JPY oft 100–200 Pips);
+  Risk-Sentiment-Barometer; nur mit weiten Stops und kleiner Größe.
+- **XAU/USD (Gold):** kein Währungspaar, aber auf MT5 handelbar; invers zum DXY, Safe-Haven,
+  reagiert stark auf Realzinsen und Krisen; große Bewegungen, weite Stops nötig.
+
+## 33.3 Die praktische Konsequenz
+
+- **Anfänger-Fokus: EUR/USD und USD/JPY.** Engste Spreads, ruhigste Technik, meiste Liquidität.
+- **GBP/JPY, GBP/USD** erst, wenn Risikomanagement sitzt — die Größe muss wegen der weiten Ranges
+  kleiner sein (gleiches €-Risiko = weniger Lot).
+- Der Assistent normiert Stops und Ziele **über ATR des jeweiligen Paares**, nicht über feste
+  Pip-Zahlen — 30 Pips sind bei EUR/GBP viel, bei GBP/JPY wenig.
+
+---
+
+# Teil XXXIV — Der schriftliche Handelsplan (Vorlage)
+
+Aus der Skills-Sammlung (Kill-Regel, Teil XXV.1) und der Psychologie (Teil XXIII): Der wichtigste
+Einzelfaktor gegen undisziplinierte Verluste ist ein **vor** dem Handeln schriftlich fixierter
+Plan. Diese Vorlage kann der Nutzer für sich ausfüllen; der Assistent erzeugt pro Trade die
+konkreten Werte.
+
+## 34.1 Der Dauerplan (einmal festlegen)
+
+```
+1. Ziel & Zeithorizont: Was will ich, bis wann, realistisch?
+2. Kapital & Risiko: Kontogröße, Risiko pro Trade (max 1 %), Tages-Verlust-Limit (−3 %)
+3. Märkte: welche Paare, welche Sitzungen (Fokus London/NY-Overlap)
+4. Setups: welche der Steckbriefe S1–S8 handle ich? (lieber 2–3 gut als 8 schlecht)
+5. Zeiten: wann handle ich, wann NICHT (News, dünne Sitzungen, nach Verlust-Limit)
+6. Ausführung: Order-Typen, Stop immer real gesetzt, TP+SL als OCO
+7. Journal: jeder Trade wird protokolliert (Schema Teil XXX.3)
+8. Review: wöchentliche Auswertung (Erwartungswert, Prozess-Treue)
+```
+
+## 34.2 Der Pro-Trade-Plan (jeder einzelne Trade)
+
+```
+- Paar, Richtung, Setup-Typ, Regime
+- These in EINEM Satz: warum steigt/fällt das jetzt wahrscheinlich?
+- Invalidierung: was macht diese These falsch? → das ist der Stop
+- Einstieg, Stop, Ziel, geplantes R:R (≥ 1:2)
+- Positionsgröße aus 1 % Kontorisiko gerechnet
+- Warnungen geprüft: News? Zeit? Korrelation zu offenen Trades?
+```
+
+## 34.3 Die drei Fragen vor jedem Klick
+
+1. **Ist das ein geplantes Setup — oder springe ich einem Move hinterher?** (FOMO-Check)
+2. **Kenne ich meine Invalidierung, und ist der Stop real gesetzt?** (Risiko-Check)
+3. **Handle ich, um meinem Plan zu folgen — oder um einen Verlust zurückzuholen?** (Rache-Check)
+
+Wenn eine Antwort nicht sauber ist: **nicht handeln.** Nichtstun ist die häufigste korrekte
+Entscheidung (Teil XXV.2).
+
+---
+
+# Teil XXXV — Zusätzliche Kernerkenntnisse (Runde 2)
+
+Ergänzt Teil XII um die verdichtete Essenz der neuen Teile XIII–XXXIV. Nummeriert weiter ab 23.
+
+23. **Die Uhrzeit ist ein Signalfilter.** Der London/NY-Overlap trägt den Großteil der sauberen
+    Bewegungen; dünne Sitzungen produzieren Rauschen. Zeit gehört in den Konfidenz-Score.
+24. **Forex-Paare sind hoch korreliert.** EUR/USD und GBP/USD sind fast dasselbe Geschäft; drei
+    korrelierte Longs sind eine große Position, keine drei kleinen.
+25. **Kerzenmuster sind ohne Ort wertlos.** Hammer und Hanging Man sind dieselbe Kerze — nur der
+    Trend und das Level machen daraus ein Signal.
+26. **Engulfing und Morning/Evening Star sind die zuverlässigsten Kerzenmuster** — weil sie einen
+    echten Kräftewechsel kodieren, nicht nur einen Docht.
+27. **Bulkowskis ehrliche Zahl: nur ~51 % der Chartmuster erreichen ihr Ziel.** Volumen-
+    bestätigung halbiert die Fehlrate. Muster sind Struktur, keine Wahrsagerei.
+28. **Der Fehlausbruch ist oft das bessere Signal als der Ausbruch.** Gefangene Trader müssen
+    glattstellen — das treibt die Gegenbewegung (Liquidity Sweep / Spring / UTAD, dieselbe Sache).
+29. **SMC/ICT ist umbenannte Marktstruktur.** Nützliches Vokabular, keine geheime Edge. Als
+    Struktur-Features übernehmen, nicht als Glaubenssystem.
+30. **Wyckoff ist der beste Rahmen für Marktphasen**, weil er Preis und Volumen zusammen liest
+    (Aufwand vs. Ergebnis). Spring und UTAD sind maschinell erfassbar.
+31. **Fibonacci, Elliott und harmonische Muster sind im Rückblick stark, im Vorlauf schwach.**
+    Nur als Konfluenz mit echten Leveln, niedrig gewichtet, nie als alleiniger Trigger.
+32. **Alle erfolgreichen Systeme teilen fünf Merkmale:** Kontraktion vor Expansion, nur mit dem
+    Trend, definierte Invalidierung vor Einstieg, Volumenbestätigung, Erwartungswert aus Asymmetrie.
+33. **Top-Down oder Rauschen.** Wer auf dem 5m-Chart anfängt, sieht überall Signale. Der höhere
+    Zeitrahmen filtert, bevor Konfidenz entsteht.
+34. **Der Ausstieg entscheidet über den Erwartungswert, nicht der Einstieg.** Zu frühes
+    Teilverkaufen und mechanisches Break-Even schneiden die großen Gewinner ab, die alles tragen.
+35. **Der Stop wird aus der Struktur bestimmt, die Größe folgt daraus** — nie umgekehrt. Den Stop
+    an eine gewünschte Größe anzupassen ist ein Kontokiller.
+36. **News bewegen über Überraschung, nicht über das Niveau.** Erwartete Zahlen bewegen nichts.
+    Um Hochimpakt-Ereignisse herum: nicht handeln (Spreads, Slippage, Reversals).
+37. **Der wichtigste Vorteil eines Bots ist Disziplin, nicht Prognose.** Er kennt keine Angst,
+    keine Rache, keine Langeweile. Deshalb sind Risikolimits im Code, nicht in der Konfiguration.
+38. **Ein regelkonformer Verlust ist ein guter Trade.** Das Journal bewertet Prozesstreue, nicht
+    nur P&L — sonst verstärkt ein Zufallsgewinn schlechtes Verhalten.
+39. **Bei kleinem Konto ist sauberes Risiko oft unmöglich.** Wenn die Mindestordergröße das
+    1 %-Limit sprengt, ist die richtige Antwort "kein Trade", nicht "Limit erhöhen".
+40. **Indikatoren müssen unkorreliert sein.** Fünf Trendindikatoren sagen fünfmal dasselbe. Je
+    einer aus Trend/Momentum/Volatilität/Volumen/Struktur ist mehr wert als zehn ähnliche.
+41. **Jedes Paar hat einen Charakter.** 30 Pips sind bei EUR/GBP viel und bei GBP/JPY wenig —
+    Stops und Ziele werden über ATR normiert, nicht über feste Pip-Zahlen.
+42. **Der schriftliche Plan vor dem Klick ist der stärkste Schutz vor sich selbst.** Drei Fragen:
+    geplantes Setup? Stop real gesetzt? Handle ich dem Plan oder der Rache?
+
+Diese 20 Punkte plus die 22 aus Teil XII sind die 42-Punkte-Essenz des gesamten Dokuments — die
+Kurzfassung, an der sich jede Signalbewertung des Assistenten messen lassen muss.
+
+---
+
+# Teil XXXVI — Einen Chart lesen: durchgerechnetes Beispiel
+
+Damit alles Vorherige greifbar wird: eine vollständige Analyse, so wie der Assistent sie
+durchläuft — von der großen Zeitebene bis zur fertigen Empfehlung. Die Zahlen sind erfunden, der
+**Ablauf** ist echt und exakt der aus Teil XXI. So sieht "der Bot guckt sich den Chart an und
+entscheidet" konkret aus.
+
+## 36.1 Ausgangslage
+
+Paar: **EUR/USD**. Aktueller Kurs: **1,0840**. Uhrzeit: **13:15 UTC** (London/NY-Overlap — gutes
+Fenster, Teil XIII.2). Wirtschaftskalender: keine Hochimpakt-News in den nächsten 2 Stunden
+(Teil XXIV — kein Veto).
+
+## 36.2 Schritt 1 — Kontext (4h)
+
+- **Trend:** EMA 21 (1,0795) > EMA 55 (1,0760) > EMA 200 (1,0710), alle steigend, Preis darüber
+  → **Aufwärtstrend**. ADX(14) = 27 → **Trend bestätigt** (> 25). **Regime: Aufwärtstrend →
+  erlaubte Richtung: nur Long.**
+- **Struktur:** letzte Bewegung bildete ein höheres Hoch bei 1,0870 und ein höheres Tief bei
+  1,0800 (intakte Aufwärts-Marktstruktur, kein CHoCH).
+- **Große Level:** Widerstand bei 1,0870 (letztes Hoch), Support-Zone 1,0800–1,0810 (letztes
+  Tief + runde Zahl).
+
+## 36.3 Schritt 2 — Setup (1h / 15m)
+
+- Der Preis ist von 1,0870 auf aktuell 1,0840 zurückgelaufen — ein **gesunder Rücksetzer im
+  Aufwärtstrend** (Setup-Kandidat S1, Teil XXXI).
+- **Fib des letzten Impulses** (1,0800 → 1,0870): 50 % = 1,0835, 61,8 % = 1,0827 → **Golden
+  Pocket 1,0827–1,0835** (Teil XIX.2).
+- **EMA 21 auf 1h** liegt bei 1,0832 — fällt fast mit dem Golden Pocket zusammen.
+- **Demand-Zone** (frische Basis vor dem letzten Anstieg) bei 1,0825–1,0835.
+- **Konfluenz:** Golden Pocket + EMA 21 + Demand-Zone + höheres Tief der Struktur — **vier
+  unabhängige Faktoren** zeigen auf dieselbe Zone bei ~1,0830.
+
+## 36.4 Schritt 3 — Trigger (15m / 5m)
+
+- Der Preis läuft in die Zone 1,0830 und bildet dort eine **bullische Engulfing-Kerze** (Teil
+  XIV.3) — Bestätigung am Level.
+- **RSI(14)** dreht aus 38 nach oben (Teil XXVII.2) — Momentum-Bestätigung.
+- **Tick-Volumen** der Engulfing-Kerze über dem 20-Kerzen-Schnitt (Teil XXVII.4).
+
+## 36.5 Schritt 4 — Risiko und Ziel
+
+- **Einstieg:** 1,0838 (Schluss der Bestätigungskerze; alternativ Limit an 1,0832).
+- **Stop-Loss:** 1,0818 — unter die Demand-Zone und das höhere Tief (Struktur-Stop, Teil XXII.2).
+  Abstand = **20 Pips**.
+- **Take-Profit 1:** 1,0870 (letztes Hoch) = +32 Pips → **R:R ≈ 1:1,6**.
+- **Take-Profit 2:** 1,0898 (Fib-Extension 127,2 %) = +60 Pips → **R:R ≈ 1:3**, Rest per
+  Chandelier-Trailing (Teil XVI.10).
+- **Mindestziel R:R ≥ 1:2** wird über TP2 erreicht → **Trade gültig**.
+
+## 36.6 Schritt 5 — Positionsgröße
+
+Bei Demo-Konto 1.000 €, Risiko 1 % = 10 €, Stop 20 Pips → erlaubt 0,50 €/Pip → **5 Micro-Lot
+(0,05 Lot)** (Teil XXIX.2). Bei 30-€-Echtkonto wäre die Mindestgröße zu groß → **kein Echttrade,
+nur Demo** (Teil XXIX.1).
+
+## 36.7 Die fertige Ausgabe-Karte
+
+```
+EUR/USD  —  ▲ LONG   Konfidenz: 76 %   Regime: Aufwärtstrend
+Einstieg:    1,0838
+Stop-Loss:   1,0818   (−20 Pips / −0,18 %)
+Take-Profit: 1,0870 (TP1) → 1,0898 (TP2)   R:R bis 1:3
+Größe:       5 Micro-Lot (0,05 Lot) bei 1.000 € Demo, 1 % Risiko
+
+Begründung: 4h-Aufwärtstrend (EMA-Fächer + ADX 27); Rücksetzer in
+Konfluenzzone (Golden Pocket 50–61,8 % + EMA 21 + frische Demand-Zone +
+höheres Tief); bullische Engulfing-Kerze am Level mit RSI-Dreh aus 38
+und überdurchschnittlichem Volumen; Overlap-Zeit, keine News.
+
+Warnungen: keine (News frei, gute Sitzung). Bei offenem GBP/USD-Long
+beachten: EUR/USD und GBP/USD korrelieren ~+0,9 → gemeinsames Risiko.
+```
+
+## 36.8 Was das Beispiel zeigt
+
+Kein einzelner Faktor löst den Trade aus — es ist das **Zusammentreffen** aus Trend, Zone,
+Kerze, Momentum, Volumen und Zeit, das die Konfidenz auf 76 % hebt. Genau diese Konfluenz-Logik
+(Teil VI.2) ist der Unterschied zwischen einem echten Analyse-Assistenten und einer App, die
+zufällig "hoch" oder "runter" anzeigt (Teil XXV.3). Und weil jeder Schritt begründet ausgegeben
+wird, **lernt der Nutzer mit jedem Signal**, statt blind zu folgen — das erklärte Ziel von Phase A.
+
+---
+
 # Quellen
 
 **Akademisch 🎓**
@@ -1602,3 +3221,61 @@ Architektur muss auf Strategiewechsel ausgelegt sein, nicht auf eine perfekte St
 - [Institutional Crypto Flows & 2026 Market Analysis (Amberdata)](https://blog.amberdata.io/institutional-crypto-flows-2026-market-analysis)
 - [On-Chain Whale Activity 2026](https://mintarex.com/en/blog/reading-on-chain-whale-activity-2026)
 - [Lessons from Algo Trading Failures (LuxAlgo)](https://www.luxalgo.com/blog/lessons-from-algo-trading-failures/)
+
+**Recherche-Runde 2 (2026-07-25) — Forex, Kerzen, Strategien 🔶/🎓**
+
+*Kerzen- und Chartmuster-Statistik*
+- [The 10 Best Candle Patterns Proven With 56,680 Trades (LiberatedStockTrader)](https://www.liberatedstocktrader.com/candle-patterns-reliable-profitable/)
+- [The Doji Myth: 8,029 Trades Prove It Wrong (LiberatedStockTrader)](https://www.liberatedstocktrader.com/doji-candle/)
+- [Assessing the Reliability of Japanese Candlestick Patterns Across Market Regimes (Science Publishing Group) 🎓](https://www.sciencepublishinggroup.com/article/10.11648/j.im.20260101.16)
+- [Candlestick Pattern Backtesting: ES and AAPL (TradesViz)](https://www.tradesviz.com/blog/candlestick-pattern-effectiveness-backtesting/)
+- [Head and shoulders pattern success rate (ChartScout)](https://chartscout.io/head-and-shoulders-pattern)
+- [How to Backtest Chart Patterns Using Bulkowski's Methods (QuantStrategy.io)](https://quantstrategy.io/blog/how-to-backtest-chart-patterns-using-bulkowskis-statistical/)
+- [Chart Patterns Cheat Sheet 2025 (VT Markets)](https://www.vtmarkets.com/discover/chart-patterns-cheat-sheet-2025-stock-trading-patterns-guide/)
+
+*Forex-Mechanik, Sitzungen, Korrelation*
+- [Forex Trading Sessions Explained: Hours, Volatility & Best Times (Maven Trading)](https://maventrading.com/blog/forex-trading-sessions-hours-volatility-guide)
+- [Best Time to Trade Forex: Session Overlaps & Peak Hours (OANDA)](https://www.oanda.com/us-en/skills-and-insights/education/trading-asset-classes/forex/when-is-the-best-time-for-forex-trading/)
+- [Forex Correlation Pairs — Currency Correlation (Dukascopy)](https://www.dukascopy.com/swiss/english/marketwatch/articles/forex-correlation-pairs/)
+- [Currency Pairs Correlation Table (Defcofx)](https://www.defcofx.com/currency-pairs-correlation-table/)
+
+*Strategien, Preisaktion, SMC/Wyckoff*
+- [ICT Trading Strategy: Complete Guide (LiteFinance)](https://www.litefinance.org/blog/for-beginners/trading-strategies/ict-trading-strategy/)
+- [Anatomy of a Valid Order Block in Smart Money Concepts (LiquidityFinder)](https://liquidityfinder.com/news/anatomy-of-a-valid-order-block-in-smart-money-concepts-67221)
+- [Supply and Demand Trading Zones Explained (TrendSpider)](https://trendspider.com/learning-center/what-are-supply-and-demand-zones/)
+- [Wyckoff Accumulation Pattern: Phases, Schematics (TrendSpider)](https://trendspider.com/learning-center/chart-patterns-wyckoff-accumulation/)
+- [Wyckoff Distribution Pattern Explained (BitMEX)](https://www.bitmex.com/blog/wyckoff-distribution)
+- [Does the Death Cross Actually Work? 65 Years of Data (QuantifiedStrategies)](https://www.quantifiedstrategies.com/death-cross-in-trading/)
+- [RSI Divergence: Bullish vs Bearish Signals (LuxAlgo)](https://www.luxalgo.com/blog/rsi-divergence-bullish-vs-bearish-signals/)
+- [Divergence Trading: RSI & MACD Setup Rules (TradingSim)](https://www.tradingsim.com/blog/divergence)
+
+*Fibonacci, Elliott, Harmonisch*
+- [Guidelines for Applying Elliott Wave Theory (StockCharts ChartSchool)](https://chartschool.stockcharts.com/table-of-contents/market-analysis/elliott-wave-analysis-articles/guidelines-for-applying-elliott-wave-theory)
+- [Elliott Wave Trading — Why To Be Cautious (LiberatedStockTrader)](https://www.liberatedstocktrader.com/elliott-wave-theory-principle-examples-stock-market/)
+- [A Trader's Guide to Fibonacci Trading Strategies (Switch Markets)](https://www.switchmarkets.com/learn/fibonacci-trading-strategies)
+- [Harmonic Patterns: Gartley, Bat, Butterfly & Crab (TradingSim)](https://www.tradingsim.com/blog/harmonic-patterns-in-stock-trading)
+
+*News, Trade-Management, Psychologie, Volatilität*
+- [Forex News Trading Guide: NFP, CPI, FOMC (PriceActionNinja)](https://priceactionninja.com/forex-news-trading-guide-nfp-cpi-fomc-major-releases/)
+- [News-driven FX Trading: FOMC, CPI, NFP (FXEmpire)](https://www.fxempire.com/education/article/news-driven-fx-trading-how-to-trade-events-like-the-fomc-cpi-and-nfp-1549791)
+- [Trade Management After Entry: Stop Loss, Partial Profits (ChartMini)](https://chartmini.com/blog/trade-management-what-to-do-after-you-enter-2026)
+- [Dynamic reward/risk ratio and risk management (Tradeciety)](https://tradeciety.com/how-to-manage-risk-as-a-trader-become-a-professional-risk-manager)
+- [How to Use ATR for Volatility-Based Stop-Losses (LuxAlgo)](https://www.luxalgo.com/blog/how-to-use-atr-for-volatility-based-stop-losses/)
+- [ATR Trailing Stop Guide: Chandelier Exit (StratBase)](https://stratbase.ai/en/blog/average-true-range-trailing-stop)
+- [Retail Trading Mistakes: 25 Costly Errors (TradeVerse)](https://www.tradeversejournal.com/blog/retail-trading-mistakes)
+- [Common Trading Mistake: Overtrading (OANDA)](https://www.oanda.com/us-en/skills-and-insights/education/trading-psychology/common-mistakes/common-trading-mistake-overtrading/)
+
+*Indikatoren, Ausführung, Pivots (Recherche-Runde 3)*
+- [Ichimoku Cloud Trading Strategies (TrendSpider)](https://trendspider.com/learning-center/ichimoku-cloud-trading-strategies/)
+- [Ichimoku Cloud know-how: Trend, signals & setups (OANDA)](https://www.oanda.com/us-en/skills-and-insights/education/technical-analysis/indicators-and-oscillators/ichimoku-cloud-trading-guide-key-strategies/)
+- [BB/KC Squeeze: Trading Range Breakouts (TrendSpider)](https://trendspider.com/learning-center/bb-kc-squeeze-a-powerful-indicator-for-trading-range-breakouts/)
+- [A Quantitative Study of the Bollinger Bands Squeeze (Superalgos/Medium)](https://medium.com/superalgos/a-quantitative-study-of-the-bollinger-bands-squeeze-strategy-9f47143f33fb)
+- [Camarilla Pivot Points (TradingView Scripts)](https://www.tradingview.com/scripts/camarilla/)
+- [Pivot Points: Formula, Types, Trading Guide (Strike.money)](https://www.strike.money/technical-analysis/pivot-points)
+- [Order Types Explained: Market, Limit, Stop, Stop-Limit, Trailing, Bracket (ChartMini)](https://chartmini.com/blog/order-types-explained)
+- [Types of Forex Orders: Market, Limit, Stop & More (Volity)](https://volity.io/forex/forex-orders-types/)
+
+*Projekt-intern*
+- Git-Branch `claude/trading-skills-repo-4q0qo9` — 64 dokumentierte Trading-Skills mit Playbooks
+  (Stockbee Momentum Burst, PEAD, Shapiro COT-Contrarian, Minervini VCP, CANSLIM, Quant-Framework
+  mit 7-Schichten-Signal-Stack). Referenzmaterial für Teil XX und XXV.
