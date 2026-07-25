@@ -290,6 +290,6 @@ und werden aktualisiert, wenn Phase B beginnt.
 | # | Frage | Status |
 |---|---|---|
 | O1 | Welchen MT5-Broker nutzt du fuer die Demo? (Betrifft Datenqualitaet) | offen |
-| O2 | Twelve Data API-Key — muss erstellt werden (kostenlos) | zu klaeren |
+| O2 | Twelve Data API-Key — muss erstellt werden (kostenlos) | erledigt — Key in .env |
 | O3 | Wo soll die App deployed werden? (Free Tier reicht zum Start) | offen |
 | O4 | Soll Claude-API fuer KI-Analyse integriert werden? (Kostet Geld) | offen |
