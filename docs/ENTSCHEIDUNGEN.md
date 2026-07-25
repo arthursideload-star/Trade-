@@ -206,13 +206,70 @@ er stellt weiteres Material (Videos) zur Verfügung.
 
 ---
 
+## 2026-07-25 (Nachtrag 2) — Strategiewechsel: Erst Halbautomat, dann Vollautomat
+
+### E9: Zwei-Phasen-Ansatz — Trading-Assistent vor autonomem Bot
+
+**Entscheidung:** Statt direkt den autonomen Bot zu bauen, wird zuerst ein
+**Trading-Assistent als Web-App** entwickelt (Phase A). Der autonome Bot folgt als Phase B,
+sobald die Analyse-Engine sich bewaehrt hat.
+
+**Begruendung:**
+- Der Nutzer moechte zuerst lernen und manuell handeln, bevor ein Bot allein entscheidet
+- Manuelles Handeln auf MT5-Demo ist risikofrei
+- Die Analyse-Engine wird in Phase B wiederverwendet — kein Doppelaufwand
+- Validierung durch echte Nutzung (Trade-Journal) statt nur Backtest
+- Der Nutzer ist im Urlaub und hat nur Handy + iPad, kein PC
+
+### E10: Plattform fuer Phase A — Forex auf MetaTrader 5 Demo
+
+**Entscheidung:** Start mit Forex auf MT5-Demo, nicht mit Krypto.
+
+**Begruendung:**
+- MT5 Demo ist kostenlos, kein Echtgeld noetig
+- Forex-Daten auf MT5-Demo sind in Echtzeit (kein 15-Min-Delay — das betrifft Aktien,
+  nicht Forex)
+- Der Nutzer hat MT5 bereits installiert
+- Majors (EUR/USD, GBP/USD etc.) haben die engsten Spreads und die zuverlaessigste
+  technische Analyse
+
+**Nicht revidiert:** E6 (Krypto + Perpetuals) gilt weiterhin fuer Phase B.
+
+### E11: Interface — Web-App statt Bildschirm-Analyse
+
+**Entscheidung:** Der Assistent ist eine Web-App, die Daten direkt von einer API holt.
+Kein Bildschirm-Lesen (Screen Capture + OCR).
+
+**Begruendung:** Bildschirm-Lesen ist fehleranfaellig, langsam und unnoetig, weil dieselben
+Daten als exakte Zahlen per API verfuegbar sind. Eine Web-App laeuft auf iPad und Handy
+gleichzeitig — der Nutzer kann auf einem Geraet handeln und auf dem anderen analysieren.
+
+### E12: Topstep-Bewertung — vorerst nicht
+
+**Entscheidung:** Prop-Trading-Firms (Topstep, FTMO etc.) werden vorerst nicht genutzt.
+
+**Analyse des Topstep-Angebots ($50K Account):**
+- 85 $/Monat laufende Kosten
+- Profit Target 3.000 $ (6 %) bei Max Drawdown 2.000 $ (4 %)
+- Consistency Rule: Kein Tag darf > 50 % des Gesamtgewinns ausmachen
+- Geschaeftsmodell basiert darauf, dass 85-90 % der Teilnehmer scheitern
+
+**Spaeter moeglich:** Wenn der Bot/Assistent nachweislich profitabel ist, koennte eine
+Prop-Firm-Challenge ein sinnvoller Weg zu groesserem Kapital sein. Aber erst nach Beweis,
+nicht als Experiment.
+
+---
+
 ## Offene Punkte
 
 | # | Frage | Status |
 |---|---|---|
-| O1 | Welche Börse ist die primäre Handelsbörse — Binance oder Bybit? | offen |
-| O2 | Zielhaltedauer konkret — Minuten oder Stunden? Bestimmt Zeitrahmen und Datenauflösung | offen |
-| O3 | Konkrete Kapitalstufen (Erhöhungsschritte ab 30 €) | offen |
-| O4 | VPS-Anbieter und Standort (Börsennähe) | zugesagt, sobald Ergebnisse stimmen |
+| O1 | Welche Boerse ist die primaere Handelsboerse — Binance oder Bybit? | ✅ Binance (E8), gilt fuer Phase B |
+| O2 | Zielhaltedauer konkret | ✅ 15m+ fuer Phase B; fuer Phase A flexibel (manuell) |
+| O3 | Konkrete Kapitalstufen (Erhoehungsschritte ab 30 €) | offen (Phase B) |
+| O4 | VPS-Anbieter und Standort | offen (Phase B) |
 | O5 | Auswertung des Beispiel-Bots | ✅ erledigt (E5) |
 | O6 | Plattformentscheidung | ✅ erledigt (E6) |
+| O7 | MT5-Broker fuer Demo? (Datenqualitaet) | offen |
+| O8 | Twelve Data API-Key erstellen | offen |
+| O9 | Deployment-Ziel fuer Web-App | offen |

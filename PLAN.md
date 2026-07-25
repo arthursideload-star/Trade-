@@ -1,369 +1,295 @@
-# Entwicklungsplan: Autonomer 24/7 Trading-Bot
+# Entwicklungsplan: Trading-Projekt
 
-Status: Architektur & Roadmap
+Status: Phase A — Trading-Assistent (Web-App)
 Letzte Aktualisierung: 2026-07-25
 
 ---
 
-## 1. Designziele
+## Zwei-Phasen-Strategie
 
-Das System soll drei Dinge können, und der gesamte Aufbau richtet sich danach:
+| Phase | Was | Warum zuerst/danach |
+|---|---|---|
+| **A** | **Trading-Assistent** — Web-App, die Forex-Charts analysiert und dir Kauf/Verkauf-Empfehlungen gibt. Du handelst manuell auf MT5-Demo. | Lernen, Strategie validieren, kein Kapitalrisiko |
+| **B** | **Autonomer Bot** — handelt selbststaendig auf Binance (Krypto-Perpetuals). Basiert auf dem validierten Analyse-Code aus Phase A. | Erst wenn Phase A beweist, dass die Analyse funktioniert |
 
-| Ziel | Bedeutung im Code |
-|---|---|
-| **24/7 autonom** | Kein manueller Eingriff im Normalbetrieb. Selbstheilung bei Verbindungsabbrüchen, Neustart mit vollständiger Zustandswiederherstellung, Deployment ohne Handelsunterbrechung. |
-| **Präzise Analyse** | Mehrere Zeitebenen, mehrere Signalquellen, Regime-Erkennung, Konfidenz-Bewertung statt binärer Kauf/Verkauf-Entscheidungen. |
-| **Präzise Ausführung** | Der beste Analysewert ist wertlos, wenn die Order 0,3 % schlechter gefüllt wird als gedacht. Ausführungsqualität wird gemessen und optimiert. |
-
-**Präzision ist eine technische Eigenschaft, keine Vorhersagegenauigkeit.** Kein System kennt
-den nächsten Kurs. Was ein gut gebautes System kann: aus vielen schwachen Signalen einen
-belastbaren Erwartungswert formen, diesen exakt in Positionsgrößen übersetzen, verlustarm
-ausführen und sich anpassen, wenn sich der Markt ändert. Darauf zielt jeder Baustein hier.
+Phase B uebernimmt die gesamte Analyse-Engine aus Phase A. Der Aufwand ist nicht doppelt,
+sondern aufbauend.
 
 ---
 
-## 2. Systemarchitektur
+# Phase A: Trading-Assistent
 
-Der Bot besteht aus entkoppelten Diensten, die über einen internen Event-Bus kommunizieren.
-Das ist der Schlüssel für 24/7-Betrieb: Ein abstürzender Analyse-Dienst darf nie eine offene
-Position verwaisen lassen.
+## A1. Was der Assistent kann
+
+Du oeffnest die Web-App auf dem iPad (oder Handy). Du gibst ein Forex-Paar ein (z.B. EUR/USD).
+Der Assistent:
+
+1. **Holt Echtzeit-Daten** direkt von einer Forex-Datenquelle (nicht vom Bildschirm)
+2. **Zeigt einen interaktiven Chart** mit Kerzen, Volumen und eingezeichneten Levels
+3. **Analysiert gruendlich:**
+   - Kerzen-Muster (Hammer, Engulfing, Doji, etc.)
+   - Trendrichtung ueber mehrere Zeitebenen (5m, 15m, 1h, 4h)
+   - Support/Resistance-Zonen
+   - Indikatoren (RSI, MACD, EMA, Bollinger, ADX)
+   - Regime: Trend, Seitwaerts oder Volatil
+4. **Gibt eine klare Empfehlung:**
+   - Richtung: LONG (kaufen) oder SHORT (verkaufen) oder ABWARTEN
+   - Konfidenz: 0-100 %
+   - Einstiegspreis
+   - Stop-Loss (wo du rausgehst bei Verlust)
+   - Take-Profit (wo du Gewinn mitnimmst)
+   - Risiko/Chance-Verhaeltnis
+5. **Erklaert warum** — damit du lernst, nicht nur blind folgst
+
+Du liest die Empfehlung, entscheidest selbst und fuehrst den Trade in MetaTrader 5 aus.
+
+---
+
+## A2. Systemarchitektur
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          MARKET DATA LAYER                            │
-│  WebSocket-Feeds (Trades, Orderbuch, Kerzen) · REST-Fallback ·        │
-│  Normalisierung · Lückenerkennung · Persistenz (TimescaleDB)          │
-└────────────────────────────────┬─────────────────────────────────────┘
-                                 │ NormalizedTick / Bar
-┌────────────────────────────────▼─────────────────────────────────────┐
-│                          FEATURE ENGINE                               │
-│  Inkrementelle Indikatorberechnung über mehrere Zeitebenen            │
-│  (1m · 5m · 15m · 1h · 4h · 1d) → Feature-Vektor mit Zeitstempel      │
-└────────────────────────────────┬─────────────────────────────────────┘
-                                 │ FeatureSnapshot
-┌────────────────────────────────▼─────────────────────────────────────┐
-│                          ANALYSIS ENGINE                              │
-│  ┌────────────┐  ┌────────────┐  ┌──────────┐  ┌─────────────────┐   │
-│  │  Regime-   │  │  Signal-   │  │ Signal-  │  │  Meta-Modell    │   │
-│  │  Detektor  │→ │  Modelle   │→ │ Ensemble │→ │  (Konfidenz)    │   │
-│  └────────────┘  └────────────┘  └──────────┘  └─────────────────┘   │
-└────────────────────────────────┬─────────────────────────────────────┘
-                                 │ Signal(direction, edge, confidence)
-┌────────────────────────────────▼─────────────────────────────────────┐
-│                        PORTFOLIO & RISK ENGINE                        │
-│  Positionsgröße (Vol-Targeting) · Korrelationsmatrix ·                │
-│  Exposure-Limits · Kapitalschutz-Layer (Vetorecht)                    │
-└────────────────────────────────┬─────────────────────────────────────┘
-                                 │ TargetPosition
-┌────────────────────────────────▼─────────────────────────────────────┐
-│                          EXECUTION ENGINE                             │
-│  Order-Typ-Wahl · Slicing (TWAP/Iceberg) · Retry & Idempotenz ·       │
-│  Fill-Tracking · Slippage-Messung · Reconciliation                    │
-└────────────────────────────────┬─────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼─────────────────────────────────────┐
-│                    EXCHANGE ADAPTER (ccxt / native)                   │
-│         Backtest · Paper (Testnet) · Live — identische Schnittstelle  │
-└──────────────────────────────────────────────────────────────────────┘
-
-Querschnitt: State Store · Watchdog · Metrics/Alerting · Config-Service
+┌──────────────────────────────────────────────────────────────┐
+│                    WEB-APP (iPad / Handy)                     │
+│  Paar-Auswahl · Chart · Analyse-Anzeige · Signal-Karte       │
+│  Mobile-first, responsive                                     │
+└──────────────────────────┬───────────────────────────────────┘
+                           │ HTTP/WebSocket
+┌──────────────────────────▼───────────────────────────────────┐
+│                    BACKEND (FastAPI)                           │
+│  ┌──────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │  Data    │  │  Analyse-    │  │  Signal-Generator      │  │
+│  │  Service │→ │  Engine      │→ │  (Richtung, Konfidenz, │  │
+│  │          │  │              │  │   SL, TP, R:R)         │  │
+│  └──────────┘  └──────────────┘  └────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+         │
+┌────────▼─────────────────────────────────────────────────────┐
+│                    DATENQUELLEN                                │
+│  Forex-API (Echtzeit-Kerzen) · Nachrichtenfeeds               │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Zentrale Regel:** Backtest, Paper und Live unterscheiden sich ausschließlich im
-Exchange-Adapter. Alles darüber ist derselbe Code. Nur so sagen Testergebnisse etwas über
-den Live-Betrieb aus.
+---
+
+## A3. Tech-Stack
+
+| Bereich | Wahl | Begruendung |
+|---|---|---|
+| **Backend** | Python 3.12 + FastAPI | Schnell, async, gutes Oekosystem fuer Datenanalyse |
+| **Frontend** | HTML/CSS/JS (vanilla, mobile-first) | Kein Framework noetig fuer MVP, laeuft ueberall |
+| **Charts** | Lightweight Charts (TradingView Open Source) | Professionelle Kerzen-Charts, laeuft im Browser |
+| **Daten** | Twelve Data API (kostenloser Tier) | 800 Credits/Tag, Echtzeit-Forex, REST + WebSocket |
+| **Indikatoren** | pandas-ta | Umfangreiche Indikator-Bibliothek, gut getestet |
+| **Datenbank** | SQLite (MVP) → PostgreSQL (spaeter) | Fuer den Anfang reicht SQLite, kein Server noetig |
+| **Deployment** | Docker auf VPS oder kostenloser Tier | Ueberall erreichbar, auch vom iPad |
 
 ---
 
-## 3. Datenschicht — die Grundlage jeder Präzision
+## A4. Datenquelle fuer Forex
 
-Schlechte Daten erzeugen präzise falsche Signale. Deshalb ist das der erste Baustein.
+MetaTrader-5-Demokonten liefern fuer Forex in der Regel **Echtzeitdaten** (kein 15-Minuten-
+Delay). Das Delay betrifft Aktienkurse auf kostenlosen Plattformen, nicht Forex bei MT5-Brokern.
 
-**Quellen (Krypto Spot als Referenz):**
-- WebSocket: Trades, Orderbuch-Deltas (L2), Kerzen — primär, niedrige Latenz
-- REST: Lückenfüllung, historische Daten, Kontostand
-- Zusatzdaten: Funding Rates, Open Interest, Long/Short-Ratio — auch für Spot-Signale wertvoll
-- Zweite Börse als Referenzpreis (erkennt fehlerhafte Ticks der Hauptbörse)
+Fuer die Web-App brauchen wir eine eigene Datenquelle, unabhaengig von MT5:
 
-**Qualitätssicherung — läuft permanent mit:**
-- Lückenerkennung: Fehlt eine Kerze, wird sie per REST nachgeladen, bevor Signale rechnen
-- Ausreißerfilter: Ticks, die > X Standardabweichungen vom Referenzpreis abweichen, werden verworfen
-- Uhrzeit-Drift: NTP-Sync, Abgleich mit Börsen-Serverzeit; alles intern in UTC
-- Staleness-Wächter: Kommen 30 Sekunden keine Daten, gilt der Feed als tot → Reconnect → bei Fehlschlag kein Handel
-- Sequenznummern im Orderbuch prüfen; bei Lücke Snapshot neu anfordern
+| Quelle | Echtzeit | Kostenlos | Limit |
+|---|---|---|---|
+| **Twelve Data** | Ja | Ja (Free Tier) | 800 Credits/Tag, 8 Calls/Min |
+| **Finnhub** | Ja | Ja (Free Tier) | 60 Calls/Min |
+| **Alpha Vantage** | Ja | Ja | 25 Calls/Tag (zu wenig) |
+| **OANDA API** | Ja | Practice-Konto | Registrierung noetig |
 
-**Speicherung:** TimescaleDB (PostgreSQL-Erweiterung für Zeitreihen). Rohdaten unverändert
-aufbewahren, Features daraus neu berechenbar. So kannst du später Signale auf echten
-historischen Daten testen, statt nur auf Börsen-Kerzen.
+**Gewaehlt: Twelve Data** als primaere Quelle. Grosszuegiger Free Tier, gute Dokumentation,
+REST + WebSocket, alle Forex-Paare.
+
+Fallback: Finnhub als zweite Quelle, falls Twelve Data ausfaellt oder das Limit erreicht ist.
 
 ---
 
-## 4. Analyse-Engine — das Herzstück
+## A5. Analyse-Engine (Kern — wird in Phase B wiederverwendet)
 
-Kein einzelner Indikator hat eine belastbare Edge. Präzision entsteht durch **Kombination
-schwacher Signale unter Berücksichtigung des Marktregimes.**
+### Zeitebenen
 
-### 4.1 Feature-Ebene (mehrere Zeitebenen parallel)
-
-Alle Indikatoren werden **inkrementell** berechnet (Online-Update pro neuer Kerze), nicht per
-Neuberechnung über das gesamte Fenster — das ist der Unterschied zwischen Millisekunden und
-Sekunden pro Tick.
-
-| Kategorie | Features |
+| Zeitebene | Rolle |
 |---|---|
-| **Trend** | EMA-Fächer (8/21/55/200), ADX, Donchian-Position, lineare Regressionssteigung, Hurst-Exponent |
-| **Momentum** | RSI, MACD-Histogramm, Rate of Change, Stochastik über mehrere Perioden |
-| **Volatilität** | ATR, realisierte Volatilität, Bollinger-Bandbreite, Parkinson/Garman-Klass-Schätzer |
-| **Volumen** | OBV, Volume Profile / POC, VWAP-Abweichung, Volumen-Impuls |
-| **Mikrostruktur** | Orderbuch-Imbalance, Bid-Ask-Spread, Tiefe auf N Ebenen, Trade-Flow-Imbalance (aggressive Käufer vs. Verkäufer) |
-| **Marktweit** | Funding Rate, Open-Interest-Änderung, Korrelation zu BTC, Marktbreite |
-| **Zeitlich** | Tageszeit, Wochentag, Session (Asien/Europa/US) — Volatilität ist stark tageszeitabhängig |
+| **5m** | Einstiegs-Timing, kurzfristige Muster |
+| **15m** | Primaeres Signal-Zeitfenster |
+| **1h** | Trendbestaetigung |
+| **4h** | Uebergeordneter Trend, erlaubte Handelsrichtung |
 
-**Mehrere Zeitebenen gleichzeitig:** Der 4h-Trend bestimmt die erlaubte Handelsrichtung, das
-15m-Signal den Einstiegszeitpunkt, das 1m-Orderbuch die Ausführung. Ein Kaufsignal gegen den
-übergeordneten Trend wird abgeschwächt oder verworfen.
+### Indikatoren (minimaler, robuster Satz)
 
-### 4.2 Regime-Erkennung
+| Kategorie | Indikatoren | Zweck |
+|---|---|---|
+| **Trend** | EMA 21/55/200, ADX | Richtung und Staerke |
+| **Momentum** | RSI(14), MACD(12,26,9), Stochastik | Ueberkauft/ueberverkauft, Divergenzen |
+| **Volatilitaet** | ATR(14), Bollinger Bands(20,2) | Bandbreite, Ausbruchserkennung |
+| **Volumen** | OBV, Volumen-Durchschnitt | Bestaetigung von Bewegungen |
+| **Struktur** | Donchian Channel, Pivot Points | Support/Resistance-Levels |
 
-Derselbe Indikator funktioniert in einem Trendmarkt und schadet in einem Seitwärtsmarkt.
-Deshalb wird zuerst der Marktzustand klassifiziert:
+### Kerzen-Muster
 
-- **Klassifikation:** Trend (auf/ab) · Seitwärts · Hochvolatile Expansion · Kompression
-- **Methoden:** ADX + Volatilitäts-Perzentil als robuste Basis; optional Hidden-Markov-Modell
-  oder Gaussian-Mixture-Clustering auf Volatilitäts-/Return-Features
-- **Wirkung:** Jedes Signalmodell bekommt pro Regime ein eigenes Gewicht. Mean-Reversion-Signale
-  werden im Trendregime heruntergewichtet, Breakout-Signale im Seitwärtsregime.
+Automatische Erkennung der wichtigsten Muster mit Kontext-Bewertung:
 
-### 4.3 Signalmodelle
+- **Umkehr:** Hammer, Shooting Star, Engulfing, Morning/Evening Star, Doji an Extremen
+- **Fortsetzung:** Three White Soldiers, Three Black Crows, Rising/Falling Three Methods
+- **Kontext-Regel:** Ein Muster zaehlt nur, wenn es an einem relevanten Level (S/R, EMA,
+  Bollinger-Band) auftritt. Isolierte Muster werden nicht gewertet.
 
-Mehrere unabhängige Modelle, jedes liefert einen Wert in `[-1, +1]`:
+### Regime-Erkennung
 
-1. **Trendfolge** — Donchian-Breakout + EMA-Ausrichtung, ATR-normiert
-2. **Mean Reversion** — Abweichung vom VWAP/Bollinger in Kompressionsregimen
-3. **Momentum-Persistenz** — Cross-Sectional: die stärksten N von M Assets kaufen
-4. **Mikrostruktur** — Orderbuch- und Trade-Flow-Imbalance für kurzfristige Richtung
-5. **Volatilitäts-Breakout** — Positionsaufbau bei Ausbruch aus Kompression
+| Regime | Erkennungskriterien | Konsequenz |
+|---|---|---|
+| **Aufwaertstrend** | ADX > 25, EMA 21 > 55 > 200 | Nur Long-Signale |
+| **Abwaertstrend** | ADX > 25, EMA 21 < 55 < 200 | Nur Short-Signale |
+| **Seitwaerts** | ADX < 20, Preis in Bollinger-Range | Vorsicht, Range-Trades moeglich |
+| **Volatil** | ATR > 1,5× Durchschnitt | Kleinere Positionen empfehlen |
 
-### 4.4 Ensemble & Konfidenz
+### Signal-Bewertung
 
-Die Modellausgaben werden **nicht** einfach gemittelt:
+Jeder Faktor liefert einen Score. Das Ensemble bildet eine Gesamtbewertung:
 
-- **Gewichtung nach Regime** (siehe 4.2) und nach rollierender Trefferleistung der letzten
-  N Trades pro Modell — Modelle, die aktuell funktionieren, bekommen mehr Gewicht
-- **Meta-Labeling** (Ansatz nach López de Prado): Ein zweites Modell (Gradient Boosting)
-  bewertet nicht *ob* gekauft wird, sondern *wie wahrscheinlich das primäre Signal richtig
-  liegt*. Ausgabe ist ein Konfidenzwert.
-- **Triple-Barrier-Labeling** für das Training: Ein Trade gilt als erfolgreich, wenn er das
-  Gewinnziel vor dem Stop und vor Ablauf des Zeitfensters erreicht — realistischer als
-  "Preis nach X Kerzen".
-- **Schwellenwert:** Nur bei Konfidenz über einem Mindestwert wird gehandelt. Kein Signal ist
-  eine gültige und häufige Entscheidung — Nichthandeln kostet nichts außer Gelegenheit.
+```
+Gesamtscore = Σ (Faktor_Score × Gewicht × Regime_Multiplikator)
 
-**Ausgabe der Analyse-Engine:** `Signal(direction, expected_edge, confidence, regime, horizon)`
-— nicht nur "kaufen", sondern *wie stark, wie sicher, für wie lange*. Genau das braucht die
-nächste Schicht.
+Faktoren:
+  Trend-Ausrichtung (4h/1h/15m)    Gewicht: 30 %
+  Momentum-Bestaetigung             Gewicht: 20 %
+  Kerzen-Muster am Level            Gewicht: 15 %
+  Volumen-Bestaetigung              Gewicht: 15 %
+  Support/Resistance-Naehe          Gewicht: 20 %
+```
 
----
+**Ausgabe:**
 
-## 5. Portfolio- & Risk-Engine
-
-Übersetzt Signale in konkrete Zielpositionen. Hier entsteht ein großer Teil der tatsächlichen
-Performance — Positionsgrößen wirken stärker als Einstiegszeitpunkte.
-
-**Positionsgröße:**
-- **Volatilitäts-Targeting** als Basis: Jede Position wird so dimensioniert, dass sie den
-  gleichen Risikobeitrag liefert (Größe ∝ 1/ATR). Ein ruhiges Asset bekommt mehr Kapital
-  als ein wildes.
-- **Skalierung mit Konfidenz:** `Größe = Basisrisiko × Konfidenz`. Starke Signale bekommen
-  mehr Kapital, schwache weniger.
-- **Fraktionales Kelly** (max. ¼ Kelly) als Obergrenze — volles Kelly ist mathematisch
-  optimal, aber praktisch zu schwankungsanfällig.
-
-**Portfolio-Ebene:**
-- Korrelationsmatrix über alle offenen Positionen; korrelierte Positionen zählen zusammen
-  auf das Risikobudget (5 Altcoins sind eine Position, nicht fünf)
-- Gesamt-Exposure-Limit und Limit pro Asset
-- Rebalancing statt Vollausstieg: Signaländerungen passen die Zielgröße an, statt zu schließen
-  und neu zu kaufen — spart Gebühren
-
-**Kapitalschutz-Layer (Vetorecht über allem):**
-
-| Regel | Startwert |
+| Feld | Beispiel |
 |---|---|
-| Risiko pro Position | 1 % des Kontos |
-| Gesamtrisiko offen | max. 5 % |
-| Täglicher Verlust-Stopp | −3 % → Handelspause bis zum nächsten Tag |
-| Gesamt-Drawdown-Stopp | −15 % → Stopp, manuelle Freigabe |
-| Order-Rate-Limit | max. N Orders/Stunde (fängt Schleifen-Bugs) |
-| Sanity-Check pro Order | Größe, Preis und Wert in plausibler Spanne |
-
-Diese Werte stehen als harte Grenzen im Code, nicht in der Strategie-Konfiguration. Sie sind
-kein Misstrauen gegen die Strategie, sondern gegen Bugs und Börsenausfälle — beides gab es
-schon bei jedem System, das lange genug lief.
+| Richtung | LONG |
+| Konfidenz | 74 % |
+| Einstieg | 1.0842 |
+| Stop-Loss | 1.0810 (−32 Pips, −0,30 %) |
+| Take-Profit | 1.0906 (+64 Pips, +0,59 %) |
+| R:R | 1:2,0 |
+| Regime | Aufwaertstrend |
+| Begruendung | "4h und 1h Trend aufwaerts, 15m Hammer an EMA 55, RSI dreht aus ueberverkauft, Volumen steigt" |
 
 ---
 
-## 6. Execution Engine — Präzision am Punkt des Geldes
+## A6. Frontend — Mobile-First Web-App
 
-Bei 500 Trades im Jahr entscheiden 0,1 % Ausführungsqualität pro Trade über 50 % Jahresertrag.
+### Hauptansicht (iPad/Handy)
 
-- **Order-Typ nach Dringlichkeit:** Post-Only-Limit für geduldige Einstiege (Maker-Gebühr,
-  oft negativ = Rabatt), Market nur bei Stop-Auslösung
-- **Slicing:** Große Orders werden in Teilorders zerlegt (TWAP oder volumenabhängig), damit sie
-  das Orderbuch nicht selbst bewegen
-- **Adaptives Limit:** Limitpreis wird nach X Sekunden ohne Fill schrittweise nachgezogen —
-  balanciert Gebührenvorteil gegen Nichtausführungsrisiko
-- **Idempotenz:** Jede Order bekommt eine deterministische Client Order ID. Ein Retry nach
-  Timeout kann so niemals eine Doppelorder erzeugen — der häufigste teure Bug in Trading-Bots.
-- **Reconciliation:** Alle N Sekunden Abgleich zwischen erwarteter und tatsächlicher Position
-  an der Börse. Bei Abweichung: Alarm und Handelspause, bis geklärt.
-- **Slippage-Messung:** Für jeden Fill wird die Differenz zum erwarteten Preis geloggt. Diese
-  Werte fließen zurück ins Backtest-Kostenmodell — der Backtest wird dadurch mit der Zeit
-  immer realistischer.
+```
+┌────────────────────────────────────────┐
+│  [EUR/USD ▼]  [15m ▼]   [Analysieren] │  ← Paar + Zeitebene waehlbar
+├────────────────────────────────────────┤
+│                                        │
+│         Kerzen-Chart                   │  ← Interaktiv, S/R-Linien,
+│         (Lightweight Charts)           │     EMA eingezeichnet
+│                                        │
+├────────────────────────────────────────┤
+│  ┌──────────────────────────────────┐  │
+│  │  ▲ LONG        Konfidenz: 74 %  │  │  ← Signal-Karte
+│  │  Einstieg: 1.0842               │  │     Gruen = Long
+│  │  Stop-Loss: 1.0810 (32 Pips)    │  │     Rot = Short
+│  │  Take-Profit: 1.0906 (64 Pips)  │  │     Grau = Abwarten
+│  │  R:R: 1:2.0                     │  │
+│  └──────────────────────────────────┘  │
+├────────────────────────────────────────┤
+│  Begruendung:                          │
+│  4h/1h Trend aufwaerts, 15m Hammer     │  ← Erklaerung, damit du lernst
+│  an EMA 55, RSI dreht, Vol. steigt     │
+├────────────────────────────────────────┤
+│  Indikatoren:                          │
+│  RSI: 38 ↑  MACD: bullish cross       │  ← Detail-Bereich
+│  ADX: 31    EMA: 21>55>200             │
+│  ATR: 12 Pips  Regime: Trend ↑         │
+└────────────────────────────────────────┘
+```
 
----
+### Unterstuetzte Forex-Paare (Start)
 
-## 7. 24/7-Infrastruktur
+Die liquidesten Paare mit den engsten Spreads:
 
-Der Teil, der aus einem Skript ein System macht.
+| Paar | Typ |
+|---|---|
+| EUR/USD | Major |
+| GBP/USD | Major |
+| USD/JPY | Major |
+| USD/CHF | Major |
+| AUD/USD | Major |
+| EUR/GBP | Cross |
+| EUR/JPY | Cross |
 
-**Betrieb:**
-- Deployment als Docker-Compose-Stack auf einem VPS (Hetzner/Contabo, ~5–15 €/Monat) in
-  Börsennähe (Frankfurt oder Tokio, je nach Börse)
-- Systemd/Docker mit `restart: always`, Healthcheck-Endpunkten pro Dienst
-- Konfiguration über Umgebungsvariablen und Config-Datei, Secrets nie im Repo
-
-**Ausfallsicherheit:**
-- **Watchdog-Prozess:** Überwacht Heartbeats aller Dienste. Bleibt ein Heartbeat aus →
-  Neustart des Dienstes → bei wiederholtem Fehlschlag: Positionen sichern und alarmieren.
-- **Auto-Reconnect** mit exponentiellem Backoff für alle WebSockets; REST-Fallback aktiviert
-  sich automatisch, solange der Stream tot ist
-- **Zustandswiederherstellung beim Start:** Der Bot liest zuerst den echten Kontostand und
-  alle offenen Orders von der Börse und gleicht sie mit dem lokalen State ab. Bei Konflikt
-  gewinnt die Börse. Erst danach beginnt der Handel.
-- **Fail-safe statt fail-open:** Wenn der Zustand nicht sicher bekannt ist, wird nicht
-  gehandelt — es wird alarmiert und gewartet.
-- **Rate-Limit-Verwaltung:** Zentrale Token-Bucket-Kontrolle über alle API-Aufrufe; ein
-  Banning der IP durch die Börse ist ein vermeidbarer Ausfall.
-- **Backup:** Datenbank-Snapshot täglich, verschlüsselt off-site
-
-**Sicherheit:**
-- API-Key ausschließlich mit Handelsrecht — **Auszahlungen deaktiviert**, IP-Whitelist auf
-  den VPS. Selbst bei komplett kompromittiertem Server kann so kein Guthaben abfließen.
-- Getrenntes Börsen-Unterkonto nur für den Bot
-- Secrets über eine `.env`-Datei außerhalb des Repos oder einen Secret-Manager
-
-**Updates ohne Handelsunterbrechung:** Neue Version startet parallel, übernimmt nach
-Zustandsübergabe, alte Version fährt geordnet herunter. Ein Deployment darf niemals eine
-offene Position ohne Stop-Loss zurücklassen.
+Erweiterbar, aber zum Start reichen die Majors — dort sind die Spreads am engsten
+und die technische Analyse am zuverlaessigsten.
 
 ---
 
-## 8. Monitoring & Selbstheilung
-
-Autonomie heißt nicht "blind laufen lassen", sondern: das System meldet sich, wenn es zählt.
-
-- **Metriken** (Prometheus + Grafana): Equity-Kurve live, offene Positionen, Latenz pro
-  Pipeline-Stufe, Feed-Gesundheit, Slippage pro Trade, Signalverteilung, API-Fehlerraten
-- **Alerts** (Telegram-Bot): sofort bei Kapitalschutz-Auslösung, Feed-Ausfall, Order-Fehlern,
-  Reconciliation-Abweichung; täglicher Ergebnisbericht um 00:00 UTC
-- **Fernsteuerung** über denselben Telegram-Bot: Status abfragen, Positionen ansehen,
-  pausieren, Kill-Switch auslösen — vom Handy aus
-- **Selbstheilung:** Feed-Reconnect, Dienst-Neustart, automatische Nachladung fehlender Daten,
-  Wiederaufnahme nach Börsen-Wartungsfenster — alles ohne dich
-
----
-
-## 9. Validierung & kontinuierliche Verbesserung
-
-Damit "präzise" messbar bleibt und nicht Meinung ist.
-
-**Backtest-Engine (event-getrieben, nicht vektorisiert):**
-- Ausführung frühestens auf der nächsten Kerze — verhindert Handel mit Zukunftswissen
-- Kostenmodell mit echten Maker/Taker-Gebühren, Spread und gemessener Slippage aus dem Livebetrieb
-- Kennzahlen: CAGR, Max Drawdown, Sharpe, Sortino, Calmar, Profit Factor, Trefferquote,
-  Turnover — immer gegen Buy & Hold als Referenz
-- Selbsttest der Engine: Eine Zufallsstrategie muss exakt die Gebühren als Verlust zeigen.
-  Zeigt sie Gewinn, hat die Engine einen Bug — dieser Test läuft in der CI mit.
-
-**Walk-Forward statt Einmal-Optimierung:** Parameter auf Fenster A bestimmen, auf dem
-folgenden Fenster B messen, Fenster vorschieben. Nur die Out-of-Sample-Ergebnisse zählen.
-Zusätzlich Parametersensitivität prüfen: Bricht das Ergebnis bei ±20 % Parameteränderung
-zusammen, ist die Konfiguration an die Vergangenheit angepasst und im Livebetrieb wertlos.
-
-**Shadow-Mode:** Neue Modelle laufen zuerst live mit — sie erzeugen Signale und werden
-bewertet, führen aber keine Orders aus. Erst wenn die Shadow-Performance stimmt, werden sie
-scharf geschaltet. So testest du auf echten Marktdaten ohne Kapitalrisiko.
-
-**Modell-Drift-Erkennung:** Laufender Vergleich der Live-Signalqualität mit der erwarteten.
-Fällt die rollierende Trefferleistung unter einen Schwellenwert, wird das Modell automatisch
-heruntergewichtet und du bekommst einen Alert. Regelmäßiges Neutrainieren auf dem jeweils
-aktuellen Datenfenster.
-
----
-
-## 10. Umsetzungs-Roadmap
-
-Aufeinander aufbauende Sprints. Jeder Sprint hinterlässt etwas Lauffähiges.
+## A7. Umsetzungs-Roadmap Phase A
 
 | Sprint | Dauer | Inhalt | Ergebnis |
 |---|---|---|---|
-| **S1** | 1 Wo | Repo, Docker, CI, Config, Logging, TimescaleDB | Gerüst steht |
-| **S2** | 1–2 Wo | Data Layer: WebSocket + REST, Normalisierung, Qualitätschecks, Persistenz | Live-Daten fließen und werden gespeichert |
-| **S3** | 1 Wo | Feature Engine: inkrementelle Indikatoren, Multi-Timeframe | Feature-Vektoren in Echtzeit |
-| **S4** | 2 Wo | Backtest-Engine mit Kostenmodell + Selbsttest | Strategien messbar |
-| **S5** | 2 Wo | Signalmodelle + Regime-Detektor + Ensemble | Analyse-Engine liefert Signale mit Konfidenz |
-| **S6** | 1 Wo | Portfolio- & Risk-Engine, Kapitalschutz-Layer | Signale werden zu Zielpositionen |
-| **S7** | 1–2 Wo | Execution Engine: Idempotenz, Slicing, Reconciliation | Orders werden präzise ausgeführt |
-| **S8** | 1 Wo | 24/7-Infrastruktur: Watchdog, Recovery, Alerting, Telegram-Steuerung | System läuft unbeaufsichtigt |
-| **S9** | 4+ Wo | Paper-Trading auf Testnet, parallel Shadow-Mode | Live-Verhalten verifiziert |
-| **S10** | fortlaufend | Live-Start, schrittweise Kapitalerhöhung, Meta-Modell, weitere Strategien | Produktivbetrieb |
+| **A1** | 2-3 Tage | Projekt-Setup, FastAPI-Backend, Twelve Data Anbindung, erste Kerzen-Daten | Backend liefert Forex-Daten |
+| **A2** | 2-3 Tage | Analyse-Engine: Indikatoren, Regime, Kerzen-Muster, Signal-Generator | Backend liefert Analyse + Signal |
+| **A3** | 2-3 Tage | Frontend: Chart (Lightweight Charts), Signal-Anzeige, mobile Layout | Web-App benutzbar auf iPad |
+| **A4** | 2-3 Tage | Multi-Timeframe-Analyse, Signal-Ensemble, Begruendungstexte | Vollstaendige Analyse laeuft |
+| **A5** | 1 Woche | Trade-Journal (Empfehlung loggen, Ergebnis nachtragen), Performance-Tracking | Messbar, ob die Signale funktionieren |
+| **A6** | fortlaufend | Optimierung anhand der Journal-Daten, weitere Paare, Nachrichtenintegration | Kontinuierliche Verbesserung |
 
-**Bauzeit bis zum unbeaufsichtigten Dauerbetrieb: ca. 10–12 Wochen** aktive Entwicklung,
-danach die Paper-Phase parallel zur Weiterentwicklung.
-
-**Sinnvolle Reihenfolge beim Kapitaleinsatz:** klein starten und in Stufen erhöhen, sobald das
-Live-Verhalten dem Shadow-/Paper-Verhalten entspricht. Nicht aus Vorsicht, sondern weil
-Ausführungsqualität und Slippage sich mit der Ordergröße ändern — die Zahlen aus 200 € gelten
-nicht automatisch für 20.000 €.
+**Bauzeit bis zur benutzbaren Web-App: ca. 1,5-2 Wochen.**
 
 ---
 
-## 11. Tech-Stack
+## A8. Deployment & Zugang
 
-| Bereich | Wahl | Begründung |
+Die Web-App muss vom iPad und Handy erreichbar sein. Optionen:
+
+| Option | Kosten | Vorteil |
 |---|---|---|
-| Sprache | **Python 3.12** (`asyncio`) | Bestes Ökosystem für Datenanalyse und Börsen-APIs; asyncio passt zu vielen parallelen Streams |
-| Performance-Kern | **Rust/Cython** bei Bedarf | Nur falls Indikatorberechnung zum Flaschenhals wird — erst messen, dann optimieren |
-| Börsenzugang | `ccxt` + native WebSocket-Clients | Börsenwechsel ohne Umbau; native Streams für Latenz |
-| Daten | `polars`, `numpy`, `TimescaleDB` | polars ist deutlich schneller als pandas bei großen Zeitreihen |
-| ML | `scikit-learn`, `LightGBM` | Gradient Boosting schlägt Deep Learning bei tabellarischen Finanzdaten fast immer |
-| Validierung | `pydantic`, `pytest`, `hypothesis` | Property-Based-Tests für Risk- und Execution-Layer |
-| Betrieb | `Docker Compose`, `Prometheus`, `Grafana` | Reproduzierbar, beobachtbar |
-| Steuerung | Telegram-Bot | Kontrolle und Alerts vom Handy |
+| **Render.com Free Tier** | 0 € | Reicht fuer MVP, schlaeft nach Inaktivitaet ein |
+| **Hetzner VPS** | ~4 €/Monat | Immer an, volle Kontrolle |
+| **Railway.app** | Free Tier | Einfaches Deployment |
 
-**Markt-Empfehlung:** Krypto Spot. 24/7 (passt zum Ziel), kostenlose historische Daten in
-hoher Auflösung, offene APIs mit WebSockets, Testnets zum gefahrlosen Üben, kleine
-Mindestordergrößen. Aktien schließen abends und am Wochenende und haben teurere Datenanbindung.
+Fuer den Start reicht ein kostenloser Tier. Sobald die App taeglich genutzt wird,
+lohnt sich ein guenstiger VPS.
 
 ---
 
-## 12. Rechtlicher Rahmen (Deutschland)
+## A9. Was die App NICHT macht
 
-Kurz, aber zu klären, bevor Kapital fließt:
-- **Steuer:** Jeder Trade ist ein steuerlich relevanter Vorgang. Der Bot schreibt von Anfang an
-  ein vollständiges Trade-Log (UTC-Zeitstempel, Symbol, Menge, Preis, Gebühr, Order-ID) und
-  exportiert es maschinenlesbar. Bei hoher Frequenz und größerem Kapital: Steuerberater fragen.
-- **Eigenhandel ist erlaubnisfrei.** Fremdes Kapital verwalten wäre BaFin-erlaubnispflichtig.
-- **Börsen-AGB:** API-Handel ist bei allen großen Börsen ausdrücklich erlaubt; Rate-Limits einhalten.
+Klare Grenzen, damit keine Missverstaendnisse entstehen:
+
+- **Keine automatischen Orders** — du entscheidest und klickst selbst in MT5
+- **Keine Gewinngarantie** — die App gibt Empfehlungen, keine Vorhersagen
+- **Kein Bildschirm-Lesen** — die App holt Daten direkt von der Quelle
+- **Kein Echtgeld noetig** — funktioniert komplett mit MT5-Demo
+- **Kein Martingale/Grid** — Empfehlungen haben immer einen festen Stop-Loss
 
 ---
 
-## 13. Nächster Schritt
+# Phase B: Autonomer Bot (spaeter)
 
-Ich beginne mit **Sprint 1 + 2**: Projektgerüst, Docker-Setup, Konfiguration, Logging und die
-komplette Datenschicht mit Live-WebSocket-Anbindung, Qualitätsprüfung und Persistenz — die
-Basis, auf der alles andere aufsetzt.
+Phase B wird gestartet, wenn:
+1. Die Analyse-Engine aus Phase A nachweislich funktioniert (Trade-Journal zeigt positive Ergebnisse)
+2. Genug Startkapital vorhanden ist (mindestens 30 €, besser 100-200 €)
+3. Du dich mit den Maerkten sicher fuehlst
 
-Offen von dir: Börse/Markt bestätigen (Vorschlag: Binance oder Bybit, Krypto Spot) und ob
-der Bot später auf einem eigenen VPS laufen soll (empfohlen) oder anderswo.
+Phase B uebernimmt die komplette Analyse-Engine und baut darauf auf:
+- Automatische Order-Ausfuehrung auf Binance (Krypto-Perpetuals, 1x Hebel)
+- 24/7-Betrieb mit Watchdog und Telegram-Steuerung
+- Alle Sicherheitsregeln aus dem urspruenglichen Plan (V1-V7)
+
+Die Details fuer Phase B stehen im Git-Verlauf (vorherige Version von PLAN.md)
+und werden aktualisiert, wenn Phase B beginnt.
+
+---
+
+## Offene Fragen
+
+| # | Frage | Status |
+|---|---|---|
+| O1 | Welchen MT5-Broker nutzt du fuer die Demo? (Betrifft Datenqualitaet) | offen |
+| O2 | Twelve Data API-Key — muss erstellt werden (kostenlos) | zu klaeren |
+| O3 | Wo soll die App deployed werden? (Free Tier reicht zum Start) | offen |
+| O4 | Soll Claude-API fuer KI-Analyse integriert werden? (Kostet Geld) | offen |
