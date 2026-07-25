@@ -138,6 +138,40 @@ sind schwach korreliert und wären echte Diversifikation.
 | V6 | Funding-Kosten werden mitgerechnet |
 | **V7** | **Keine Martingale-, Grid- oder Averaging-Down-Logik.** Positionsgrößen werden bei Verlusten nie erhöht |
 
+### E5b: Videoauswertung des Beispiel-Bots (Nachtrag)
+
+Zwei Bildschirmaufnahmen (je ~17 s) wurden per Einzelbildextraktion ausgewertet. Sie bestätigen
+und ergänzen die Screenshot-Analyse aus E5.
+
+**Dokumentierter Verlauf einer laufenden Session (Video 2):**
+
+| Trade 2 (laufend) | Einsatz | Ergebnis |
+|---|---|---|
+| Schritt 1 ↓ | 10,00 $ | verloren |
+| Schritt 2 ↑ | 21,96 $ | verloren |
+| Schritt 3 ↑ | 48,22 $ | verloren |
+| **Zwischenstand** | | **−80,18 $** |
+
+Session-Ergebnis −70,98 $; Guthaben von 50.172,60 $ auf 50.101,62 $ gefallen. Schritt 4 läge
+bei rund 106 $.
+
+**Übertragen auf 30 € Realkapital:** Nach Schritt 2 verbleiben 0,04 $. Schritt 3 ist nicht mehr
+finanzierbar — das Konto wäre in dieser Session leer. Drei Verluste in Folge haben bei 50 %
+Trefferquote eine Wahrscheinlichkeit von 12,5 %.
+
+**Zwei zusätzliche Befunde aus den Videos:**
+
+1. **Die Wettrichtung wechselt zwischen den Nachsetz-Schritten** (↓, ↑, ↑ bzw. ↑, ↓). Ein
+   Signal, das bei jedem Nachsetzen die Richtung wechselt, ist keine Analyse. Die Anzeige
+   "Signal: Trend ↑ HOCH" hat keine erkennbare Funktion für die Einsatzentscheidung.
+2. **"Kosten: 💎 1 · Demo"** — jede Session verbraucht Credits. Der Ertrag der Anwendung
+   entsteht aus Credit-Verkauf und Einzahlungen, nicht aus Handelsergebnissen.
+
+**Begriffliche Klarstellung für dieses Projekt:** Die Anwendung kennt keine Haltedauer. Der rote
+Balken ist ein Ablauf-Countdown einer binären Option, kein Kursverlauf einer offenen Position.
+Der Wunsch nach "Trades wie dort, etwa 1 Minute" lässt sich deshalb nicht auf echten Handel
+übertragen — es gibt dort keine Position, die gehalten wird.
+
 ### E8: Primäre Handelsbörse — Binance
 
 **Entscheidung** (vom Nutzer delegiert): Binance als Handelsbörse, Bybit als Datenreferenz.
