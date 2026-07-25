@@ -123,19 +123,24 @@ Direkt aus TRADING-WISSEN.md und den Projektgrundsätzen (CLAUDE.md: Risikolimit
 
 ## 5. Bau-Plan (Sprints für den neuen Chat)
 
-| Sprint | Inhalt | Ergebnis |
-|---|---|---|
-| **B1** | Projektgerüst als Claude-Code-Skills-Projekt; Twelve-Data-Anbindung; erste Kerzen | Daten fließen |
-| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen |
-| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt |
-| **B4** | Top-Down-Orchestrierung durch Claude + Empfehlungskarte (Teil XXVI.3) | Erste echte Empfehlung |
-| **B5** | News-MCP-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz |
-| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit |
-| **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale |
+| Sprint | Inhalt | Ergebnis | Stand |
+|---|---|---|---|
+| **B1** | Projektgerüst als Claude-Code-Skills-Projekt; Twelve-Data-Anbindung; erste Kerzen | Daten fließen | **fertig** — `skills/forex-data/` |
+| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen | offen |
+| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt | offen |
+| **B4** | Top-Down-Orchestrierung durch Claude + Empfehlungskarte (Teil XXVI.3) | Erste echte Empfehlung | offen |
+| **B5** | News-MCP-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz | offen |
+| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit | offen |
+| **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale | offen |
 
 **Wichtig für den neuen Chat:** Zuerst den Branch `claude-trading-skills` als Vorlage ansehen —
 vieles (Position-Sizer, Technical-Analyst, Backtest-Expert) ist dort schon implementiert und kann
 adaptiert statt neu gebaut werden.
+
+**Gefunden in B1:** Der Vorlage-Branch heißt hier `claude/trading-skills-repo-4q0qo9` und enthält
+70 Skills. Übernommene Konventionen: `skills/<name>/SKILL.md` mit `scripts/`, `scripts/tests/` und
+`references/`; Skripte nur mit Standardbibliothek; JSON nach stdout, Diagnose nach stderr.
+Für B2 sind dort `position-sizer`, `technical-analyst` und `backtest-expert` die nächsten Vorlagen.
 
 ---
 
@@ -180,7 +185,7 @@ Bester Zeitpunkt: **London/NY-Overlap (ca. 12–16 Uhr UTC)** — engste Spreads
 
 ## 9. Offene Punkte für den neuen Chat
 
-- Twelve-Data-API-Key (kostenlos) anlegen.
+- ~~Twelve-Data-API-Key (kostenlos) anlegen.~~ Erledigt in B1, liegt in `.env` (nicht im Git).
 - Konkrete MCP-Namen/Autorisierung der beiden hinzugefügten Server (News, Disclosure) — in der
   interaktiven Sitzung freigeben.
 - Aktien/Krypto-Marktscope erst nach bewährtem Forex-Halbautomaten.

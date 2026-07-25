@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class Candle(BaseModel):
@@ -7,7 +9,9 @@ class Candle(BaseModel):
     high: float
     low: float
     close: float
-    volume: float = 0.0
+    # None when the feed reports no volume. Forex has no exchange volume, and a
+    # fabricated 0.0 would read as a real measurement downstream.
+    volume: Optional[float] = None
 
 
 class TimeSeriesResponse(BaseModel):
@@ -15,22 +19,14 @@ class TimeSeriesResponse(BaseModel):
     interval: str
     currency_base: str = ""
     currency_quote: str = ""
+    order: str = "ascending (oldest first)"
+    from_cache: bool = False
+    warnings: list[str] = Field(default_factory=list)
     candles: list[Candle]
 
 
 class PriceResponse(BaseModel):
     symbol: str
     price: float
-
-
-SUPPORTED_PAIRS = [
-    "EUR/USD",
-    "GBP/USD",
-    "USD/JPY",
-    "USD/CHF",
-    "AUD/USD",
-    "EUR/GBP",
-    "EUR/JPY",
-]
-
-SUPPORTED_INTERVALS = ["5min", "15min", "1h", "4h"]
+    as_of: str
+    note: str = "latest close of the 15min candle, not a live tick"

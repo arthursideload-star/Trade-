@@ -1,45 +1,86 @@
 # Trade-
 
-Autonomer Trading-Bot: läuft 24/7, analysiert den Markt über mehrere Zeitebenen und handelt
-selbstständig.
+Trading-Assistent für Forex. Claude analysiert auf Anfrage ein Währungspaar und gibt eine
+begründete Empfehlung — gehandelt wird manuell auf einem MT5-Demokonto.
 
-**Aktueller Stand:** Architektur und Roadmap stehen. Implementierung beginnt mit Sprint 1.
+**Aktueller Stand:** Phase A, Sprint B1 abgeschlossen — die Datenanbindung steht.
+
+## Zwei Phasen
+
+| Phase | Was | Stand |
+|---|---|---|
+| **A** | Halbautomat: Claude als Gehirn, Analyse auf Anfrage, du klickst die Trades selbst | in Arbeit |
+| **B** | Vollautomat: handelt selbstständig, plus Dashboard | später, erst wenn A sich bewährt hat |
+
+## Sprints (Phase A)
+
+| Sprint | Inhalt | Stand |
+|---|---|---|
+| **B1** | Projektgerüst als Skills-Projekt, Twelve-Data-Anbindung, erste Kerzen | fertig |
+| **B2** | Deterministische Rechner: Trend/Regime, Indikatoren, Level, ATR, Größe, R:R | offen |
+| **B3** | Kerzen-, Muster- und Fehlausbruch-Erkennung, ausschließlich am Level | offen |
+| **B4** | Top-Down-Orchestrierung durch Claude, Empfehlungskarte | offen |
+| **B5** | News-Anbindung und News-Veto, Wirtschaftskalender | offen |
+| **B6** | Trade-Journal und wöchentliche Auswertung | offen |
+
+## Aufbau
+
+```
+skills/forex-data/       Kerzendaten von Twelve Data (Sprint B1)
+  SKILL.md               Wann und wie Claude den Skill nutzt
+  scripts/               Standardbibliothek, keine Installation nötig
+  references/            API-Referenz, Limits, Fallstricke
+backend/                 Optionales Dashboard (Phase A.5), nutzt denselben Client
+docs/                    Pläne und Wissensbasis
+```
+
+Es gibt genau **eine** Stelle mit API-Zugriff: `skills/forex-data/scripts/twelvedata_client.py`.
+Das Dashboard greift darauf zu, statt eine zweite Anbindung zu pflegen.
+
+## Einrichtung
+
+```bash
+cp .env.example .env          # TWELVEDATA_API_KEY eintragen
+export TWELVEDATA_API_KEY=... # oder direkt in der Umgebung setzen
+```
+
+Kerzen holen — ohne jede Installation:
+
+```bash
+python skills/forex-data/scripts/fetch_candles.py --symbol EUR/USD --interval 5m,15m,1h,4h
+```
+
+Tests:
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+Optionales Dashboard:
+
+```bash
+pip install -r requirements.txt
+uvicorn backend.main:app --reload
+```
 
 ## Dokumente
 
 | Dokument | Inhalt |
 |---|---|
-| **[PLAN.md](./PLAN.md)** | Architektur und Umsetzungs-Roadmap (Sprints S1–S10) |
-| **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Konkreter Bau- und Betriebsplan des Assistenten (Claude als Gehirn, Skills + MCP) |
-| **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Recherchierte Wissensbasis: Gewinn- und Verlustmechanik, Kerzen, Charts, Setups, Krypto-Signale, Validierung, Risiko, Datenquellen |
+| **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Maßgeblicher Bau- und Betriebsplan: Claude als Gehirn, Skills, Risikoregeln, Sprints |
+| **[PLAN.md](./PLAN.md)** | Architektur und Roadmap beider Phasen |
+| **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Wissensbasis: Kerzen, Setups, Risiko, Validierung, Datenquellen |
+| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Getroffene Projektentscheidungen |
 | **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 
-## Systemüberblick
+## Risikoregeln
 
-```
-Market Data → Feature Engine → Analysis Engine → Risk Engine → Execution → Exchange
-              (Multi-TF)       (Regime +          (Sizing)      (Slicing,
-                                Ensemble)                        Idempotenz)
-```
-
-Backtest, Paper-Trading und Live-Betrieb nutzen identischen Code — getauscht wird nur der
-Exchange-Adapter.
-
-## Kernmerkmale
-
-- **24/7-Betrieb** mit Watchdog, Auto-Reconnect und vollständiger Zustandswiederherstellung
-  nach Neustart
-- **Multi-Timeframe-Analyse** (1m bis 1d) mit Regime-Erkennung und Signal-Ensemble
-- **Konfidenzbasierte Positionsgrößen** statt binärer Kauf/Verkauf-Entscheidungen
-- **Präzise Ausführung**: adaptive Limit-Orders, Order-Slicing, idempotente Order-IDs,
-  laufende Slippage-Messung
-- **Fernsteuerung und Alerts** per Telegram
-
-## Stack
-
-Python 3.12 (asyncio) · ccxt · polars · TimescaleDB · LightGBM · Docker · Prometheus/Grafana
+Die harten Grenzen (R1–R8 in [docs/BOT-PLAN.md](./docs/BOT-PLAN.md)) stehen im Code, nicht in
+Konfigurationsdateien — eine Änderung soll einen Commit erfordern. Sie greifen ab Sprint B2,
+sobald Positionsgrößen berechnet werden.
 
 ## Hinweis
 
-Automatisierter Handel setzt eingesetztes Kapital dem Marktrisiko aus. Es wird ausschließlich
-eigenes Kapital gehandelt. Dieses Projekt ist keine Anlageberatung.
+Handel setzt eingesetztes Kapital dem Marktrisiko aus. Dieses Projekt gibt Empfehlungen,
+keine Vorhersagen, und ist keine Anlageberatung.

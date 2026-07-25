@@ -228,6 +228,11 @@ und die technische Analyse am zuverlaessigsten.
 
 ## A7. Umsetzungs-Roadmap Phase A
 
+> **Hinweis:** Gebaut wird nach den Sprints **B1–B7** in [docs/BOT-PLAN.md](./docs/BOT-PLAN.md).
+> Dieser Plan hier beschreibt Phase A als Web-App; der Bot-Plan hat das später auf ein
+> Claude-Skills-Projekt umgestellt (Web-Dashboard erst als optionale Phase A.5). Die Tabelle
+> unten bleibt als inhaltliche Gliederung gültig, die Sprint-Nummern darin sind überholt.
+
 | Sprint | Dauer | Inhalt | Ergebnis |
 |---|---|---|---|
 | **A1** | 2-3 Tage | Projekt-Setup, FastAPI-Backend, Twelve Data Anbindung, erste Kerzen-Daten | Backend liefert Forex-Daten |

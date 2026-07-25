@@ -1,107 +1,67 @@
+"""Async adapter around the forex-data skill client.
+
+The skill script under skills/forex-data/scripts/ is the single place in this
+project that talks to Twelve Data. The optional dashboard backend delegates to
+it instead of keeping a second implementation, so the guarantees the analysis
+relies on (ascending order, honest volume, validation) hold in both entry
+points.
+
+The skill directory carries a hyphen and therefore cannot be imported as a
+package; the path insert below is what the skills repo does in its own conftest.
+"""
+
 import asyncio
-import time
+import sys
+from pathlib import Path
 
-import httpx
+_SKILL_SCRIPTS = Path(__file__).resolve().parents[2] / "skills" / "forex-data" / "scripts"
+if str(_SKILL_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SKILL_SCRIPTS))
 
-from backend.config import settings
-from backend.models.market import Candle, PriceResponse, TimeSeriesResponse
+import twelvedata_client as _client  # noqa: E402
 
+from backend.config import settings  # noqa: E402
+from backend.models.market import Candle, TimeSeriesResponse  # noqa: E402
 
-class RateLimiter:
-    """Enforces the Twelve Data free-tier limit of 8 requests per minute."""
+# Re-exported so the routers can handle them without reaching into the skill.
+TwelveDataError = _client.TwelveDataError
+RateLimitError = _client.RateLimitError
 
-    def __init__(self, max_calls: int, period: float = 60.0):
-        self._max_calls = max_calls
-        self._period = period
-        self._timestamps: list[float] = []
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
-            self._timestamps = [
-                t for t in self._timestamps if now - t < self._period
-            ]
-            if len(self._timestamps) >= self._max_calls:
-                wait = self._period - (now - self._timestamps[0])
-                await asyncio.sleep(wait)
-            self._timestamps.append(time.monotonic())
-
-
-_rate_limiter = RateLimiter(settings.twelvedata_max_calls_per_minute)
+SUPPORTED_PAIRS = list(_client.SUPPORTED_PAIRS)
+# Shortest first, so the list reads like the top-down workflow.
+SUPPORTED_INTERVALS = sorted(_client.INTERVAL_SECONDS, key=_client.INTERVAL_SECONDS.get)
 
 
 async def fetch_time_series(
     symbol: str,
     interval: str,
-    outputsize: int = 100,
+    outputsize: int = _client.DEFAULT_OUTPUTSIZE,
 ) -> TimeSeriesResponse:
-    """Fetch OHLCV candle data from Twelve Data."""
-    await _rate_limiter.acquire()
-
-    params = {
-        "symbol": symbol,
-        "interval": interval,
-        "outputsize": outputsize,
-        "apikey": settings.twelvedata_api_key,
-        "timezone": "UTC",
-    }
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(
-            f"{settings.twelvedata_base_url}/time_series", params=params
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    if data.get("status") == "error":
-        raise TwelveDataError(data.get("message", "Unknown API error"))
-
-    meta = data.get("meta", {})
-    raw_values = data.get("values", [])
-
-    candles = [
-        Candle(
-            datetime=v["datetime"],
-            open=float(v["open"]),
-            high=float(v["high"]),
-            low=float(v["low"]),
-            close=float(v["close"]),
-            volume=float(v.get("volume", 0)),
-        )
-        for v in raw_values
-    ]
-
-    return TimeSeriesResponse(
-        symbol=meta.get("symbol", symbol),
-        interval=meta.get("interval", interval),
-        currency_base=meta.get("currency_base", ""),
-        currency_quote=meta.get("currency_quote", ""),
-        candles=candles,
+    """Fetch OHLC candles, oldest first. Runs the blocking client off-loop."""
+    series = await asyncio.to_thread(
+        _client.fetch_candles,
+        symbol=symbol,
+        interval=interval,
+        outputsize=outputsize,
+        api_key=settings.twelvedata_api_key,
     )
 
-
-async def fetch_price(symbol: str) -> PriceResponse:
-    """Fetch the current price for a symbol."""
-    await _rate_limiter.acquire()
-
-    params = {
-        "symbol": symbol,
-        "apikey": settings.twelvedata_api_key,
-    }
-
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{settings.twelvedata_base_url}/price", params=params
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    if "price" not in data:
-        raise TwelveDataError(data.get("message", "No price returned"))
-
-    return PriceResponse(symbol=symbol, price=float(data["price"]))
-
-
-class TwelveDataError(Exception):
-    pass
+    return TimeSeriesResponse(
+        symbol=series.symbol,
+        interval=series.interval,
+        currency_base=series.currency_base,
+        currency_quote=series.currency_quote,
+        from_cache=series.from_cache,
+        warnings=series.warnings,
+        candles=[
+            Candle(
+                datetime=c.datetime,
+                open=c.open,
+                high=c.high,
+                low=c.low,
+                close=c.close,
+                volume=c.volume,
+            )
+            for c in series.candles
+        ],
+    )

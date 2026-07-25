@@ -1,7 +1,16 @@
+# The skill scripts under skills/ deliberately use the standard library only,
+# so they run without any installation. Nothing below is needed to fetch data.
+
+# Optional dashboard backend (Phase A.5)
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
-httpx==0.28.1
 pydantic==2.11.3
 pydantic-settings==2.9.1
+
+# Tests (httpx backs the FastAPI TestClient)
+pytest==9.1.1
+httpx==0.28.1
+
+# Analysis engine, from sprint B2 onwards
 pandas==2.2.3
 ta-lib==0.7.1
