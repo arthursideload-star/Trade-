@@ -138,6 +138,38 @@ sind schwach korreliert und wären echte Diversifikation.
 | V6 | Funding-Kosten werden mitgerechnet |
 | **V7** | **Keine Martingale-, Grid- oder Averaging-Down-Logik.** Positionsgrößen werden bei Verlusten nie erhöht |
 
+### E8: Primäre Handelsbörse — Binance
+
+**Entscheidung** (vom Nutzer delegiert): Binance als Handelsbörse, Bybit als Datenreferenz.
+
+Begründung: höchste Perpetual-Liquidität und engste Spreads, umfangreichste kostenlose
+Zusatzdaten (Funding, Open Interest, Long/Short-Ratio, Taker-Volumen) direkt über die reguläre
+API, gute Dokumentation, nutzbares Testnet.
+
+### Analyse: Kostenlast nach Haltedauer
+
+Der Nutzer wünscht Haltedauern um eine Minute. Berechnungsgrundlage: BTC mit grob 45 %
+annualisierter Volatilität, √Zeit-Skalierung, mittlere absolute Bewegung ≈ 0,8 σ.
+
+| Haltedauer | Typische Bewegung | Roundtrip (Maker) | Kosten/Bewegung |
+|---|---|---|---|
+| 1 Minute | ~0,05 % | 0,04 % | **80 %** |
+| 5 Minuten | ~0,11 % | 0,04 % | 36 % |
+| 15 Minuten | ~0,19 % | 0,04 % | 21 % |
+| 1 Stunde | ~0,38 % | 0,04 % | 11 % |
+| 4 Stunden | ~0,77 % | 0,04 % | 5 % |
+
+Zwei verschärfende Effekte bei sehr kurzen Haltedauern:
+
+1. **Post-Only ist nicht durchhaltbar.** Limit-Orders werden nicht garantiert gefüllt; ein
+   Ausstieg innerhalb einer Minute erzwingt Market-Orders. Damit verdoppeln sich die
+   Roundtrip-Kosten auf 0,10 % — das Doppelte der durchschnittlichen Minutenbewegung.
+2. **Adverse Selection.** Als Maker wird man bevorzugt dann gefüllt, wenn besser informierte
+   Gegenparteien handeln. Auf Minutenebene ist das der dominierende Effekt.
+
+**Empfehlung: 15 Minuten als praktische Untergrenze.** Entscheidung des Nutzers steht aus;
+er stellt weiteres Material (Videos) zur Verfügung.
+
 ---
 
 ## Offene Punkte
