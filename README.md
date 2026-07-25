@@ -1,23 +1,38 @@
 # Trade-
 
-Projekt für einen autonom laufenden Trading-Bot.
+Autonomer Trading-Bot: läuft 24/7, analysiert den Markt über mehrere Zeitebenen und handelt
+selbstständig.
 
-**Aktueller Stand:** Planungsphase (Phase 0). Es existiert noch kein Code.
+**Aktueller Stand:** Architektur und Roadmap stehen. Implementierung beginnt mit Sprint 1.
 
-👉 Der vollständige Entwicklungsplan steht in **[PLAN.md](./PLAN.md)**.
+👉 Vollständiger Plan: **[PLAN.md](./PLAN.md)**
 
-## Kurzfassung
+## Systemüberblick
 
-Ziel ist ein Bot, der eine getestete Handelsstrategie automatisiert ausführt — mit hartem
-Risikomanagement, realistischem Backtesting und einer langen Paper-Trading-Phase, bevor
-echtes Geld im Spiel ist.
+```
+Market Data → Feature Engine → Analysis Engine → Risk Engine → Execution → Exchange
+              (Multi-TF)       (Regime +          (Sizing)      (Slicing,
+                                Ensemble)                        Idempotenz)
+```
 
-Der Plan ist in Phasen mit Gates aufgebaut: Jede Phase muss ein überprüfbares Kriterium
-erfüllen, bevor die nächste beginnt. Der Weg zum ersten echten Trade dauert realistisch
-4–5 Monate.
+Backtest, Paper-Trading und Live-Betrieb nutzen identischen Code — getauscht wird nur der
+Exchange-Adapter.
 
-## Wichtiger Hinweis
+## Kernmerkmale
 
-Trading mit automatisierten Systemen kann zum Totalverlust des eingesetzten Kapitals führen.
-Dieses Projekt ist keine Anlageberatung. Es wird ausschließlich eigenes Kapital gehandelt,
-dessen Verlust verkraftbar ist.
+- **24/7-Betrieb** mit Watchdog, Auto-Reconnect und vollständiger Zustandswiederherstellung
+  nach Neustart
+- **Multi-Timeframe-Analyse** (1m bis 1d) mit Regime-Erkennung und Signal-Ensemble
+- **Konfidenzbasierte Positionsgrößen** statt binärer Kauf/Verkauf-Entscheidungen
+- **Präzise Ausführung**: adaptive Limit-Orders, Order-Slicing, idempotente Order-IDs,
+  laufende Slippage-Messung
+- **Fernsteuerung und Alerts** per Telegram
+
+## Stack
+
+Python 3.12 (asyncio) · ccxt · polars · TimescaleDB · LightGBM · Docker · Prometheus/Grafana
+
+## Hinweis
+
+Automatisierter Handel setzt eingesetztes Kapital dem Marktrisiko aus. Es wird ausschließlich
+eigenes Kapital gehandelt. Dieses Projekt ist keine Anlageberatung.
