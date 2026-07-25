@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin ruff version to match .pre-commit-config.yaml (v0.9.6)
+      - name: Install linters
+        run: pip install "ruff==0.9.6" codespell
+
+      - name: Ruff check
+        run: ruff check skills/ scripts/
+
+      - name: Ruff format check
+        run: ruff format --check skills/ scripts/
+
+      # Use pyproject.toml config for skip/ignore-words-list
+      - name: Codespell
+        run: codespell --toml pyproject.toml skills/ scripts/
+
+  discover-tests:
+    name: Discover test matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Discover and validate test coverage
+        id: discover
+        run: echo "matrix=$(python3 scripts/ci_test_matrix.py matrix)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test (${{ matrix.id }})
+    needs: discover-tests
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allowed_failure }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install project dependencies
+        run: pip install -e ".[dev]"
+      - name: Install policy dependencies
+        run: python scripts/ci_test_matrix.py install "${{ matrix.id }}"
+      - name: Run isolated tests
+        run: >
+          python scripts/ci_test_matrix.py run "${{ matrix.id }}"
+          --coverage-dir coverage-data
+      - name: Upload coverage row
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.id }}
+          path: coverage-data/
+          if-no-files-found: warn
+          retention-days: 1
+
+  coverage:
+    name: Coverage
+    needs: [discover-tests, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install project dependencies
+        run: pip install -e ".[dev]"
+      - name: Download coverage rows
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts
+      - name: Validate and combine coverage
+        run: >
+          python scripts/ci_test_matrix.py aggregate
+          --artifacts coverage-artifacts
+          --output combined-coverage
+
+  metadata:
+    name: Metadata + Workflow checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal deps
+        run: pip install pyyaml
+
+      # 1. Validate skills-index.yaml structure + bijection with skills/.
+      # Default mode is what pre-commit runs on each commit.
+      - name: Validate skills-index (default)
+        run: python3 scripts/validate_skills_index.py
+
+      # 2. Strict workflow validation — workflow files exist, schema rules
+      # pass (artifact parity, required_skills coverage, decision-gate
+      # questions, no deprecated skills in required_skills, etc.).
+      # This is what pre-push enforces locally.
+      - name: Validate skills-index (--strict-workflows)
+        run: python3 scripts/validate_skills_index.py --strict-workflows
+
+      # 2b. Strict metadata validation — every skill has populated
+      # timeframe / difficulty / inputs / outputs (no `unknown` markers,
+      # no empty lists). Now safe to enforce because the corresponding
+      # fill-in PR populated these fields for all 54 skills.
+      - name: Validate skills-index (--strict-metadata)
+        run: python3 scripts/validate_skills_index.py --strict-metadata
+
+      # 2c. Skillset manifest validation — full-field completeness +
+      # related_workflows coherence (SK001-SK013). Always strict.
+      - name: Validate skillsets
+        run: python3 scripts/validate_skillsets.py
+
+      # 3b. Drift check: docs/{en,ja}/skillsets.md must match what the
+      # generator would produce from skillsets/*.yaml. Catches manual edits
+      # to the docs and stale docs after manifest changes.
+      - name: Skillset docs drift check
+        run: python3 scripts/generate_skillset_docs.py --check
+
+      # 3a. Skill docs drift check: generator-owned pages (frontmatter
+      # `generated: true`) must match generator output, and every skill must
+      # have EN+JA pages. Hand-maintained pages (generated:false/absent or
+      # HAND_WRITTEN) are existence/marker-checked only — never content-
+      # compared, never reverted.
+      - name: Skill docs drift check
+        run: python3 scripts/generate_skill_docs.py --check
+
+      # 3. Drift check: docs/{en,ja}/workflows.md must match what the
+      # generator would produce from workflows/*.yaml. Catches manual edits
+      # to the docs and stale docs after manifest changes.
+      - name: Workflow docs drift check
+        run: python3 scripts/generate_workflow_docs.py --check
+
+      # 4. README catalog drift check: the catalog sections in README.md and
+      # README.ja.md (between skills-index sentinel markers) must match what
+      # the generator would produce from skills-index.yaml.
+      - name: README catalog drift check
+        run: python3 scripts/generate_catalog_from_index.py --check
+
+      # 5. Navigator snapshot drift check: the bundled
+      # skills/trading-skills-navigator/assets/metadata_snapshot.json (the
+      # Claude Web App fallback) must match what build_snapshot.py would
+      # produce from skills-index.yaml + workflows/*.yaml.
+      - name: Navigator snapshot drift check
+        run: python3 skills/trading-skills-navigator/scripts/build_snapshot.py --check
+
+      - name: FMP client drift check
+        run: python3 scripts/generate_fmp_client.py --check
+
+      - name: Packaged skill drift check
+        run: python3 scripts/check_package_drift_for_changed_skills.py
+
+      - name: FMP skill package drift check
+        run: python3 scripts/package_skills.py --check --skill pead-screener --skill earnings-trade-analyzer --skill ibd-distribution-day-monitor --skill vcp-screener --skill parabolic-short-trade-planner --skill ftd-detector --skill canslim-screener --skill macro-regime-detector --skill market-top-detector
+
+      # Note: the validator + generator unit tests already run under the
+      # 'Test repo-level scripts' step in the test job above.
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install security tools
+        run: pip install "bandit[toml]>=1.9.0" "detect-secrets>=1.5.0"
+
+      - name: Bandit SAST scan
+        run: bandit -c pyproject.toml -r skills/ --exclude "*/tests/*"
+
+      # Compare a fresh scan against committed baseline (results only, ignore metadata)
+      - name: Detect secrets check
+        run: |
+          detect-secrets scan \
+            --exclude-files '\.env$|\.json$|\.csv$|\.md$|\.zip$|\.baseline$' \
+            > /tmp/new_scan.json
+          python3 -c "
+          import json, sys
+          with open('.secrets.baseline') as f: old = json.load(f)
+          with open('/tmp/new_scan.json') as f: new = json.load(f)
+          old_set = {(p, i['hashed_secret'], i['line_number'])
+                     for p, items in old.get('results', {}).items() for i in items}
+          new_set = {(p, i['hashed_secret'], i['line_number'])
+                     for p, items in new.get('results', {}).items() for i in items}
+          diff = new_set - old_set
+          if diff:
+              print(f'ERROR: {len(diff)} new secret(s) not in baseline:')
+              for p, h, ln in sorted(diff):
+                  print(f'  {p}:{ln}')
+              sys.exit(1)
+          print(f'OK: {len(new_set)} known, 0 new')
+          "
