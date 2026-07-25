@@ -270,6 +270,76 @@ nicht als Experiment.
 | O4 | VPS-Anbieter und Standort | offen (Phase B) |
 | O5 | Auswertung des Beispiel-Bots | ✅ erledigt (E5) |
 | O6 | Plattformentscheidung | ✅ erledigt (E6) |
-| O7 | MT5-Broker fuer Demo? (Datenqualitaet) | offen |
+| O7 | MT5-Broker fuer Demo? (Datenqualitaet) | ✅ PuPrime-Demo vorerst (E14) |
 | O8 | Twelve Data API-Key erstellen | offen |
-| O9 | Deployment-Ziel fuer Web-App | offen |
+| O9 | Deployment-Ziel fuer Web-App | offen (durch E13 relativiert) |
+
+---
+
+## 2026-07-25 (Nachtrag 3) — Gehirn, Broker, Datenquellen
+
+### E13: Gehirn des Assistenten — Claude (Opus) via Abo, als Claude-Code-Skills-Projekt
+
+**Entscheidung:** Claude selbst ist das analytische Gehirn, genutzt ueber das Claude-Abo
+(interaktiv), nicht ueber die kostenpflichtige API. Umsetzung als **Claude-Code-Skills-Projekt**
+(Hybrid: deterministische Rechner + Claude-Orchestrierung + Live-Daten via Skills/MCP).
+
+**Begruendung / ehrliche Abgrenzung:**
+- Ein Abo deckt **interaktive** Nutzung ab (Halbautomat) ohne Extra-Kosten pro Analyse.
+- Ein Abo gibt **keinen** API-Schluessel fuer einen 24/7-Vollautomaten — dafuer braeuchte es die
+  Anthropic-API (Kosten pro Token, Opus teuer). Das bleibt Phase B.
+- Der gewuenschte Assistent passt exakt zum Abo-Modell. Der vorhandene Branch
+  `claude-trading-skills` demonstriert das Muster bereits.
+
+Details im neuen `docs/BOT-PLAN.md`. Verfeinert Phase A aus PLAN.md (die eigenstaendige Web-App
+aus E9 wird durch das Skills-Projekt ersetzt bzw. optional).
+
+### E14: Broker — PuPrime-Demo vorerst, echtes Geld spaeter eher IC Markets
+
+**Entscheidung:** Der vom Nutzer angelegte PuPrime-Account wird als **Demo** zum Ueben genutzt.
+Fuer echtes Geld ist **IC Markets** die vorlaeufige Empfehlung.
+
+**Begruendung:**
+- Fuer eine **Demo** ist die Broker-Wahl fast egal — beide bieten kostenlose MT5-Demos mit
+  EA-Unterstuetzung. PuPrime reicht zum Ueben vollstaendig.
+- **PuPrime:** Hauptregulierung Seychelles (FSA, offshore), kein Tier-1; MT4/MT5 mit EA; min.
+  Einzahlung 20 $ (Cent) / 50 $ (Standard); Financial-Commission-Mitglied (bis 20.000 € Deckung).
+  **Aber:** dokumentierte Auszahlungsbeschwerden und Warnhinweise mehrerer Aufsichten
+  (FCA, AMF, daenische FSA, SEC Philippinen). Fuer echtes Geld ein Risiko.
+- **IC Markets:** Tier-1 (ASIC + CySEC), seit 2007, sauberer Ruf, beste Wahl fuer Algo/EA,
+  Raw-Spread 0.0 + 7 $ Kommission. Keine Boni (Tier-1-Regulatoren verbieten sie).
+
+### E15: Einzahlungsbonus wird NICHT als Auswahlkriterium verwendet
+
+**Entscheidung:** Der PuPrime-Bonus (50 % / 100 % auf die erste Einzahlung, bis 1.000 $) wird
+nicht als Grund fuer eine Broker-Wahl genommen und vorerst nicht aktiviert.
+
+**Begruendung:** Der Bonus selbst ist **nicht auszahlbar** (nur die daraus erzielten Gewinne, nach
+Erfuellung der Bedingungen). Einzahlungsboni sind typisch fuer Offshore-Broker und locken
+Einzahlungen an; das reale Risiko sind die Auszahlungsbeschwerden, nicht der fehlende Bonus.
+50 € + 50 € Bonus bei einem Broker mit Auszahlungsproblemen sind weniger wert als 50 € bei einem
+Broker, bei dem man sein Geld sicher wiederbekommt. **Und ohnehin:** In Phase A wird gar kein
+echtes Geld gebraucht — nur die Demo.
+
+### E16: Datenquellen — weltweite News (Veto + Kontext) und oeffentliche Disclosures
+
+**Entscheidung:** Der Assistent bindet zwei zusaetzliche Datenquellen an (vom Nutzer als MCPs
+hinzugefuegt): weltweite **Nachrichten** und **Disclosure-/"Insider"-Daten**.
+
+**Praezisierung (rechtlich wichtig):**
+- **News:** aktiv genutzt — als **Veto** um Hochimpakt-Ereignisse und als **Kontext** fuer die
+  Richtung (Geopolitik, Zentralbanken). Weltereignisse bewegen Forex stark (Teil XXIV).
+- **"Insider":** Handel auf **echten** Insiderinformationen (nicht-oeffentlich) ist **illegal**.
+  Genutzt werden ausschliesslich **oeffentliche Pflichtmeldungen** (US-Kongress/STOCK Act,
+  SEC Form 4, 13F) — das ist legal, aber **aktienbezogen** und fuer reines Forex kaum relevant;
+  wertvoll erst bei Aufnahme von Aktien/Krypto.
+- **Session-Hinweis:** Autorisierungspflichtige MCP-Server verbinden sich nur in der
+  interaktiven Claude-Sitzung des Nutzers, nicht in automatischen Build-Sessions.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O10 | Marktscope: nur Forex, oder auch US-Aktien/Krypto (nutzt News/Disclosure voll)? | offen |
+| O11 | Spaetere Autonomie: Halbautomat behalten oder Vollautomat (braucht API/Kosten)? | offen |
+| O12 | Konkrete Namen/Autorisierung der beiden MCP-Server (News, Disclosure) | offen |

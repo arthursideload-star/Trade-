@@ -10,6 +10,7 @@ selbstständig.
 | Dokument | Inhalt |
 |---|---|
 | **[PLAN.md](./PLAN.md)** | Architektur und Umsetzungs-Roadmap (Sprints S1–S10) |
+| **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Konkreter Bau- und Betriebsplan des Assistenten (Claude als Gehirn, Skills + MCP) |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Recherchierte Wissensbasis: Gewinn- und Verlustmechanik, Kerzen, Charts, Setups, Krypto-Signale, Validierung, Risiko, Datenquellen |
 | **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 
