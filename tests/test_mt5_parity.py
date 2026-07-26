@@ -335,6 +335,20 @@ class TestSetupGuideStaysTrue(unittest.TestCase):
                       "failed")
         self.assertIn(f"{lines} Zeilen", self._guide())
 
+    def test_the_documented_panel_states_are_the_ones_the_ea_prints(self):
+        """The guide teaches the user to read the panel. Renaming a state in
+        the EA without touching the guide would teach them a word that never
+        appears on their screen."""
+        with open(EA_PATH, encoding="utf-8") as fh:
+            ea = fh.read()
+        guide = self._guide()
+        labels = ea.split("const string quality_text =", 1)[1].split(";", 1)[0]
+        for state in ("PRIME", "good", "marginal", "AVOID"):
+            self.assertIn(f'"{state}"', labels,
+                          f"{state} is not a label the EA emits")
+            self.assertIn(f"`{state}`", guide,
+                          f"{state} is missing from the setup guide")
+
     def test_the_download_url_points_at_the_file_that_exists(self):
         """A raw URL cannot be resolved offline, so check its shape: the
         branch this project develops on, and the path the EA really has."""

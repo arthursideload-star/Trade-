@@ -5,110 +5,280 @@ weiter wenn dein iPad aus ist.
 
 ---
 
+## Erst mal: die vier Wörter, die dauernd vorkommen
+
+Ohne die versteht man die Hostinger-Oberfläche nicht. Sie sind harmloser als sie klingen.
+
+| Wort | Was es wirklich bedeutet |
+|---|---|
+| **VPS** | Dein gemieteter Computer in Frankfurt. Läuft 24/7, auch wenn dein iPad aus ist. |
+| **Container** | Ein abgeschottetes Programm-Paket auf diesem Computer. Enthält alles was es braucht — hier: MetaTrader 5 samt Windows-Nachbau. |
+| **Docker** | Die Technik, die solche Container startet und laufen lässt. |
+| **Docker Manager** | Die Seite im Hostinger-Panel, auf der du deine Container siehst und bedienst. Mehr ist es nicht — eine Übersichtsseite. |
+
+Bild dazu: Der VPS ist die Wohnung, ein Container ist ein fertig eingerichtetes Zimmer darin,
+Docker ist der Hausmeister, und der Docker Manager ist die Klingelanlage im Hausflur.
+
+**Wichtig für dich:** In deinem Docker Manager steht schon ein Projekt namens
+`metatrader-5-iore` und daneben ein grüner Haken mit **„In Betrieb"**. Das heißt:
+**MetaTrader 5 ist bereits installiert und läuft gerade.** Du musst nichts mehr installieren.
+Du musst nur noch reinkommen.
+
+Das zweite Projekt (`paperclip-…`) hat mit dem Bot nichts zu tun — ignorieren.
+
+> Der Zusatz `-iore` am Namen ist eine Zufallskennung, die Hostinger beim Bereitstellen
+> anhängt. Bei dir heißt es `metatrader-5-iore`, bei jemand anderem `metatrader-5-xkfp`.
+> Keine Bedeutung.
+
+---
+
 ## Schritt 0 — Welchen Weg hast du?
 
 | Was auf dem VPS läuft | Weg | Zeitbedarf |
 |---|---|---|
-| **Hostinger Docker-Template „MetaTrader 5"** | **Teil A** | ~15 Minuten |
+| **Docker-Projekt `metatrader-5-…` auf „In Betrieb"** | **Teil A ← dein Fall** | ~15 Minuten |
 | Windows Server | Teil B | ~30 Minuten |
 | Nacktes Ubuntu/Debian, kein Template | Teil C | ~60 Minuten |
 
-Nachsehen im Hostinger-Panel unter **VPS → dein Server → Docker Manager**. Steht dort ein
-Projekt namens `metatrader-5-…` auf **„In Betrieb"**, ist es **Teil A** — dann ist MT5 schon
-installiert und du überspringst B und C komplett.
+**So kommst du zum Docker Manager** (falls du die Seite wieder suchst):
+
+1. Safari → `hpanel.hostinger.com` → anmelden
+2. Oben links das **Menü ☰** → **VPS**
+3. Auf deinen Server tippen (`srv…….hstgr.cloud`)
+4. Links bzw. im Menü: **Docker Manager**
+
+Die Brotkrümel-Leiste oben zeigt dann: `🏠 › VPS › srv…….hstgr.cloud › Docker Manager`.
+Wenn das dasteht, bist du richtig.
 
 ---
 
 ## Teil A — MT5 läuft schon als Docker-Container
 
-Das Hostinger-Template ist MetaTrader 5 unter Wine, bedient über **KasmVNC im Browser**
-(Port 3000). Es braucht keinen Remote-Desktop, keine App — nur Safari auf dem iPad.
+Das Hostinger-Template ist MetaTrader 5, das über einen Windows-Nachbau (Wine) auf Linux
+läuft und dessen Bildschirm ins Web übertragen wird (KasmVNC). Praktische Folge: **Du
+brauchst keine App.** Safari reicht. Du siehst das MT5-Fenster wie einen Screenshot, der
+sich bewegt, und tippst hinein.
 
-### A1. MT5 öffnen
+### Die Seite, auf der du stehst — was die Knöpfe tun
 
-Hostinger-Panel → **VPS → Docker Manager** → beim Projekt `metatrader-5-…` auf
-**Zugriff → Öffnen**.
+Auf der Docker-Manager-Seite steht bei deinem Projekt Folgendes. Was jede Zeile bedeutet:
 
-Es fragt nach Benutzername und Passwort. Das sind die, die bei der Bereitstellung des
-Templates gesetzt wurden (`CUSTOM_USER` / `PASSWORD`) — nicht dein Root-Passwort. Wenn du sie
-nicht mehr weißt: **Verwalten → Umgebungsvariablen**.
+| Was du siehst | Was es tut |
+|---|---|
+| **metatrader-5-iore**, „1 Container" | Der Name deines Projekts. Ein Container darin — MT5. |
+| **Status: ✅ In Betrieb** | Läuft gerade. Muss so bleiben. |
+| **Zugriff → Öffnen ↗** | **Der wichtigste Knopf.** Öffnet MT5 im Browser. |
+| **Zugriff → Terminal ↗** | Öffnet eine Eingabezeile **im Container**. Brauchst du in A4. |
+| **Anleitung → Dokumentation ↗** | Hostingers eigene Hilfeseite. Kannst du ignorieren. |
+| **Verwalten** | Detailseite: Umgebungsvariablen, Logs, Neustart. Nur für A2 nötig. |
+| **Weitere Aktionen** | Stoppen, Löschen, Neu bereitstellen. **Hier nichts anklicken.** |
+| **Compose ⌄** (schwarzer Knopf oben) | Neue Projekte anlegen. **Brauchst du nicht** — deins existiert schon. |
 
-> **Sicherheit, kurz und ernst:** Dieser Port ist aus dem ganzen Internet erreichbar und
-> dahinter liegt ein Handelskonto. Wenn das Passwort schwach oder Standard ist, ändere es
-> jetzt, bevor irgendein Konto verbunden wird. Nicht dasselbe wie das Root-Passwort nehmen.
+Der Knopf **„Terminal ↗"** ganz oben auf der Seite (über „Docker-Projekte") ist **ein
+anderer** als der bei „Zugriff". Der obere führt auf den VPS selbst, der untere in den
+Container. Das ist die häufigste Verwechslung — dazu gleich mehr in A4.
 
-### A2. Beim Broker anmelden
+---
 
-In MT5: **Datei → Handelskonto öffnen** bzw. **Mit Handelskonto verbinden** → Login,
-Passwort und Server deines **Demokontos** eintragen.
+### A1. MT5 im Browser öffnen
 
-Steht PuPrime nicht in der Serverliste: Servernamen von Hand eintippen. Er steht in der
-Kontoeröffnungs-E-Mail.
+Beim Projekt `metatrader-5-iore` auf **Zugriff → Öffnen ↗** tippen.
 
-### A3. EA in den Container kopieren
+Es öffnet sich ein neuer Tab mit einer Adresse wie `http://168…….…:3000`. Die `3000` am Ende
+ist die Tür-Nummer, hinter der MT5 sitzt — nicht wundern.
 
-Das geht ohne Datei-Upload — der Container holt sich die Datei selbst. Im Hostinger-Panel
-beim Docker-Projekt auf **Zugriff → Terminal**, dann:
+**Was jetzt passiert, hängt davon ab, wie das Template eingerichtet wurde:**
+
+- **Es fragt nach Benutzername und Passwort** → weiter bei A2.
+- **Es kommt direkt ein Desktop mit MT5** → sehr gut, weiter bei A3.
+  Aber lies A2 trotzdem, der Sicherheitshinweis gilt dann erst recht.
+- **Es lädt gar nicht / „Verbindung fehlgeschlagen"** → siehe „Häufige Probleme" unten.
+
+### A2. Falls nach Zugangsdaten gefragt wird
+
+Das sind **nicht** dein Hostinger-Login und **nicht** das Root-Passwort. Es sind zwei Werte,
+die beim Bereitstellen des Templates gesetzt wurden und `CUSTOM_USER` und `PASSWORD` heißen.
+
+Nachsehen: Docker Manager → beim Projekt auf **Verwalten** → dort nach
+**Umgebungsvariablen** (englisch *Environment variables*) suchen. Dort stehen beide.
+
+> **Kurz und ernst gemeint:** Diese Adresse ist aus dem ganzen Internet erreichbar, und
+> gleich hängt ein Handelskonto daran. Wenn dort ein kurzes oder offensichtliches Passwort
+> steht, ändere es **jetzt**, bevor du in A3 dein Konto verbindest. Und nimm nicht dasselbe
+> wie beim Root-Zugang — sonst hat wer das eine hat, auch das andere.
+
+### A3. Beim Broker anmelden
+
+Du siehst jetzt MetaTrader 5. Falls dort schon ein Konto verbunden ist, das nicht deins ist:
+trotzdem weitermachen, du legst deins einfach daneben.
+
+In MT5 oben im Menü: **Datei → Mit Handelskonto verbinden** (in manchen Versionen
+*Datei → Handelskonto öffnen → Bestehendes Konto*).
+
+Drei Felder:
+- **Login** — die Kontonummer aus deiner Broker-Mail (nur Ziffern)
+- **Passwort** — das Kontopasswort, nicht dein Broker-Website-Passwort
+- **Server** — z. B. `PUPrime-Demo`. Steht in derselben Mail.
+
+Steht dein Server nicht in der Liste: **Namen von Hand eintippen**, exakt wie in der Mail.
+
+Unten rechts in MT5 muss danach eine Verbindung mit Zahlen (kb/s) stehen, nicht „Keine
+Verbindung". Und oben in der Kontoübersicht muss **Demo** stehen.
+
+> **Nimm ein Demokonto mit 1.000 USD.** Nicht 100.000 (dann übst du Größen, die du nie
+> handeln wirst) und nicht 55 (dann lehnt der EA jeden Trade ab, siehe ganz unten).
+> Ein neues Demokonto legst du im Kundenbereich deines Brokers in zwei Minuten an.
+
+### A4. Den EA in den Container holen
+
+Jetzt die einzige Stelle, an der du tippen statt tippen-auf-Knöpfe machst. Ist halb so wild —
+ich erkläre jede Zeile.
+
+**Ein „Terminal" ist ein schwarzes Fenster mit einer Eingabezeile.** Du schreibst einen
+Befehl, drückst **Enter**, und der Computer antwortet mit Text. Immer nur **eine Zeile auf
+einmal**, jeweils Enter. Kein Doppelklick, keine Maus.
+
+**Schritt 1: das richtige Terminal öffnen.**
+Docker Manager → beim Projekt `metatrader-5-iore` → **Zugriff → Terminal ↗**.
+
+Nicht den Terminal-Knopf ganz oben auf der Seite — der führt auf den VPS und dort liegt die
+Datei falsch.
+
+**Schritt 2: prüfen, dass du drin bist.** Erste Zeile eintippen und Enter:
+
+```bash
+ls -d /config/.wine && echo "RICHTIG-IM-CONTAINER"
+```
+
+- Antwortet er mit `/config/.wine` und `RICHTIG-IM-CONTAINER` → passt, weiter.
+- Antwortet er `No such file or directory` → du bist im VPS-Terminal, nicht im Container.
+  Tab schließen, den **unteren** Terminal-Knopf nehmen.
+
+**Schritt 3: den Zielordner finden.**
 
 ```bash
 find / -type d -path "*MQL5/Experts" 2>/dev/null
 ```
 
-Erwartet wird ein Pfad in dieser Art:
+Das durchsucht die Festplatte nach dem Ordner, in den MT5 seine Expert Advisors legt.
+Dauert ein paar Sekunden. Heraus kommt eine Zeile, meistens genau diese:
 
 ```
 /config/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts
 ```
 
-Diesen Pfad unten einsetzen (die Anführungszeichen sind wegen der Leerzeichen nötig):
+- **Mehrere Zeilen?** Nimm die mit `Program Files/MetaTrader 5/` darin.
+- **Gar keine Zeile?** In MT5 auf **Datei → Datenverzeichnis öffnen** — der Pfad steht dann
+  oben im Fenster. Den nimmst du dann unten statt meinem.
+
+**Schritt 4: in den Ordner wechseln.** Der Pfad hat Leerzeichen, deshalb die
+Anführungszeichen — die gehören dazu:
 
 ```bash
 cd "/config/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
+```
+
+Wenn nichts passiert und einfach die nächste Eingabezeile kommt: **genau richtig.** Ein
+Terminal meldet Erfolg durch Schweigen.
+
+**Schritt 5: die Datei herunterladen.** Das ist ein Befehl über zwei Zeilen — der
+Rückstrich `\` am Ende sagt „geht in der nächsten Zeile weiter". Beide Zeilen tippen bzw.
+einfügen, dann Enter:
+
+```bash
 wget -O GoldScalpAssistant.mq5 \
   https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/trading-bot-plan-4uj86r/mt5/Experts/GoldScalpAssistant.mq5
+```
+
+`wget` holt eine Datei aus dem Internet. Die lange Adresse zeigt auf unser GitHub. Du siehst
+einen Fortschrittsbalken und am Ende `saved`.
+
+**Schritt 6: nachzählen.** Der wichtigste Befehl von allen:
+
+```bash
 wc -l GoldScalpAssistant.mq5
 ```
 
-**Erwartet: `1377 GoldScalpAssistant.mq5`.** Steht dort eine andere Zahl oder eine Fehlermeldung,
-ist die Datei nicht vollständig angekommen — dann nicht weitermachen, sondern mir die Ausgabe
-schicken.
+`wc -l` zählt die Zeilen der Datei.
 
-> Findet `find` mehrere Pfade, nimm den unter `Program Files/MetaTrader 5/`. Findet es gar
-> keinen, öffne in MT5 **Datei → Datenverzeichnis öffnen** — der Pfad steht dann in der
-> Titelzeile des Fensters.
+**Es muss `1377 GoldScalpAssistant.mq5` dastehen.**
 
-### A4. Kompilieren
+- Steht dort `1377` → die Datei ist vollständig angekommen. Weiter bei A5.
+- Steht dort eine **andere Zahl** oder eine Fehlermeldung → nicht weitermachen.
+  Datei löschen (`rm GoldScalpAssistant.mq5`) und Schritt 5 wiederholen. Bleibt es dabei:
+  Ausgabe abfotografieren und mir schicken.
 
-Zurück im MT5-Fenster im Browser: den **IDE-Knopf** in der Symbolleiste (öffnet MetaEditor;
-**F4** funktioniert über VNC oft nicht, weil der Browser die Taste abfängt).
+Diese Zahl ist bewusst als Test eingebaut — ein Test im Projekt prüft, dass sie zur echten
+Datei passt. Wenn sie stimmt, hast du garantiert die richtige, vollständige Datei.
 
-Links im Navigator unter *Experts* auf `GoldScalpAssistant.mq5` → **Kompilieren** (oder F7).
+### A5. Kompilieren
 
-**Erwartet: `0 errors, 0 warnings`.**
+MT5 versteht die Datei noch nicht — `.mq5` ist Quelltext, den man erst übersetzen muss. Das
+macht MetaEditor, ein Programm das in MT5 eingebaut ist.
 
-> **Wenn Fehler kommen:** Zeilennummern und Text abschreiben oder abfotografieren und mir
-> schicken. Ich kann hier nicht kompilieren — das ist der erste echte Test des EA.
+**Zurück im MT5-Tab.** In der Symbolleiste den **IDE-Knopf** suchen (er heißt manchmal auch
+*MetaEditor*; das Symbol ist ein kleines Blatt mit Stift).
 
-### A5. Auf den Chart
+> **F4 funktioniert hier meistens nicht.** Über den Browser fängt Safari die Taste ab, bevor
+> MT5 sie sieht. Deshalb der Knopf statt der Tastenkombination.
 
-- **XAUUSD** öffnen, Zeitrahmen **M5**
-- EA aus dem Navigator auf den Chart ziehen
-- Reiter **Allgemein**: Haken bei *Algo-Trading erlauben* → OK
-- In der Symbolleiste **Algo-Trading** grün schalten
+Im MetaEditor links im **Navigator** den Ordner **Experts** aufklappen →
+`GoldScalpAssistant.mq5` antippen → oben auf **Kompilieren** (oder F7).
 
-Oben links erscheint das Panel. Steht dort `[ADVISOR]` — richtig, so soll es anfangen.
+Unten erscheint ein Fenster mit dem Ergebnis. **Erwartet: `0 errors, 0 warnings`.**
 
-### A6. Weiterlaufen lassen
+- **`0 errors`** → fertig, weiter bei A6.
+- **Fehler mit Zeilennummern** → abfotografieren und mir schicken. Ich kann MQL5 hier nicht
+  kompilieren, also ist das der erste echte Test des EA. Fehler sind an dieser Stelle normal
+  und schnell behoben — schick sie einfach.
 
-Hier ist es einfacher als bei Windows: **Browser-Tab einfach zumachen.** Der Container läuft
-auf dem VPS weiter, MT5 ebenfalls. VNC ist nur die Fernbedienung.
+Danach liegt neben der `.mq5` eine `.ex5`. Die ist die übersetzte Fassung, die MT5 ausführt.
 
-Nicht tun: im Docker Manager auf *Stoppen* oder *Neu starten*.
+### A6. Auf den Chart ziehen
 
-Zum Prüfen: Tab schließen, 10 Minuten warten, wieder öffnen. Ist das Panel aktuell, läuft es.
+1. In MT5 die **Marktübersicht** öffnen (Ansicht → Marktübersicht) und **XAUUSD** suchen.
+   Heißt bei manchen Brokern `XAUUSD.r`, `GOLD` oder `XAUUSDm` — dann eben so.
+2. Rechtsklick darauf → **Chartfenster** → der Gold-Chart öffnet sich.
+3. Oben den Zeitrahmen auf **M5** stellen (5 Minuten). Das ist Pflicht, der EA rechnet auf M5.
+4. Links im **Navigator** unter *Expert Advisors* den `GoldScalpAssistant` **auf den Chart
+   ziehen**.
+5. Im Fenster das aufgeht, Reiter **Allgemein**: Haken bei **Algo-Trading erlauben** → **OK**.
+6. In der Symbolleiste oben den Knopf **Algo-Trading** antippen, bis er **grün** ist.
 
-**Weiter bei Schritt E.**
+**Woran du erkennst, dass es läuft:**
+- Oben rechts im Chart steht ein kleines Gesicht 🙂 (nicht 😞) neben dem EA-Namen.
+- Oben links im Chart erscheint das Panel des EA, und dort steht **`[ADVISOR]`**.
 
+`[ADVISOR]` heißt: Er rechnet, zeichnet und meldet Setups, **platziert aber keine Order**.
+Genau so soll es anfangen. Der Auto-Modus ist eine bewusste Umschaltung, kein Standard.
+
+### A7. Weiterlaufen lassen
+
+Der bequemste Teil: **Browser-Tab einfach zumachen.**
+
+MT5 läuft auf dem VPS weiter, nicht auf deinem iPad. Der Browser war nur die Fernbedienung.
+Du kannst das iPad ausschalten, es ändert nichts.
+
+**Was du nicht tun darfst:** im Docker Manager auf *Stoppen*, *Neu starten* oder unter
+*Weitere Aktionen* irgendetwas anklicken. Das beendet den Container und damit MT5.
+
+**Gegenprobe:** Tab schließen, zehn Minuten warten, über *Öffnen* wieder rein. Steht MT5
+noch da und zeigt das Panel eine aktuelle Uhrzeit — läuft.
+
+### A8. Checkliste
+
+Alles erledigt, wenn du jedes Häkchen setzen kannst:
+
+- [ ] MT5 öffnet sich über *Zugriff → Öffnen* im Browser
+- [ ] Demokonto verbunden, unten rechts steht eine Verbindung, oben steht **Demo**
+- [ ] Kontostand rund **1.000 USD**
+- [ ] `wc -l` hat **1377** ausgegeben
+- [ ] MetaEditor meldet **0 errors, 0 warnings**
+- [ ] XAUUSD-Chart auf **M5**, EA drauf, 🙂 oben rechts
+- [ ] Knopf **Algo-Trading** ist grün
+- [ ] Panel oben links zeigt **`[ADVISOR]`**
+
+**Weiter bei Schritt E** — was du am ersten Abend damit machst.
 ---
 
 ## Teil B — Windows-VPS
@@ -234,6 +404,35 @@ Reihenfolge, die etwas bringt:
 
 4. **Erst wenn du 20–30 Vorschläge gesehen hast:** Auto-Modus, weiterhin Demo.
 
+### Was du im Panel siehst und was es heißt
+
+Das Panel oben links im Chart bewertet zuerst die **Uhrzeit** — noch bevor es um ein Setup
+geht. Vier Zustände, genau diese Wörter:
+
+| Anzeige | Bedeutung |
+|---|---|
+| **`PRIME`** | London, New York oder die Überlappung. Die Stunden mit Bewegung. |
+| **`good`** | Handelbar, aber nicht die beste Zeit. |
+| **`marginal`** | Dünn. Asiatische Stunden. |
+| **`AVOID`** | Gesperrt. Wochenende, Rollover (21–23 UTC) oder Markt zu. Kein Fehler — das ist die Regel, die greift. |
+
+Daneben steht `[ADVISOR]` oder `[AUTO]` (der Modus) und der Zustand einer offenen Position.
+Greift zusätzlich ein Limit — Tagesverlust, Trade-Zahl, Verlustserie — nennt das Panel den
+Grund im Klartext.
+
+**`PRIME` heißt nicht „gleich kommt ein Trade".** Die meisten Kerzen sind keine Gelegenheit.
+Wenn stundenlang nichts passiert, arbeitet der EA korrekt — Nichtstun ist der Normalfall.
+
+### Wo du siehst, was der EA gemacht hat
+
+In MT5 unten das Fenster **Werkzeugkasten** (Ansicht → Werkzeugkasten):
+
+- Reiter **Experten** — alles was der EA meldet. Hier stehen die Setups.
+- Reiter **Journal** — was das Terminal selbst tut, Verbindungen, Fehler.
+- Reiter **Handel** — offene Positionen. Im Advisor-Modus bleibt der leer, das ist richtig.
+
+Wenn du am nächsten Tag wissen willst, was war: Reiter **Experten**, hochscrollen.
+
 ---
 
 ## Zu deinem Zeitplan — die Zahl, die entscheidet
@@ -304,18 +503,23 @@ du behalten willst, vorher sichern:
 
 ## Häufige Probleme
 
-| Symptom | Ursache |
+| Symptom | Was los ist und was du tust |
 |---|---|
-| Docker: „Öffnen" fragt nach Passwort, keins bekannt | Docker Manager → Verwalten → Umgebungsvariablen (`CUSTOM_USER` / `PASSWORD`) |
-| Docker: Seite lädt nicht | Container gestoppt. Docker Manager → Status prüfen, ggf. starten |
-| `wget` schreibt „Permission denied" | Im Container-Terminal statt im VPS-Terminal arbeiten (Zugriff → Terminal beim Projekt) |
-| `wc -l` zeigt nicht 1377 | Download unvollständig oder falscher Pfad. Datei löschen, erneut laden |
-| F4 öffnet nichts | Über VNC fängt der Browser die Taste ab — den **IDE-Knopf** in der Symbolleiste nutzen |
+| „Öffnen" fragt nach Passwort, du kennst keins | Docker Manager → beim Projekt **Verwalten** → **Umgebungsvariablen**. Dort stehen `CUSTOM_USER` und `PASSWORD` |
+| „Öffnen" lädt nicht, „Verbindung fehlgeschlagen" | Container gestoppt. Docker Manager → Status prüfen. Steht dort nicht „In Betrieb": *Weitere Aktionen → Starten* |
+| Terminal antwortet `No such file or directory` bei `ls -d /config/.wine` | Du bist im **VPS-Terminal** statt im Container. Tab zu, den Terminal-Knopf **bei „Zugriff"** nehmen, nicht den oben auf der Seite |
+| `wget: command not found` | Seltener Fall, anderes Image. Stattdessen `curl -L -o GoldScalpAssistant.mq5 <dieselbe Adresse>` |
+| `wget` schreibt „Permission denied" | Falscher Ordner oder falsches Terminal. `pwd` eingeben — muss auf `…/MQL5/Experts` enden |
+| `wc -l` zeigt nicht 1377 | Datei unvollständig. `rm GoldScalpAssistant.mq5`, dann Schritt 5 wiederholen |
+| Datei ist da, MetaEditor zeigt sie nicht | Falscher `Experts`-Ordner erwischt. In MT5 **Datei → Datenverzeichnis öffnen**, den Pfad von dort nehmen |
+| F4 öffnet nichts | Über den Browser fängt Safari die Taste ab — den **IDE-Knopf** in der Symbolleiste nutzen |
+| Kein XAUUSD in der Marktübersicht | Rechtsklick → *Alle anzeigen*. Heißt bei manchen Brokern `GOLD`, `XAUUSD.r` oder `XAUUSDm` |
+| Trauriges Gesicht 😞 statt 🙂 am Chart | *Algo-Trading erlauben* nicht angehakt, oder der Knopf in der Symbolleiste ist nicht grün |
 | Remote Desktop verbindet nicht | Port 3389 blockiert. Hostinger-Panel → Firewall → 3389/TCP freigeben |
 | Linux: schwarzer Bildschirm nach Login | `echo "xfce4-session" > ~/.xsession` vergessen, dann `systemctl restart xrdp` |
 | MT5 startet nicht (Linux) | Wine-Installation unvollständig. `./mt5ubuntu.sh` erneut ausführen |
 | EA-Panel erscheint nicht | Algo-Trading nicht grün, oder EA nicht auf den Chart gezogen |
 | Panel zeigt dauernd `AVOID` | Wochenende, Rollover (21–23 UTC) oder Markt geschlossen. Richtig so |
-| Panel `PRIME`, aber nichts passiert | Kein Setup. Die meisten Kerzen sind keine Gelegenheit |
+| Panel `PRIME`, aber nichts passiert | Kein Setup. Die meisten Kerzen sind keine Gelegenheit — Nichtstun ist der Normalfall |
 | „Cannot size" im Journal | Konto zu klein für die Stop-Distanz — siehe oben |
 | MT5 weg nach dem Trennen | Du hast dich abgemeldet statt nur das Fenster zu schließen |
