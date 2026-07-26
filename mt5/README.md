@@ -176,6 +176,41 @@ Beides wird beim Start aus den Aufzeichnungen des Terminals rekonstruiert:
 schließt er sie. Eine Position ohne definierte Invalidierung ist kein Trade, sondern eine
 offene Rechnung (Regel R7) — das gilt auch für eine, die er nicht selbst eröffnet hat.
 
+## Das Journal
+
+Der EA schreibt jedes erkannte Setup und jeden geschlossenen Trade nach
+`MQL5/Files/GoldScalpAssistant.csv` — ab dem ersten Signal, **auch im Advisor-Modus**, ohne
+Einstellung. Ein Protokoll, das man abschalten kann, wird abgeschaltet, und dann fehlt genau
+die Woche, um die es später geht.
+
+Zwei Zeilenarten:
+
+| `kind` | Wann | Enthält |
+|---|---|---|
+| `signal` | Ein Setup wurde erkannt | Einstieg, Stop, T1, T2, ATR, Spread, Session, Größe — und ob es gehandelt wurde, sonst **warum nicht** |
+| `close` | Eine Position wurde geschlossen | Ergebnis in **R**, Ausstiegsgrund, Haltedauer |
+
+Ausgewertet wird in Python, nicht im EA:
+
+```bash
+python -m metals journal --file GoldScalpAssistant.csv
+```
+
+**Der EA liest diese Datei nie zurück.** Er justiert sich nicht selbst nach — das ist eine
+Entscheidung, keine fehlende Funktion, und `tests/test_mt5_parity.py` erzwingt sie: Der EA
+darf `FileWriteString` benutzen und keine der `FileRead*`-Funktionen. Ein Rückkanal würde
+also einen roten Test hinterlassen.
+
+Die Begründung mit den Zahlen steht in **[../docs/LERNEN.md](../docs/LERNEN.md)**. Kurzform:
+Bei 10–12 Auswertungsschubladen liegt die Chance, dass mindestens eine rein zufällig gut
+aussieht, bei rund 46 %. Ein Automatismus, der die beste hochgewichtet, verfolgt genau dieses
+Rauschen.
+
+**Der R-Multiplikator** ist verdientes Geld geteilt durch riskiertes Geld, mit dem beim
+Einstieg festgehaltenen Risikobetrag als Nenner. Nicht über die Preisdistanz: Sobald der
+Teilgewinn genommen und der Stop auf Einstand gezogen ist, entspricht die Preisdistanz nicht
+mehr dem tatsächlich getragenen Risiko.
+
 ## Was der EA anders macht als ein Backtest
 
 Drei Dinge, die es im Strategietester nicht gibt und die live sofort auftreten:

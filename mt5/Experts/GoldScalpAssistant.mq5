@@ -136,10 +136,21 @@ struct ManagedPosition
    double   initial_volume;
    datetime opened_at;
    string   setup_id;
+   //--- The denominator for the R multiple written to the journal. Stored at
+   //--- entry rather than recomputed at exit, because by then the stop has
+   //--- usually moved to break-even and the original risk is no longer
+   //--- readable from the position.
+   double   risk_money;
+   string   session;
 };
 ManagedPosition managed;
 
 string lastNote = "";
+
+//--- Why the position that is closing went away. Set by whoever decides to
+//--- close; read once by RecordClosedTrade and then cleared. A stop hit
+//--- outside our control leaves it empty, which is itself the answer.
+string lastExitReason = "";
 
 //--- Log a reason once rather than on every bar.
 void Note(const string text)
@@ -320,6 +331,27 @@ SessionQuality ClassifySession(const datetime utc, string &label)
    return QUALITY_GOOD;
 }
 
+//--- The one place a session quality becomes a word. The on-chart panel
+//--- shows these exact strings and mt5/VPS-SETUP.md teaches the user to read
+//--- them, so a second copy anywhere would eventually teach a word that never
+//--- appears on screen. tests/test_mt5_parity.py checks this list against the
+//--- guide.
+string QualityLabel(const SessionQuality q)
+{
+   return (q == QUALITY_PRIME)    ? "PRIME"    :
+          (q == QUALITY_GOOD)     ? "good"     :
+          (q == QUALITY_MARGINAL) ? "marginal" : "AVOID";
+}
+
+//--- The same word, lower-cased, for grouping in the journal.
+string SessionWord(const datetime utc)
+{
+   string ignored;
+   string word = QualityLabel(ClassifySession(utc, ignored));
+   StringToLower(word);
+   return word;
+}
+
 bool IsTradableSession(const datetime utc, const bool prime_only, string &label)
 {
    const SessionQuality q = ClassifySession(utc, label);
@@ -405,6 +437,20 @@ double LotsForRisk(const string symbol, const double stop_distance,
    return lots;
 }
 
+//--- The inverse of LotsForRisk: what a given stop actually puts at risk.
+//--- Needed for the journal's R multiple, and for a position adopted after a
+//--- restart whose intended risk was never recorded.
+double MoneyAtRisk(const string symbol, const double stop_distance,
+                   const double lots)
+{
+   const double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   const double tick_size  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   if(tick_value <= 0.0 || tick_size <= 0.0 ||
+      stop_distance <= 0.0 || lots <= 0.0)
+      return 0.0;
+   return (stop_distance / tick_size) * tick_value * lots;
+}
+
 double DayPnLPercent()
 {
    if(day.start_equity <= 0.0) return 0.0;
@@ -464,6 +510,137 @@ bool InCooldown(const datetime utc, string &reason)
       "straight after a loss is statistically the worst of the day.",
       elapsed, COOLDOWN_AFTER_LOSS_MIN);
    return true;
+}
+
+//====================================================================
+// SECTION 5b -- THE JOURNAL
+//
+// Every signal and every closed trade is appended to a CSV that
+// metals/journal.py reads. This is the only way the question "did S4
+// actually work?" ever gets an answer made of data rather than of
+// memory, and memory is the worst instrument in trading: it keeps the
+// trades that confirm what you already believed.
+//
+// Note what is NOT here: any mechanism by which the EA changes its own
+// behaviour based on this record. That is deliberate. Reweighting
+// setups after a losing trade is not learning, it is fitting noise --
+// with three setups and four session qualities there are twelve
+// slices, and at twenty trades one of them looks excellent by chance
+// alone. The record is gathered here and judged in Python, and any
+// rule change costs a commit, exactly like the risk limits above.
+//
+// The schema is checked against metals/journal.py COLUMNS by
+// tests/test_mt5_parity.py: a column added on one side and not the
+// other would silently corrupt every conclusion drawn from the file.
+//====================================================================
+
+#define JOURNAL_FILE "GoldScalpAssistant.csv"
+
+//--- A function rather than a #define: a macro would have to combine
+//--- backslash continuation with adjacent string literals, and this file
+//--- cannot be compiled where it is written. Explicit `+` is unambiguous.
+string JournalHeader()
+{
+   return "timestamp,kind,symbol,setup,direction,session,mode," +
+          "entry,stop,target1,target2,atr,spread,risk_per_unit," +
+          "lots,taken,skip_reason,exit_reason,r_multiple,pnl," +
+          "minutes_held";
+}
+
+bool journalBroken = false;   // stop retrying after a write failure
+
+//--- ISO-8601 with a hyphen, not MetaTrader's dotted format, because the
+//--- Python side parses it with fromisoformat.
+string IsoUtc(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   return StringFormat("%04d-%02d-%02d %02d:%02d:%02d",
+                       dt.year, dt.mon, dt.day, dt.hour, dt.min, dt.sec);
+}
+
+//--- Free text goes into a comma-separated file, so the commas have to go.
+string CsvSafe(const string text)
+{
+   string out = text;
+   StringReplace(out, ",", ";");
+   StringReplace(out, "\n", " ");
+   StringReplace(out, "\r", " ");
+   StringReplace(out, "\"", "'");
+   return out;
+}
+
+//--- Empty rather than "0" for a value that was never measured. A zero the
+//--- analysis cannot distinguish from a missing reading is worse than a gap.
+string Num(const double value, const int digits = 2)
+{
+   if(value == EMPTY_VALUE) return "";
+   return DoubleToString(value, digits);
+}
+
+void JournalAppend(const string line)
+{
+   if(journalBroken) return;
+
+   const int handle = FileOpen(JOURNAL_FILE,
+                               FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI |
+                               FILE_SHARE_READ);
+   if(handle == INVALID_HANDLE)
+   {
+      journalBroken = true;
+      PrintFormat("journal disabled: cannot open %s (error %d). Trading is "
+                  "unaffected, but nothing will be recorded for review.",
+                  JOURNAL_FILE, GetLastError());
+      return;
+   }
+   FileSeek(handle, 0, SEEK_END);
+   if(FileTell(handle) == 0)
+      FileWriteString(handle, JournalHeader() + "\r\n");
+   FileWriteString(handle, line + "\r\n");
+   FileClose(handle);
+}
+
+//--- A setup was detected. Recorded whether or not it was acted on: the
+//--- refusals are the more interesting half, because they show which gate is
+//--- doing the work and whether one of them is blocking everything.
+void JournalSignal(const string setup_id, const bool is_long,
+                   const string session, const double entry,
+                   const double stop, const double t1, const double t2,
+                   const double atr_value, const double spread,
+                   const double risk_per_unit, const double lots,
+                   const bool taken, const string skip_reason)
+{
+   JournalAppend(StringFormat(
+      "%s,signal,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,,,,",
+      IsoUtc(ServerToUtc(TimeTradeServer())), _Symbol, CsvSafe(setup_id),
+      (is_long ? "long" : "short"), session,
+      (InpMode == MODE_ADVISOR ? "advisor" : "auto"),
+      Num(entry, _Digits), Num(stop, _Digits), Num(t1, _Digits),
+      Num(t2, _Digits), Num(atr_value), Num(spread, _Digits),
+      Num(risk_per_unit), Num(lots), (taken ? "1" : "0"),
+      CsvSafe(skip_reason)));
+}
+
+//--- A position closed. The R multiple is the only column that matters for
+//--- the expectancy question, and it is money made over money risked -- not
+//--- price distance, which stops being meaningful once a partial is taken.
+void JournalClose(const double profit, const double r_multiple,
+                  const double minutes_held, const string exit_reason)
+{
+   //--- The position is gone by now, so its direction is recovered from the
+   //--- geometry that was recorded at entry: a stop below the entry is a long.
+   const string direction =
+      (managed.initial_stop < managed.entry) ? "long" : "short";
+
+   JournalAppend(StringFormat(
+      "%s,close,%s,%s,%s,%s,%s,%s,%s,,,,,%s,%s,,,%s,%s,%s,%s",
+      IsoUtc(ServerToUtc(TimeTradeServer())), _Symbol,
+      CsvSafe(managed.setup_id), direction, managed.session,
+      (InpMode == MODE_ADVISOR ? "advisor" : "auto"),
+      Num(managed.entry, _Digits), Num(managed.initial_stop, _Digits),
+      Num(managed.risk_per_unit), Num(managed.initial_volume),
+      CsvSafe(exit_reason), Num(r_multiple, 3),
+      Num(profit), Num(minutes_held, 0)));
 }
 
 //====================================================================
@@ -603,6 +780,14 @@ bool AdoptExistingPosition(const datetime utc)
          ? managed.entry + managed.risk_per_unit * InpRunnerTargetR
          : managed.entry - managed.risk_per_unit * InpRunnerTargetR;
 
+      //--- Reconstructed, so the R multiple this trade eventually reports is
+      //--- an estimate. Recorded anyway: an adopted trade that loses 3R still
+      //--- needs to show up as a discipline failure, and marking it "unknown"
+      //--- would hide exactly the case worth seeing.
+      managed.risk_money = MoneyAtRisk(_Symbol, managed.risk_per_unit,
+                                       managed.initial_volume);
+      managed.session    = SessionWord(utc);
+
       PrintFormat("adopted open position #%I64u (%s %.2f lots from %s). "
                   "First target %s. Management resumes.",
                   managed.ticket, (is_long ? "long" : "short"),
@@ -663,6 +848,10 @@ int OnInit()
                (is_demo ? "DEMO" : "LIVE"),
                RISK_PER_TRADE_PCT, DAILY_LOSS_LIMIT_PCT,
                DAILY_WIN_TARGET_PCT, MAX_TRADES_PER_DAY);
+
+   PrintFormat("journal: %s in MQL5/Files (File -> Open Data Folder). Read it "
+               "with: python -m metals journal --file %s",
+               JOURNAL_FILE, JOURNAL_FILE);
 
    return INIT_SUCCEEDED;
 }
@@ -734,7 +923,8 @@ void ManageOpenPosition(const datetime utc)
    const int age_min = (int)((utc - managed.opened_at) / 60);
    if(age_min >= InpTimeStopMinutes)
    {
-      CloseAll(StringFormat("time stop after %d minutes", age_min));
+      CloseAll("time_stop",
+               StringFormat("time stop after %d minutes", age_min));
       return;
    }
 
@@ -743,7 +933,8 @@ void ManageOpenPosition(const datetime utc)
    TimeToStruct(utc, dt);
    if(dt.day_of_week == 5 && dt.hour >= FRIDAY_FLAT_HOUR_UTC)
    {
-      CloseAll("Friday flat -- a stop does not protect against a weekend gap");
+      CloseAll("session_end",
+               "Friday flat -- a stop does not protect against a weekend gap");
       return;
    }
 
@@ -761,7 +952,7 @@ void ManageOpenPosition(const datetime utc)
                                    : (price <= managed.runner_target);
    if(runner_hit)
    {
-      CloseAll("runner target reached");
+      CloseAll("target", "runner target reached");
       return;
    }
 
@@ -781,7 +972,7 @@ void TakePartialAndMoveToBreakEven(const bool is_long, const double price)
    // an order the server rejects while price walks away.
    if(part < vol_min || remaining < vol_min)
    {
-      CloseAll(StringFormat(
+      CloseAll("target", StringFormat(
          "first target reached but a partial is not possible: %.2f/%.2f lots "
          "against a %.2f minimum. Closing in full.", part, remaining, vol_min));
       return;
@@ -838,7 +1029,11 @@ void TrailRunner(const bool is_long, const double price)
    }
 }
 
-void CloseAll(const string why)
+//--- `category` is the coarse bucket the journal groups by, `why` the human
+//--- sentence for the log. They are separate arguments because the sentence
+//--- carries specifics -- "time stop after 47 minutes" -- and grouping by it
+//--- would produce one bucket per minute, which is no grouping at all.
+void CloseAll(const string category, const string why)
 {
    if(!trade.PositionClose(managed.ticket))
    {
@@ -847,6 +1042,7 @@ void CloseAll(const string why)
       return;
    }
    PrintFormat("closed: %s", why);
+   lastExitReason = category;
    RecordClosedTrade();
    ZeroMemory(managed);
 }
@@ -878,10 +1074,33 @@ void RecordClosedTrade()
    if(profit < 0.0) day.consecutive_losses++;
    else             day.consecutive_losses = 0;
 
-   PrintFormat("trade closed, result %.2f %s. Day %.2f%%, %d trades, %d "
-               "consecutive loss(es).", profit,
-               AccountInfoString(ACCOUNT_CURRENCY), DayPnLPercent(),
-               day.trades_taken, day.consecutive_losses);
+   //--- Money made over money risked. This -- not the currency amount -- is
+   //--- the number that can be compared across account sizes and across
+   //--- trades of different stop widths, and it is what the expectancy
+   //--- question is asked in. Left empty when the denominator is unknown
+   //--- (an adopted position whose original risk could not be reconstructed),
+   //--- because a wrong R is worse than a missing one.
+   const double r_multiple = (managed.risk_money > 0.0)
+      ? profit / managed.risk_money
+      : EMPTY_VALUE;
+
+   const double minutes_held = (managed.opened_at > 0)
+      ? (double)(ServerToUtc(TimeTradeServer()) - managed.opened_at) / 60.0
+      : EMPTY_VALUE;
+
+   const string why = (lastExitReason == "")
+      ? "closed outside the EA (stop, manual or margin)"
+      : lastExitReason;
+
+   JournalClose(profit, r_multiple, minutes_held, why);
+   lastExitReason = "";
+
+   PrintFormat("trade closed, result %.2f %s (%s R). Day %.2f%%, %d trades, "
+               "%d consecutive loss(es).", profit,
+               AccountInfoString(ACCOUNT_CURRENCY),
+               (r_multiple == EMPTY_VALUE ? "unknown"
+                                          : DoubleToString(r_multiple, 2)),
+               DayPnLPercent(), day.trades_taken, day.consecutive_losses);
 }
 
 //====================================================================
@@ -1194,12 +1413,17 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    const double spread = SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                        - SymbolInfoDouble(_Symbol, SYMBOL_BID);
    const double spread_pct = spread / risk_per_unit * 100.0;
+   const string session_word = SessionWord(ServerToUtc(TimeTradeServer()));
+
    if(spread_pct > MAX_SPREAD_PCT_OF_STOP)
    {
       Note(StringFormat(
          "S6: spread %.3f is %.0f%% of the %.2f stop, over the %.0f%% ceiling. "
          "Refused -- the cost would dominate the edge.",
          spread, spread_pct, risk_per_unit, MAX_SPREAD_PCT_OF_STOP));
+      JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
+                    EMPTY_VALUE, EMPTY_VALUE, atr_value, spread,
+                    risk_per_unit, EMPTY_VALUE, false, "S6 spread gate");
       return;
    }
 
@@ -1224,6 +1448,13 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    if(lots <= 0.0)
    {
       Note("cannot size: " + size_problem);
+      //--- Worth recording rather than merely printing: a journal full of
+      //--- this one reason is the signature of an account too small for the
+      //--- instrument, which no amount of signal tuning will fix.
+      JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
+                    first_target, runner_target, atr_value, spread,
+                    risk_per_unit, EMPTY_VALUE, false,
+                    "position size below the broker minimum at 1% risk");
       return;
    }
 
@@ -1256,6 +1487,12 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    if(InpMode == MODE_ADVISOR)
    {
       Print("ADVISOR MODE -- no order placed. Execute manually if you agree.");
+      //--- In Advisor mode the journal becomes a pure signal log, which is
+      //--- exactly what it should be for the first weeks: a record of what
+      //--- the EA would have done, to be compared against what you did.
+      JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
+                    first_target, runner_target, atr_value, spread,
+                    risk_per_unit, lots, false, "advisor mode -- not traded");
       return;
    }
 
@@ -1269,6 +1506,11 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    {
       PrintFormat("order failed: %d %s", trade.ResultRetcode(),
                   trade.ResultRetcodeDescription());
+      JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
+                    first_target, runner_target, atr_value, spread,
+                    risk_per_unit, lots, false,
+                    StringFormat("order rejected: %d %s", trade.ResultRetcode(),
+                                 trade.ResultRetcodeDescription()));
       return;
    }
 
@@ -1301,6 +1543,12 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    managed.initial_volume    = lots;
    managed.opened_at         = ServerToUtc(TimeTradeServer());
    managed.setup_id          = s.id;
+   managed.risk_money        = risk_money;
+   managed.session           = session_word;
+
+   JournalSignal(s.id, s.is_long, session_word, managed.entry, stop,
+                 first_target, runner_target, atr_value, spread,
+                 risk_per_unit, lots, true, "");
 
    day.trades_taken++;
    PrintFormat("opened #%I64u, %d of %d trades today",
@@ -1338,10 +1586,7 @@ void DrawDashboard(const datetime utc)
    string stop_reason;
    const bool stopped = ShouldStopTrading(stop_reason);
 
-   const string quality_text =
-      (q == QUALITY_PRIME)    ? "PRIME"    :
-      (q == QUALITY_GOOD)     ? "good"     :
-      (q == QUALITY_MARGINAL) ? "marginal" : "AVOID";
+   const string quality_text = QualityLabel(q);
 
    const string position_text = (managed.ticket == 0)
       ? "no position"

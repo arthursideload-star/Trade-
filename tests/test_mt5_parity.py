@@ -313,6 +313,229 @@ class TestSourceFilesExistAndAreSane(unittest.TestCase):
             self.assertNotIn(forbidden, text)
 
 
+def _strip_mql(source: str) -> str:
+    """Remove comments and string literals so punctuation inside them is not
+    counted as code."""
+    source = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    out = []
+    for line in source.splitlines():
+        line = re.sub(r'"(\\.|[^"\\])*"', '""', line)
+        line = re.sub(r"//.*$", "", line)
+        out.append(line)
+    return "\n".join(out)
+
+
+class TestTheEaIsStructurallyIntact(unittest.TestCase):
+    """Structural checks standing in for a compiler.
+
+    MQL5 cannot be compiled in this environment, so the first time anyone
+    finds out the file is broken is in MetaEditor on a VPS, at which point
+    the feedback loop is a screenshot sent over chat. These checks catch the
+    damage an edit does most often -- an unbalanced brace, a helper called
+    but never defined -- while it is still cheap to fix.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            cls.raw = fh.read()
+        cls.code = _strip_mql(cls.raw)
+
+    def test_braces_balance(self):
+        self.assertEqual(self.code.count("{"), self.code.count("}"),
+                         "unbalanced braces -- the file will not compile")
+
+    def test_parentheses_balance(self):
+        self.assertEqual(self.code.count("("), self.code.count(")"),
+                         "unbalanced parentheses -- the file will not compile")
+
+    def test_every_function_called_is_also_defined(self):
+        """Limited to the project's own helpers: the MQL5 standard library is
+        not visible here, so only names defined in this file are checked."""
+        defined = set(re.findall(
+            r"^\s*(?:void|int|bool|double|string|datetime|ulong)\s+(\w+)\s*\(",
+            self.code, re.M))
+        self.assertIn("OnTick", defined)
+        self.assertIn("OnInit", defined)
+        called = set(re.findall(r"\b(\w+)\s*\(", self.code))
+        for helper in ("JournalAppend", "JournalSignal", "JournalClose",
+                       "JournalHeader", "IsoUtc", "CsvSafe", "QualityLabel",
+                       "SessionWord", "MoneyAtRisk", "CloseAll"):
+            with self.subTest(helper=helper):
+                self.assertIn(helper, defined, f"{helper} is called but never "
+                                               f"defined")
+                self.assertIn(helper, called, f"{helper} is defined but never "
+                                              f"used -- dead code")
+
+    def test_every_close_states_a_category_for_the_journal(self):
+        """CloseAll's first argument is the bucket the journal groups by. A
+        call that passed only the human sentence would put one trade per
+        wording into its own bucket."""
+        body = self.code.split("void CloseAll(", 1)[0]
+        for call in re.findall(r"CloseAll\(([^;]*)\);", body, re.S):
+            first = call.strip().split(",", 1)[0].strip()
+            self.assertEqual(first, '""',
+                             "CloseAll must be called with a category literal "
+                             f"first, got {first!r}")
+
+    def test_the_advisor_default_survived_the_edit(self):
+        """Cheap to check and catastrophic to get wrong."""
+        self.assertIn("InpMode            = MODE_ADVISOR", self.raw)
+
+
+class TestJournalSchemaMatchesBothSides(unittest.TestCase):
+    """The EA writes the journal; Python draws conclusions from it.
+
+    A column added on one side and not the other does not crash anything --
+    it shifts every field after it, so R multiples are read out of the pnl
+    column and the analysis is confidently wrong. That is the worst kind of
+    bug this project can have, so the schema is checked rather than trusted.
+    """
+
+    @staticmethod
+    def _ea() -> str:
+        with open(EA_PATH, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_header_the_ea_writes_is_the_schema_python_expects(self):
+        from metals.journal import COLUMNS
+        ea = self._ea()
+        body = ea.split("string JournalHeader()", 1)[1].split("}", 1)[0]
+        header = "".join(re.findall(r'"([^"]*)"', body))
+        self.assertEqual(tuple(header.split(",")), COLUMNS)
+
+    def test_every_journal_row_has_exactly_one_field_per_column(self):
+        """Counted from the format strings themselves.
+
+        `StringFormat` is happy to emit a row with the wrong number of commas
+        and the CSV reader is happy to parse it, so nothing downstream would
+        complain until a conclusion was drawn from the wrong column.
+        """
+        from metals.journal import COLUMNS
+        ea = self._ea()
+        formats = re.findall(r'"(%s,(?:signal|close),[^"]*)"', ea)
+        self.assertTrue(formats, "no journal format strings found in the EA")
+        for fmt in formats:
+            kind = fmt.split(",")[1]
+            with self.subTest(kind=kind):
+                self.assertEqual(
+                    len(fmt.split(",")), len(COLUMNS),
+                    f"the {kind} row writes {len(fmt.split(','))} fields but "
+                    f"the schema has {len(COLUMNS)} columns"
+                )
+
+    def test_the_row_kinds_are_the_ones_python_accepts(self):
+        from metals.journal import CLOSE, SIGNAL
+        ea = self._ea()
+        kinds = {f.split(",")[1]
+                 for f in re.findall(r'"(%s,(?:signal|close),[^"]*)"', ea)}
+        self.assertEqual(kinds, {SIGNAL, CLOSE})
+
+    def test_free_text_is_sanitised_before_it_reaches_a_csv(self):
+        """A skip reason containing a comma would shift its own row."""
+        ea = self._ea()
+        self.assertIn("string CsvSafe(", ea)
+        body = ea.split("string CsvSafe(", 1)[1].split("\n}", 1)[0]
+        self.assertIn('StringReplace(out, ",", ";")', body)
+        # Every free-text field must go through it.
+        for call in ("CsvSafe(skip_reason)", "CsvSafe(exit_reason)",
+                     "CsvSafe(setup_id)"):
+            self.assertIn(call, ea, f"{call} is missing -- that field can "
+                                    f"carry a comma into the CSV")
+
+    def test_the_r_multiple_is_money_over_money_not_price_over_price(self):
+        """Once a partial is taken, price distance stops being the risk that
+        was actually run. Dividing by the money committed is the only
+        definition that survives the exit logic."""
+        ea = self._ea()
+        self.assertIn("profit / managed.risk_money", ea)
+
+    def test_the_ea_does_not_retune_itself_from_the_journal(self):
+        """The journal is evidence, not a feedback loop.
+
+        A system that reweights setups from its own recent results is fitting
+        noise at the sample sizes involved. If that ever changes it must be a
+        deliberate, reviewed decision -- not something that appears quietly.
+        """
+        ea = self._ea()
+        # The EA may write the file and must never read it back.
+        self.assertIn("FileWriteString", ea)
+        for reading in ("FileReadString", "FileReadNumber", "FileReadDouble"):
+            self.assertNotIn(reading, ea,
+                             "the EA reads its own journal -- that is a "
+                             "self-tuning loop and needs an explicit decision")
+
+
+class TestTheInstallScriptStaysTrue(unittest.TestCase):
+    """The script runs where nobody can debug it.
+
+    It executes in a container terminal on a VPS, driven from a phone, by
+    someone who cannot read shell. Every constant in it that can go stale is
+    therefore checked here, where going stale costs a failing test instead of
+    a confusing morning.
+    """
+
+    SCRIPT = os.path.join(MT5_DIR, "install-ea.sh")
+
+    @classmethod
+    def setUpClass(cls):
+        with open(cls.SCRIPT, encoding="utf-8") as fh:
+            cls.text = fh.read()
+
+    def test_the_expected_line_count_matches_the_ea(self):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            lines = sum(1 for _ in fh)
+        match = re.search(r"EXPECTED_LINES=(\d+)", self.text)
+        self.assertIsNotNone(match, "EXPECTED_LINES is gone from the script")
+        self.assertEqual(int(match.group(1)), lines,
+                         "the script would reject the very file it just "
+                         "downloaded")
+
+    def test_it_downloads_from_the_branch_this_project_develops_on(self):
+        self.assertIn("claude/trading-bot-plan-4uj86r", self.text)
+        self.assertIn("mt5/Experts/GoldScalpAssistant.mq5", self.text)
+
+    def test_it_verifies_before_it_installs(self):
+        """A truncated .mq5 sitting in Experts produces compiler errors that
+        look like bugs in the EA. The file must only be moved into place
+        after the line count proves it is whole."""
+        move = self.text.index('mv "${TMP}" "${TARGET}"')
+        check = self.text.index('if [ "${LINES}" != "${EXPECTED_LINES}" ]')
+        self.assertLess(check, move,
+                        "the script installs the file before checking it")
+
+    def test_it_never_hard_codes_a_credential(self):
+        """The script prints the container's own environment. It must not
+        carry anyone's password in its text -- it lives in a public repo."""
+        for forbidden in ("PASSWORD=", "CUSTOM_USER="):
+            # Assignments are forbidden; reading them via printenv is the point.
+            self.assertNotIn(f"\n{forbidden}", self.text)
+        self.assertIn("printenv CUSTOM_USER", self.text)
+        self.assertIn("printenv PASSWORD", self.text)
+
+    def test_a_failed_compile_is_not_treated_as_a_failed_install(self):
+        """Command-line compilation is a convenience. If it does not work the
+        GUI route still does, and the script must say so rather than exit."""
+        tail = self.text[self.text.index("4. Compiling"):]
+        self.assertIn("Compile it from the GUI instead", tail)
+        self.assertNotIn("exit 1", tail,
+                         "a compile problem must not abort the install")
+
+    def test_it_is_posix_sh_not_bash(self):
+        """The image is not guaranteed to ship bash."""
+        self.assertTrue(self.text.startswith("#!/bin/sh"))
+        for bashism in ("[[", "function ", "$'"):
+            self.assertNotIn(bashism, self.text)
+
+    def test_it_points_at_the_journal_command_that_exists(self):
+        from metals.cli import build_parser
+        self.assertIn("python -m metals journal", self.text)
+        # The parser must actually accept it, with that flag.
+        args = build_parser().parse_args(
+            ["journal", "--file", "GoldScalpAssistant.csv"])
+        self.assertEqual(args.file, "GoldScalpAssistant.csv")
+
+
 class TestSetupGuideStaysTrue(unittest.TestCase):
     """The VPS guide tells the user to verify the download by line count.
 
@@ -329,11 +552,16 @@ class TestSetupGuideStaysTrue(unittest.TestCase):
     def test_the_stated_line_count_matches_the_file(self):
         with open(EA_PATH, encoding="utf-8") as fh:
             lines = sum(1 for _ in fh)
-        self.assertIn(f"{lines} GoldScalpAssistant.mq5", self._guide(),
-                      "the guide's expected `wc -l` output no longer matches "
-                      "the EA -- a user following it would think the download "
-                      "failed")
-        self.assertIn(f"{lines} Zeilen", self._guide())
+        guide = self._guide()
+        # assertIn would dump the entire guide into the failure message, which
+        # buries the one number that matters.
+        for needle in (f"{lines} GoldScalpAssistant.mq5", f"{lines} Zeilen"):
+            self.assertTrue(
+                needle in guide,
+                f"the guide does not mention {needle!r}. The EA now has "
+                f"{lines} lines, so the `wc -l` check the guide teaches would "
+                f"look like a failed download. Update mt5/VPS-SETUP.md."
+            )
 
     def test_the_documented_panel_states_are_the_ones_the_ea_prints(self):
         """The guide teaches the user to read the panel. Renaming a state in
@@ -342,7 +570,9 @@ class TestSetupGuideStaysTrue(unittest.TestCase):
         with open(EA_PATH, encoding="utf-8") as fh:
             ea = fh.read()
         guide = self._guide()
-        labels = ea.split("const string quality_text =", 1)[1].split(";", 1)[0]
+        # QualityLabel is the single place the EA turns a session quality into
+        # a word -- both the panel and the journal go through it.
+        labels = ea.split("string QualityLabel(", 1)[1].split("}", 1)[0]
         for state in ("PRIME", "good", "marginal", "AVOID"):
             self.assertIn(f'"{state}"', labels,
                           f"{state} is not a label the EA emits")

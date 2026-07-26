@@ -736,3 +736,80 @@ eroeffnet hat.
 | O23 | VPS-Anbieter auswaehlen, sobald der Auto-Betrieb ansteht | offen (erst nach Schritt 1 und 2 der Reihenfolge) |
 | O24 | Neustart-Wiederherstellung im echten Terminal pruefen (EA neu laden, waehrend eine Position offen ist) | offen |
 | O25 | Kontogroesse fuer den Live-Start: mindestens ~300 USD, sonst lehnt der EA jeden Gold-Trade ab | offen (Entscheidung liegt beim Nutzer) |
+
+---
+
+## 2026-07-27 — Journal: aufzeichnen ja, selbst nachjustieren nein
+
+**Ausgangsfrage des Nutzers:** „Kann der Bot ueberhaupt lernen, wenn er Fehler gemacht hat
+oder etwas sehr gut gemacht hat?"
+
+### E41: Der EA schreibt ein Journal, liest es aber nie zurueck
+
+**Entscheidung:** Der EA protokolliert jedes erkannte Setup (auch die abgelehnten, mit
+Grund) und jeden geschlossenen Trade (mit Ergebnis in R) nach
+`MQL5/Files/GoldScalpAssistant.csv`. Ausgewertet wird in Python
+(`python -m metals journal`). Der EA **liest die Datei nicht** und veraendert sein Verhalten
+nicht auf ihrer Grundlage.
+
+**Begruendung — die Zahl, an der die Entscheidung haengt:** Der EA teilt in 3 Setups, 4
+Session-Qualitaeten, 2 Richtungen und mehrere Ausstiegsarten. In der Auswertung sind das
+schnell 10–12 Schubladen. Haette **keine einzige** davon einen echten Vorteil, laege die
+Wahrscheinlichkeit, dass trotzdem mindestens eine gut aussieht, bei **46 %**. Ein
+Automatismus, der die beste Schublade hochgewichtet, verfolgt genau dieses Zufallsmuster —
+und taeglich ein anderes.
+
+**Durchgesetzt als Test:** `tests/test_mt5_parity.py` prueft, dass der EA `FileWriteString`
+benutzt und keine der `FileRead*`-Funktionen. Ein Rueckkanal muesste also bewusst
+eingebaut werden und wuerde einen roten Test hinterlassen.
+
+### E42: Ergebnisse in R, nicht in Kontowaehrung
+
+**Entscheidung:** Der R-Multiplikator wird als *verdientes Geld geteilt durch riskiertes
+Geld* berechnet, mit dem beim Einstieg festgehaltenen Risikobetrag als Nenner.
+
+**Warum nicht ueber die Preisdistanz:** Sobald der Teilgewinn genommen und der Stop auf
+Einstand gezogen ist, entspricht die Preisdistanz nicht mehr dem tatsaechlich getragenen
+Risiko. Und warum nicht in Euro: Ein Ergebnis in Kontowaehrung ist zwischen Kontogroessen
+und zwischen Trades mit unterschiedlicher Stop-Weite nicht vergleichbar — es misst die
+Kontogroesse mit, nicht die Entscheidung.
+
+**Sonderfall ehrlich behandelt:** Bei einer nach Neustart uebernommenen Position ist der
+urspruengliche Risikobetrag rekonstruiert, also geschaetzt. Der Wert wird trotzdem
+geschrieben — ein uebernommener Trade, der 3R verliert, soll als Disziplinbefund sichtbar
+sein und nicht als „unbekannt" verschwinden.
+
+### E43: Die Auswertung sagt selbst, was sie nicht belegt
+
+**Entscheidung:** `python -m metals journal` gibt zu jeder Kennzahl ein 95%-Intervall aus
+(Wilson fuer die Trefferquote, weil das Lehrbuchintervall bei kleinem n Werte unter 0 und
+ueber 1 produziert) und nennt ausdruecklich, wie viele Trades noch fehlen, bis ein Vorteil
+dieser Groesse von null unterscheidbar waere.
+
+**Mit eingebauter Warnung vor der eigenen Zahl:** Diese Schaetzung rechnet mit dem bisher
+*gemessenen* Vorteil, und der ist bei kleiner Stichprobe nach oben verzerrt — wer Glueck
+hatte, bekommt eine zu kleine Zahl. Deshalb wird zusaetzlich der Bedarf fuer einen
+realistischen Vorteil von 0,1 R genannt: **385 Trades**, bei 4 Trades pro Tag rund 96
+Handelstage.
+
+### E44: Ein Installationsskript fuer den Container
+
+**Entscheidung:** `mt5/install-ea.sh` erledigt die Container-Schritte in einem Aufruf und
+gibt dabei `CUSTOM_USER`/`PASSWORD` aus dem Container aus.
+
+**Anlass:** Der Anmeldedialog des Templates hat den Nutzer real blockiert — HTTP-Basisauth
+zeigt bei falschen Daten denselben leeren Dialog, ohne Fehlermeldung. Die Zugangsdaten
+stehen in der Container-Umgebung; das Skript liest sie dort und zeigt sie an. Es enthaelt
+selbst kein Passwort.
+
+**Sicherheitsnetz:** Die Datei wird unter einem Zwischennamen geladen und erst nach
+bestandener Zeilenpruefung an ihren Platz verschoben. Eine halbe `.mq5` im Experts-Ordner
+erzeugt Compilerfehler, die wie Fehler im EA aussehen. Ein Test bindet die erwartete
+Zeilenzahl an die echte Datei.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O26 | Journal nach 2–4 Wochen Demo auswerten — zuerst die Disziplin-Sektion, nicht die Bilanz | offen |
+| O27 | Pruefen, ob der EA im Container tatsaechlich nach `MQL5/Files` schreiben darf (Wine-Rechte) | offen (zeigt sich beim ersten Signal) |

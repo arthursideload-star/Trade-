@@ -390,6 +390,38 @@ def cmd_minimum(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_journal(args: argparse.Namespace) -> int:
+    """What has the EA actually done, and what does it prove?
+
+    The second half of that question is the reason this command exists. A
+    list of trades invites the reader to draw a conclusion from it; the
+    renderer says out loud how much of a conclusion the sample supports,
+    which is usually none.
+    """
+    from .journal import JournalError, load, render, summarise
+
+    try:
+        entries = load(args.file)
+    except JournalError as exc:
+        print(f"cannot read the journal: {exc}", file=sys.stderr)
+        return 1
+
+    summary = summarise(entries)
+    print(render(summary))
+
+    if args.csv:
+        # For pasting into a spreadsheet, one row per closed trade.
+        print()
+        print("timestamp,setup,session,direction,exit,r_multiple")
+        for t in summary.trades:
+            print(f"{t.timestamp:%Y-%m-%d %H:%M},{t.setup},{t.session},"
+                  f"{t.direction},{t.exit_reason},{t.r_multiple:+.3f}")
+
+    # A non-zero exit when the record shows a discipline failure, so this can
+    # be wired into a scheduled check that only speaks up when it matters.
+    return 1 if summary.discipline_breaches else 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -470,6 +502,17 @@ def build_parser() -> argparse.ArgumentParser:
     c = sub.add_parser("check", help="what the assistant can currently see")
     c.add_argument("--no-network", action="store_true")
     c.set_defaults(func=cmd_check)
+
+    j = sub.add_parser("journal",
+                       help="what the EA did, and what it proves (usually "
+                            "less than it looks)")
+    j.add_argument("--file", default="GoldScalpAssistant.csv",
+                   help="the CSV the EA writes into MQL5/Files "
+                        "(MetaTrader: File -> Open Data Folder)")
+    j.add_argument("--csv", action="store_true",
+                   help="also print one row per closed trade, for a "
+                        "spreadsheet")
+    j.set_defaults(func=cmd_journal)
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)

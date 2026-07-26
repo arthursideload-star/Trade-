@@ -3,8 +3,9 @@
 Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/USD)**.
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
-**Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest und MetaTrader-EA implementiert
-und getestet (292 Tests). Nächster Schritt: Backtest auf echter Historie, dann Journal-Modul.
+**Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
+Journal-Modul implementiert und getestet (363 Tests). Nächster Schritt: Backtest auf echter
+Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
 > Erwartungswert**. Siehe [docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md).
@@ -37,6 +38,12 @@ Windows und Linux.
 So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
 darf. Der Auto-Modus ist eine bewusste Umschaltung, kein Standard.
 
+**Er führt Buch.** Jedes erkannte Setup, jedes abgelehnte samt Grund und jeder geschlossene
+Trade samt Ergebnis in R landen in einer CSV, die `python -m metals journal` auswertet — mit
+Unsicherheitsbändern und einer klaren Ansage, wann die Stichprobe noch nichts belegt.
+**Selbst nachjustieren tut er sich nicht**, und zwar mit Absicht:
+[docs/LERNEN.md](./docs/LERNEN.md) rechnet vor, warum das bei diesen Datenmengen schadet.
+
 ## Auf der Kommandozeile
 
 ```bash
@@ -47,6 +54,7 @@ python -m metals setups scalp                   # Der Scalping-Katalog S1–S6
 python -m metals ratio                          # Gold/Silber-Ratio und Regime
 python -m metals rules                          # Risikoregeln und Kontraktspezifikationen
 python -m metals minimum XAUUSD --equity 55     # Reicht mein Konto für dieses Metall?
+python -m metals journal                        # Was hat der EA getan — und was belegt das?
 python -m metals backtest --source live         # Backtest, letzte ~60 Tage
 python -m metals backtest --source file \
     --file XAU_5m_data.csv --tz broker_gmt3     # Backtest auf echter Historie
@@ -76,11 +84,12 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
 | **[mt5/README.md](./mt5/README.md)** | Expert Advisor für MetaTrader 5: Installation, Einstellungen, Strategietester |
 | **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)** | Warum ein EA auf dem Handy nicht geht, und wie es vom iPad aus trotzdem funktioniert |
-| **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS in 30–60 Minuten einrichten (Windows und Linux), EA installieren, erster Demo-Abend |
+| **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux), EA installieren, erster Demo-Abend |
+| **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |
-| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E40 mit Begründungen |
+| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E44 mit Begründungen |
 | **[PLAN.md](./PLAN.md)** | Architektur und Roadmap |
 | **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 
@@ -131,7 +140,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-292 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+363 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die

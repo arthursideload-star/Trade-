@@ -5,6 +5,37 @@ weiter wenn dein iPad aus ist.
 
 ---
 
+## Der kürzeste Weg — wenn du keine Lust auf Lesen hast
+
+Bei MT5 ist alles schon installiert. Es fehlt nur der EA. Drei Schritte:
+
+**1.** Docker Manager → beim Projekt `metatrader-5-…` → **Zugriff → Terminal ↗**
+(der untere Terminal-Knopf, nicht der oben auf der Seite). Diese zwei Zeilen einfügen:
+
+```sh
+curl -sSLO https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/trading-bot-plan-4uj86r/mt5/install-ea.sh
+sh install-ea.sh
+```
+
+Das Skript lädt den EA, prüft ihn, kompiliert ihn wenn möglich — **und zeigt dir ganz oben
+dein Login für Schritt 2 an.**
+
+**2.** Zurück im Docker Manager → **Zugriff → Öffnen ↗**. Beim Anmeldedialog die zwei Werte
+eintippen, die das Skript ausgegeben hat. Kommt der Dialog leer zurück, waren sie falsch —
+eine andere Fehlermeldung gibt es nicht ([Details in A2](#a2-der-anmeldedialog--und-warum-er-immer-wiederkommt)).
+
+**3.** In MT5: Demokonto verbinden (**1 000 USD**, nicht 55 — sonst lehnt der EA jeden Trade
+ab), **XAUUSD** auf **M5** öffnen, `GoldScalpAssistant` auf den Chart ziehen, *Algo-Trading
+erlauben* anhaken, den Algo-Trading-Knopf grün schalten.
+
+Fertig ist es, wenn oben links im Chart **`[ADVISOR]`** steht. Ab dann läuft er, meldet
+Setups und führt Buch — auch wenn dein iPad aus ist.
+
+Alles andere unten ist die ausführliche Fassung für den Fall, dass einer der drei Schritte
+klemmt.
+
+---
+
 ## Erst mal: die vier Wörter, die dauernd vorkommen
 
 Ohne die versteht man die Hostinger-Oberfläche nicht. Sie sind harmloser als sie klingen.
@@ -181,24 +212,64 @@ Verbindung". Und oben in der Kontoübersicht muss **Demo** stehen.
 
 ### A4. Den EA in den Container holen
 
-Jetzt die einzige Stelle, an der du tippen statt tippen-auf-Knöpfe machst. Ist halb so wild —
-ich erkläre jede Zeile.
-
 > **Das geht auch, wenn A2 noch klemmt.** Das Terminal läuft über das Hostinger-Panel und
 > fragt nicht nach dem MT5-Passwort. Wenn du im Anmeldedialog feststeckst, mach hier weiter
 > und hol A2 danach nach — dann ist die Datei schon da, wenn du reinkommst.
+> **Mehr noch: das Skript unten zeigt dir die Zugangsdaten aus A2 an.**
 
 **Ein „Terminal" ist ein schwarzes Fenster mit einer Eingabezeile.** Du schreibst einen
-Befehl, drückst **Enter**, und der Computer antwortet mit Text. Immer nur **eine Zeile auf
-einmal**, jeweils Enter. Kein Doppelklick, keine Maus.
+Befehl, drückst **Enter**, und der Computer antwortet mit Text. Kein Doppelklick, keine Maus.
 
-**Schritt 1: das richtige Terminal öffnen.**
-Docker Manager → beim Projekt `metatrader-5-iore` → **Zugriff → Terminal ↗**.
+**Das richtige Terminal öffnen:** Docker Manager → beim Projekt `metatrader-5-iore` →
+**Zugriff → Terminal ↗**. Nicht den Terminal-Knopf ganz oben auf der Seite — der führt auf
+den VPS statt in den Container.
 
-Nicht den Terminal-Knopf ganz oben auf der Seite — der führt auf den VPS und dort liegt die
-Datei falsch.
+---
 
-**Schritt 2: prüfen, dass du drin bist.** Erste Zeile eintippen und Enter:
+#### Der kurze Weg — zwei Zeilen
+
+Diese beiden Zeilen einfügen, Enter:
+
+```sh
+curl -sSLO https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/trading-bot-plan-4uj86r/mt5/install-ea.sh
+sh install-ea.sh
+```
+
+Das Skript macht alles, was ohne Fenster geht, und sagt bei jedem Schritt, was es tut:
+
+1. **Zeigt dir `CUSTOM_USER` und `PASSWORD`** — die Zugangsdaten aus A2, im Klartext.
+2. Prüft, ob du im Container bist (und sagt es dir, wenn nicht).
+3. Sucht den `MQL5/Experts`-Ordner.
+4. Lädt den EA und **zählt nach, ob er vollständig ist** — bei falscher Zeilenzahl wird
+   nichts installiert, statt eine halbe Datei liegen zu lassen.
+5. Versucht zu kompilieren. Klappt das, ist A5 schon erledigt.
+
+Am Ende steht, was noch von Hand zu tun ist. Das Skript handelt nichts, ändert kein
+Risikolimit und rührt kein Konto an — du kannst es beliebig oft laufen lassen.
+
+**Erwartete Ausgabe an der wichtigsten Stelle:**
+
+```
+3. Downloading the expert advisor
+------------------------------------------------------------
+  OK    1622 lines, complete
+  OK    installed at /config/.wine/drive_c/.../MQL5/Experts/GoldScalpAssistant.mq5
+```
+
+Steht dort `FAIL`, lies die Zeile darunter — dort steht, was zu tun ist. Wenn du nicht
+weiterkommst: abfotografieren und schicken.
+
+Wenn im Abschnitt `4. Compiling` ein **`OK compiled`** steht, überspringst du A5 und machst
+bei **A6** weiter.
+
+---
+
+#### Der lange Weg — von Hand, Zeile für Zeile
+
+Nur nötig, wenn das Skript nicht läuft (kein `curl`, kein Netz im Container). Immer nur
+**eine Zeile auf einmal**, jeweils Enter.
+
+**Schritt 1: prüfen, dass du drin bist.** Erste Zeile eintippen und Enter:
 
 ```bash
 ls -d /config/.wine && echo "RICHTIG-IM-CONTAINER"
@@ -208,7 +279,7 @@ ls -d /config/.wine && echo "RICHTIG-IM-CONTAINER"
 - Antwortet er `No such file or directory` → du bist im VPS-Terminal, nicht im Container.
   Tab schließen, den **unteren** Terminal-Knopf nehmen.
 
-**Schritt 3: den Zielordner finden.**
+**Schritt 2: den Zielordner finden.**
 
 ```bash
 find / -type d -path "*MQL5/Experts" 2>/dev/null
@@ -225,7 +296,7 @@ Dauert ein paar Sekunden. Heraus kommt eine Zeile, meistens genau diese:
 - **Gar keine Zeile?** In MT5 auf **Datei → Datenverzeichnis öffnen** — der Pfad steht dann
   oben im Fenster. Den nimmst du dann unten statt meinem.
 
-**Schritt 4: in den Ordner wechseln.** Der Pfad hat Leerzeichen, deshalb die
+**Schritt 3: in den Ordner wechseln.** Der Pfad hat Leerzeichen, deshalb die
 Anführungszeichen — die gehören dazu:
 
 ```bash
@@ -235,7 +306,7 @@ cd "/config/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
 Wenn nichts passiert und einfach die nächste Eingabezeile kommt: **genau richtig.** Ein
 Terminal meldet Erfolg durch Schweigen.
 
-**Schritt 5: die Datei herunterladen.** Das ist ein Befehl über zwei Zeilen — der
+**Schritt 4: die Datei herunterladen.** Das ist ein Befehl über zwei Zeilen — der
 Rückstrich `\` am Ende sagt „geht in der nächsten Zeile weiter". Beide Zeilen tippen bzw.
 einfügen, dann Enter:
 
@@ -247,7 +318,7 @@ wget -O GoldScalpAssistant.mq5 \
 `wget` holt eine Datei aus dem Internet. Die lange Adresse zeigt auf unser GitHub. Du siehst
 einen Fortschrittsbalken und am Ende `saved`.
 
-**Schritt 6: nachzählen.** Der wichtigste Befehl von allen:
+**Schritt 5: nachzählen.** Der wichtigste Befehl von allen:
 
 ```bash
 wc -l GoldScalpAssistant.mq5
@@ -255,11 +326,11 @@ wc -l GoldScalpAssistant.mq5
 
 `wc -l` zählt die Zeilen der Datei.
 
-**Es muss `1377 GoldScalpAssistant.mq5` dastehen.**
+**Es muss `1622 GoldScalpAssistant.mq5` dastehen.**
 
-- Steht dort `1377` → die Datei ist vollständig angekommen. Weiter bei A5.
+- Steht dort `1622` → die Datei ist vollständig angekommen. Weiter bei A5.
 - Steht dort eine **andere Zahl** oder eine Fehlermeldung → nicht weitermachen.
-  Datei löschen (`rm GoldScalpAssistant.mq5`) und Schritt 5 wiederholen. Bleibt es dabei:
+  Datei löschen (`rm GoldScalpAssistant.mq5`) und Schritt 4 wiederholen. Bleibt es dabei:
   Ausgabe abfotografieren und mir schicken.
 
 Diese Zahl ist bewusst als Test eingebaut — ein Test im Projekt prüft, dass sie zur echten
@@ -326,11 +397,15 @@ Alles erledigt, wenn du jedes Häkchen setzen kannst:
 - [ ] MT5 öffnet sich über *Zugriff → Öffnen* im Browser
 - [ ] Demokonto verbunden, unten rechts steht eine Verbindung, oben steht **Demo**
 - [ ] Kontostand rund **1.000 USD**
-- [ ] `wc -l` hat **1377** ausgegeben
+- [ ] `wc -l` hat **1622** ausgegeben
 - [ ] MetaEditor meldet **0 errors, 0 warnings**
 - [ ] XAUUSD-Chart auf **M5**, EA drauf, 🙂 oben rechts
 - [ ] Knopf **Algo-Trading** ist grün
 - [ ] Panel oben links zeigt **`[ADVISOR]`**
+- [ ] Nach dem ersten Setup: `GoldScalpAssistant.csv` liegt in `MQL5/Files`
+
+Der letzte Punkt braucht Geduld — die Datei entsteht erst, wenn der EA das erste Setup
+sieht. In einer ruhigen Stunde kann das dauern; das ist kein Fehler.
 
 **Weiter bei Schritt E** — was du am ersten Abend damit machst.
 ---
@@ -421,7 +496,7 @@ https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/t
 Rechtsklick → **Seite speichern unter**. Wohin? In MT5: **Datei → Datenverzeichnis öffnen** →
 Ordner `MQL5/Experts`.
 
-Es ist **eine einzige Datei**, sonst nichts. 1377 Zeilen.
+Es ist **eine einzige Datei**, sonst nichts. 1622 Zeilen.
 
 ### D2. Kompilieren
 
@@ -487,6 +562,37 @@ In MT5 unten das Fenster **Werkzeugkasten** (Ansicht → Werkzeugkasten):
 
 Wenn du am nächsten Tag wissen willst, was war: Reiter **Experten**, hochscrollen.
 
+### Das Journal — die Datei, die der EA für dich führt
+
+Hochscrollen ist auf Dauer nichts. Deshalb schreibt der EA **automatisch mit**, ab dem ersten
+Setup, auch im Advisor-Modus. Die Datei heißt `GoldScalpAssistant.csv` und liegt in
+`MQL5/Files` (in MT5: **Datei → Datenverzeichnis öffnen**, dann Ordner `Files`).
+
+Darin steht jede Zeile, die zählt:
+
+- **Jedes erkannte Setup** — mit Einstieg, Stop, beiden Zielen, ATR, Spread, Session, Größe.
+- **Jedes abgelehnte Setup mit dem Grund.** Das ist die interessantere Hälfte: Sie zeigt,
+  welcher Filter arbeitet. Steht dort 40-mal *„position size below the broker minimum"*, ist
+  das Konto zu klein — und keine Einstellung der Welt behebt das.
+- **Jeder geschlossene Trade** — mit dem Ergebnis in **R** und dem Ausstiegsgrund.
+
+Auswerten kannst du sie im Chat mit:
+
+```
+python -m metals journal --file GoldScalpAssistant.csv
+```
+
+Die Ausgabe sagt nicht nur, was passiert ist, sondern auch **was das belegt** — mit
+Unsicherheitsbändern und einer klaren Ansage, wenn die Stichprobe zu klein ist. Genau darauf
+kommt es an: Acht Gewinner am Stück fühlen sich nach Beweis an und sind keiner.
+
+> **Der Bot stellt sich davon nicht selbst um.** Das ist Absicht, keine fehlende Funktion.
+> Warum das bei diesen Datenmengen schaden würde, steht in
+> **[../docs/LERNEN.md](../docs/LERNEN.md)** — mit der Rechnung dazu.
+
+**Datei sichern, bevor der VPS abläuft** (siehe unten) — sie ist das Einzige, was du dir mit
+Zeit erarbeitest.
+
 ---
 
 ## Zu deinem Zeitplan — die Zahl, die entscheidet
@@ -550,8 +656,14 @@ Läuft die Laufzeit ab, ist der Container weg — inklusive kompiliertem EA und 
 du behalten willst, vorher sichern:
 
 - Die `.mq5` liegt ohnehin auf GitHub, die ist sicher.
-- **Journal und Kontoauszug** vor dem Ablauf exportieren: MT5 → **Kontohistorie →
-  Rechtsklick → Bericht → XLSX**, Datei über den Browser herunterladen.
+- **`GoldScalpAssistant.csv` aus `MQL5/Files`** — das ist das Wichtigste. Der EA ist in zwei
+  Minuten wieder installiert; die Aufzeichnung deiner Trades ist es nicht. Im
+  Container-Terminal ausgeben und den Text kopieren:
+  ```sh
+  cat "$(find / -name GoldScalpAssistant.csv 2>/dev/null | head -n 1)"
+  ```
+- **Kontoauszug** exportieren: MT5 → **Kontohistorie → Rechtsklick → Bericht → XLSX**,
+  Datei über den Browser herunterladen.
 
 ---
 
@@ -566,7 +678,7 @@ du behalten willst, vorher sichern:
 | Terminal antwortet `No such file or directory` bei `ls -d /config/.wine` | Du bist im **VPS-Terminal** statt im Container. Tab zu, den Terminal-Knopf **bei „Zugriff"** nehmen, nicht den oben auf der Seite |
 | `wget: command not found` | Seltener Fall, anderes Image. Stattdessen `curl -L -o GoldScalpAssistant.mq5 <dieselbe Adresse>` |
 | `wget` schreibt „Permission denied" | Falscher Ordner oder falsches Terminal. `pwd` eingeben — muss auf `…/MQL5/Experts` enden |
-| `wc -l` zeigt nicht 1377 | Datei unvollständig. `rm GoldScalpAssistant.mq5`, dann Schritt 5 wiederholen |
+| `wc -l` zeigt nicht 1622 | Datei unvollständig. `rm GoldScalpAssistant.mq5`, dann Schritt 4 wiederholen |
 | Datei ist da, MetaEditor zeigt sie nicht | Falscher `Experts`-Ordner erwischt. In MT5 **Datei → Datenverzeichnis öffnen**, den Pfad von dort nehmen |
 | F4 öffnet nichts | Über den Browser fängt Safari die Taste ab — den **IDE-Knopf** in der Symbolleiste nutzen |
 | Kein XAUUSD in der Marktübersicht | Rechtsklick → *Alle anzeigen*. Heißt bei manchen Brokern `GOLD`, `XAUUSD.r` oder `XAUUSDm` |
