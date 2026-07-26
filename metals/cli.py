@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .risk import RULES, AccountState, size_position
 from .sessions import classify
@@ -183,6 +183,118 @@ def _probe(client: HttpClient) -> None:
             print(f"  FAIL  {name}: {str(exc)[:90]}")
 
 
+def cmd_backtest(args: argparse.Namespace) -> int:
+    from .backtest import BacktestConfig, report, run
+    from . import simulate
+
+    cfg = BacktestConfig(
+        symbol=args.symbol,
+        spread_usd_oz=args.spread,
+        slippage_fraction=args.slippage,
+        style=args.style,
+        min_confidence=args.min_confidence,
+        max_trades_per_day=args.max_trades,
+    )
+
+    if args.source == "live":
+        from .sources.prices import fetch_candles
+        client = HttpClient()
+        try:
+            m5 = fetch_candles(args.symbol, "5m", args.bars, client).series
+        except Exception as exc:  # noqa: BLE001
+            print(f"could not fetch live candles: {exc}", file=sys.stderr)
+            print("\nFall back to the simulated market with --source sim, but "
+                  "read the health warning in metals/simulate.py first: "
+                  "simulated results test the machinery, not the strategy.",
+                  file=sys.stderr)
+            return 1
+        source_label = f"live ({m5.source}, {len(m5)} bars)"
+    else:
+        m5 = simulate.generate(bars=args.bars, timeframe="5m", seed=args.seed)
+        source_label = f"SIMULATED (seed {args.seed}) -- NOT real gold"
+        stats = simulate.describe(m5)
+        print("Simulated market properties:")
+        print(f"  bars {stats['bars']:.0f}, price {stats['start_price']:.0f} -> "
+              f"{stats['end_price']:.0f} ({stats['total_move_pct']:+.1f}%)")
+        print(f"  mean ATR(14) {stats['mean_atr_usd']:.2f} USD/oz = "
+              f"{stats['mean_atr_pct']:.3f}% of price")
+        print(f"  excess kurtosis {stats['excess_kurtosis']:.1f} (fat tails), "
+              f"vol clustering {stats['vol_clustering']:.2f}")
+        print()
+
+    result = run(m5, cfg, data_source=source_label)
+    print(report(result))
+
+    if args.source != "live":
+        print("\n" + "!" * 72)
+        print("These numbers come from a SIMULATED market. They show whether")
+        print("the machinery works -- signals fire, R multiples and costs are")
+        print("computed correctly, exits behave. They are NOT a measured hit")
+        print("rate for real gold and must not be used to size a position.")
+        print("Run with --source live for real candles.")
+        print("!" * 72)
+    return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """Should I keep trading right now?"""
+    from .exits import DayState, session_advice
+
+    account = AccountState(
+        equity=args.equity,
+        realised_pnl_today=args.pnl_today,
+        open_positions=args.open_positions,
+    )
+    day = DayState(
+        trades_taken=args.trades_today,
+        consecutive_losses=args.consecutive_losses,
+        last_trade_was_loss=args.last_was_loss,
+        last_trade_closed_at=(
+            datetime.now(timezone.utc) - timedelta(minutes=args.minutes_since_last)
+            if args.minutes_since_last is not None else None
+        ),
+    )
+    advice = session_advice(account, day)
+    print(f"{advice.headline()}")
+    print("-" * 68)
+    for r in advice.reasons:
+        print(f"  {r}")
+    if advice.minutes_of_good_session_left is not None:
+        print(f"\n  Gutes Fenster noch etwa "
+              f"{advice.minutes_of_good_session_left} Minuten.")
+    return 1 if advice.should_stop else 0
+
+
+def cmd_setups(args: argparse.Namespace) -> int:
+    from .scalping import CATALOGUE as SCALP
+    from .setups import CATALOGUE as SWING
+
+    if args.kind in ("scalp", "all"):
+        print("SCALPING SETUPS (M5 with M1 confirmation)")
+        print("=" * 72)
+        for key, s in SCALP.items():
+            print(f"\n  {key} -- {s.name}   (base confidence {s.base_confidence:.2f})")
+            print(f"     idea:    {s.idea}")
+            print(f"     phases:  {s.phases}")
+            print(f"     entry:   {s.entry_rule}")
+            print(f"     stop:    {s.stop_rule}")
+            print(f"     exit:    {s.exit_rule}")
+            print(f"     FAILS:   {s.failure_mode}")
+            print(f"     window:  {s.best_window}")
+
+    if args.kind in ("swing", "all"):
+        print("\n\nSWING / INTRADAY SETUPS (H4 context, H1 setup, M15 trigger)")
+        print("=" * 72)
+        for key, s in SWING.items():
+            print(f"\n  {key} -- {s.name}   (base confidence {s.base_confidence:.2f})")
+            print(f"     idea:    {s.idea}")
+            print(f"     entry:   {s.entry_rule}")
+            print(f"     stop:    {s.stop_rule}")
+            print(f"     target:  {s.target_rule}")
+            print(f"     FAILS:   {s.failure_mode}")
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -266,6 +378,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)
+
+    b = sub.add_parser("backtest", help="run the scalping setups over history")
+    b.add_argument("symbol", nargs="?", default="XAUUSD")
+    b.add_argument("--source", choices=("sim", "live"), default="sim",
+                   help="'live' fetches real candles; 'sim' uses the synthetic "
+                        "market (machinery test only -- see simulate.py)")
+    b.add_argument("--bars", type=int, default=5000)
+    b.add_argument("--seed", type=int, default=42)
+    b.add_argument("--spread", type=float, default=0.20,
+                   help="spread in USD per ounce")
+    b.add_argument("--slippage", type=float, default=0.5,
+                   help="extra adverse fill as a fraction of the spread")
+    b.add_argument("--style", choices=("scalp", "intraday", "swing"),
+                   default="scalp")
+    b.add_argument("--min-confidence", type=float, default=0.50)
+    b.add_argument("--max-trades", type=int, default=4)
+    b.set_defaults(func=cmd_backtest)
+
+    st = sub.add_parser("stop", help="should I keep trading right now?")
+    st.add_argument("--equity", type=float, default=10_000.0)
+    st.add_argument("--pnl-today", type=float, default=0.0)
+    st.add_argument("--trades-today", type=int, default=0)
+    st.add_argument("--consecutive-losses", type=int, default=0)
+    st.add_argument("--last-was-loss", action="store_true")
+    st.add_argument("--minutes-since-last", type=int, default=None)
+    st.add_argument("--open-positions", type=int, default=0)
+    st.set_defaults(func=cmd_stop)
+
+    se = sub.add_parser("setups", help="print the setup catalogue")
+    se.add_argument("kind", nargs="?", choices=("scalp", "swing", "all"),
+                    default="all")
+    se.set_defaults(func=cmd_setups)
 
     z = sub.add_parser("size", help="size a trade you already have levels for")
     z.add_argument("symbol")

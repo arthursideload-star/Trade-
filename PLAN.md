@@ -1,7 +1,19 @@
 # Entwicklungsplan: Trading-Projekt
 
-Status: Phase A — Trading-Assistent (Web-App)
-Letzte Aktualisierung: 2026-07-25
+Status: Phase A — Gold- und Silber-Assistent, Analyse-Engine implementiert
+Letzte Aktualisierung: 2026-07-26
+
+> **Aktualisierung 2026-07-26:** Der Marktscope ist auf **Gold (XAU/USD) und Silber
+> (XAG/USD)** verengt (Entscheidung E18), und ein eigener **Scalping-Modus** ist dazugekommen
+> (E24). Die Zwei-Phasen-Strategie unten gilt unveraendert; nur die gehandelten Instrumente
+> haben sich geaendert. Der aktuelle Stand steht in
+> [README.md](./README.md), die Fachgrundlagen in
+> [docs/GOLD-SILBER.md](./docs/GOLD-SILBER.md) und
+> [docs/GOLD-SCALPING.md](./docs/GOLD-SCALPING.md).
+>
+> Umgesetzt: Datenanbindung, Rechner, Setup-Erkennung (G1-G12 Swing, S1-S6 Scalping),
+> Ausstiegsmanagement, Risikoregeln, Backtest-Engine, `/trade`-Command.
+> Offen: Journal-Modul, Backtest auf echten historischen Daten.
 
 ---
 

@@ -58,9 +58,14 @@ def build_fetcher(*, quiet_news: bool = True, macro: bool = True,
     fetcher.fail("api.stlouisfed.org", "no key")
 
     if news_reachable:
-        feed = RSS_SAMPLE
+        # The veto compares headline age against wall-clock now, so the
+        # fixture timestamps have to be relative. A fixed date made this test
+        # pass or fail depending on the hour it was run at.
+        fresh = (datetime.now(UTC) - timedelta(minutes=5)).strftime(
+            "%a, %d %b %Y %H:%M:%S +0000")
+        feed = RSS_SAMPLE.replace("Sun, 26 Jul 2026 12:00:00 +0000", fresh)
         if not quiet_news:
-            feed = RSS_SAMPLE.replace(
+            feed = feed.replace(
                 "Gold miners report higher output in Q2",
                 "FOMC announces emergency rate decision",
             )

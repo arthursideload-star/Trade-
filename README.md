@@ -6,13 +6,26 @@ Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 **Aktueller Stand:** Analyse-Engine implementiert und getestet (191 Tests). Wissensbasis und
 Datenquellen-Anbindung stehen. Nächster Schritt: Journal-Modul.
 
-## Schnellstart
+## Im Chat
+
+```
+/trade
+```
+
+Claude analysiert Gold, sagt **hoch / runter / abwarten**, nennt Einstieg, Stop, zwei Ziele
+und Positionsgröße — und sagt ausdrücklich, **wann du aufhören sollst**. Definiert in
+[.claude/commands/trade.md](./.claude/commands/trade.md).
+
+## Auf der Kommandozeile
 
 ```bash
-python -m metals check                          # Was ist erreichbar? Welche Session?
+python -m metals stop --equity 10000            # Darf ich gerade handeln?
 python -m metals analyse XAUUSD --equity 10000  # Vollständige Top-Down-Analyse
+python -m metals check                          # Was ist erreichbar? Welche Session?
+python -m metals setups scalp                   # Der Scalping-Katalog S1–S6
 python -m metals ratio                          # Gold/Silber-Ratio und Regime
 python -m metals rules                          # Risikoregeln und Kontraktspezifikationen
+python -m metals backtest --source live         # Backtest auf echten Kerzen
 ```
 
 Keine Installation nötig — reine Standardbibliothek, Python 3.11+.
@@ -31,6 +44,8 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | Dokument | Inhalt |
 |---|---|
 | **[docs/GOLD-SILBER.md](./docs/GOLD-SILBER.md)** | Wissensbasis Edelmetalle: Treiber, Sessions, Setups G1–G12, Risiko, typische Fehler |
+| **[docs/GOLD-SCALPING.md](./docs/GOLD-SCALPING.md)** | Scalping: Setups S1–S6, Ausstiege, wann aufhören, Backtest-Methodik |
+| **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |

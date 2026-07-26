@@ -459,3 +459,104 @@ kommentarlos vorzuschlagen oder ihn zu verschweigen.
 | O15 | Setup-Konfidenzen sind kalibrierte Schaetzungen, keine gemessenen Trefferquoten | offen bis 30+ Trades pro Setup im Journal |
 | O16 | Journal-Modul (Erfassung, MAE/MFE, Prozess-Note) | noch nicht implementiert |
 | O17 | Live-Erreichbarkeit aller Endpunkte | in der Build-Session nicht pruefbar (Netzpolicy); im interaktiven Chat mit `python -m metals check` pruefen |
+
+---
+
+## 2026-07-26 (2) — Scalping, Ausstiege und Backtest
+
+### E24: Scalping als eigener Modus auf M5 mit M1-Bestaetigung
+
+**Entscheidung (Nutzer):** Der Bot soll Gold-**Scalping** koennen. Umgesetzt als eigener
+Modus (`metals/scalping.py`) mit den Setups S1-S6, getrennt vom Swing-Katalog G1-G12.
+
+**Warum M5 und nicht M1:** M1 auf Gold ist ueberwiegend Spread und Rauschen. Der Konsens der
+Scalping-Quellen ist, dass M5 die brauchbare Untergrenze ist. M1 dient nur als
+Einstiegsbestaetigung, nachdem ein M5-Setup scharfgeschaltet hat.
+
+### E25: Setups sind Zustandsautomaten, keine Einzelkerzen-Pruefungen
+
+**Entscheidung:** Jedes Scalping-Setup laeuft als Vier-Phasen-Maschine
+SCANNING → ARMED → WINDOW_OPEN → ENTRY, mit einem eigenen INVALIDATED-Zustand.
+
+**Herkunft:** Idee aus `ilahuerta-IA/backtrader-pullback-window-xauusd` (MIT). Uebernommen
+wurde die Struktur, der Code ist neu geschrieben.
+
+**Begruendung:** Eine Einzelkerzen-Pruefung kann nicht ausdruecken "ich habe darauf gewartet,
+und dann hat der Markt etwas getan, das sagt, ich lag falsch". Diese Unterscheidung trennt
+ein Setup von einem Muster.
+
+### E26: Der Spread bekommt ein eigenes Veto (S6)
+
+**Entscheidung:** Kein Scalp, wenn der Spread ueber 10 % der Stop-Distanz liegt.
+
+**Begruendung:** Bei 3 USD/oz Stop und 0,20 Spread startet jeder Trade 6,7 % seines Risikos
+im Minus, mit Slippage eher 10 %. Bei vier Trades taeglich ist das ein permanenter Abfluss.
+Ein enger Stop ist beim Scalping nicht "effizient", sondern teuer.
+
+### E27: Tagesziel nach oben stoppt genauso wie das Verlustlimit
+
+**Entscheidung:** Bei **+2 %** am Tag ist ebenso Schluss wie bei −3 %.
+
+**Begruendung:** Einen guten Tag zurueckzugeben ist die haeufigste Art, eine gute Woche zu
+verlieren. Die meisten Systeme kennen nur das Verlustlimit; das ist die Haelfte des Problems.
+
+Zusaetzlich: Stopp nach **2 Verlusten in Folge** (das Regime passt nicht mehr zu den Setups)
+und nach **4 Trades am Tag** (ab da wird Langeweile gehandelt, nicht Setups).
+
+### E28: Backtest auf simulierten Daten — und warum das ausdruecklich gekennzeichnet ist
+
+**Sachlage:** Die Build-Umgebung hat keinen Netzzugang (Organisations-Policy, 403 auf alle
+externen Hosts). Historische Golddaten konnten in dieser Session nicht geladen werden.
+
+**Entscheidung:** Statt keine Auswertung zu liefern oder eine Zahl zu erfinden, wurde ein
+Marktsimulator gebaut (`metals/simulate.py`), der Golds dokumentierte statistische
+Eigenschaften nachbildet — Volatilitaets-Cluster, fette Raender, Session-Profil,
+Liquiditaets-Sweeps. Jede daraus gewonnene Zahl ist im Code, im Report und in der
+Dokumentation als **simuliert** gekennzeichnet.
+
+**Was diese Zahlen zeigen:** ob die Mechanik stimmt und ob es **strukturelle** Fehler gibt.
+**Was sie nicht zeigen:** eine Erfolgswahrscheinlichkeit auf echtem Gold. Fuer echte Zahlen:
+`python -m metals backtest --source live` im interaktiven Chat.
+
+### E29: Backtest-Konstruktionsregeln, damit die Zahlen nicht luegen
+
+Vier Regeln, alle getestet:
+
+1. **Kein Lookahead** — der Detektor bei Kerze i sieht nur 0..i. Regressionstest: derselbe
+   Backtest ueber ein Praefix muss dieselben Trades erzeugen.
+2. **Stop vor Ziel** — deckt eine Kerze beides ab, gilt der Stop als zuerst getroffen.
+3. **Kosten immer** — Spread bei Ein- und Ausstieg plus Slippage; Brutto und Netto werden
+   getrennt ausgewiesen.
+4. **Konfidenzintervall auf den Erwartungswert** — schliesst es die Null ein, ist keine Kante
+   nachgewiesen, unabhaengig vom Punktschaetzer.
+
+### E30: Zwei durch den Backtest gefundene Fehler
+
+**Fund 1 — Trailing auf der Fuellkerze (Bug, behoben).** Der Trailing-Stop zog schon auf
+derselben Kerze nach, auf der das erste Ziel gefuellt wurde, berechnet aus deren Hoch. Der
+Runner-Stop landete rund 0,4R ueber dem Einstieg und wurde beim naechsten Ruecksetzer
+mitgenommen. **Jeder Runner wurde zu einem Kleingewinn.** Behoben, Regressionstest vorhanden.
+
+**Fund 2 — Die Teilgewinn-Falle (Strategie, nicht Code).** 60 % bei 1R schliessen und den
+Rest per Break-even-Stop absichern ergibt im Gewinnfall +0,60R gegen −1,00R im Verlustfall.
+Erforderliche Trefferquote fuer Break-even: **62,5 %**, vor Kosten. Das ist Arithmetik, kein
+Marktphaenomen — es gilt auf jedem Markt und auf echten Daten genauso. Deshalb wurde ein
+Vergleich mehrerer Ausstiegsstrukturen aufgesetzt (`metals/evaluate.experiment_grid`).
+
+### E31: `/trade` als Slash-Command
+
+**Entscheidung (Nutzer):** `.claude/commands/trade.md` — bei `/trade` beginnt Claude die
+Gold-Analyse und begleitet die Sitzung: Richtung (hoch/runter/abwarten), Einstieg, Stop,
+zwei Ziele, Groesse, und ausdruecklich **wann aufgehoert wird**.
+
+Die harten Grenzen sind im Command verankert: kein Einstieg ohne Stop, keine Zahlen fuer
+einen regelwidrigen Trade, und wenn `metals stop` AUFHOEREN sagt, wird die Sperre erklaert,
+nicht wegdiskutiert.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O18 | Backtest auf echten historischen M5-Daten | **offen — im interaktiven Chat mit `--source live`** |
+| O19 | Setup-Konfidenzen auf echten Daten kalibrieren | offen |
+| O20 | Ausstiegsstruktur final festlegen, nachdem echte Daten vorliegen | offen |

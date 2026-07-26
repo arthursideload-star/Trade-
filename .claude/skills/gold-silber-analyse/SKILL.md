@@ -92,11 +92,31 @@ Der häufigste Fall in der Praxis. Sag konkret, was fehlt und was das bedeutet:
 - **Nur Fallback-Preisfeed** → für eine Sizing-Entscheidung gegen die MT5-Plattform des
   Nutzers gegenprüfen lassen
 
+## Scalping
+
+Für kurze Trades gibt es einen eigenen Modus mit den Setups S1–S6 auf M5:
+
+```bash
+python -m metals setups scalp          # Katalog mit Zustandsautomaten und Fehlermodi
+python -m metals stop --equity <k>     # Darf ich gerade handeln, und wann höre ich auf?
+python -m metals backtest --source live --bars 5000
+```
+
+Für eine begleitete Handelssitzung gibt es den Slash-Command **`/trade`**
+(`.claude/commands/trade.md`) — der ist dem Chat-Ablauf hier vorzuziehen, sobald der Nutzer
+tatsächlich handeln will.
+
+**Die eine Zahl, die beim Scalping zuerst kommt:** Bei 3 USD/oz Stop und 0,20 USD/oz Spread
+startet jeder Trade 6,7 % seines Risikos im Minus. Frag nach dem aktuellen Spread aus MT5 und
+gib ihn mit `--spread` weiter.
+
 ## Nachschlagen
 
 | Frage | Datei |
 |---|---|
 | Warum bewegt sich Gold? | `docs/GOLD-SILBER.md` Teil III |
+| Scalping-Setups, Ausstiege, wann aufhören | `docs/GOLD-SCALPING.md` |
+| Was die Backtests ergeben haben | `docs/BACKTEST-ERGEBNISSE.md` |
 | Was ist anders bei Silber? | `docs/GOLD-SILBER.md` Teil IV |
 | Setup-Details G1–G12 | `docs/GOLD-SILBER.md` Teil XIII, Code `metals/setups.py` |
 | Risikoregeln | `docs/GOLD-SILBER.md` Teil XV, Code `metals/risk.py` |
