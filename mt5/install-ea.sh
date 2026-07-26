@@ -21,10 +21,13 @@ set -u
 BRANCH="claude/trading-bot-plan-4uj86r"
 RAW="https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/${BRANCH}/mt5/Experts/GoldScalpAssistant.mq5"
 
-# Checked against the real file by tests/test_mt5_parity.py, so that a
-# truncated download is caught here rather than by a confusing compiler error
-# forty minutes later.
-EXPECTED_LINES=1649
+# Sanity floor, not an exact count. An exact count would be checked against a
+# copy of the EA fetched moments apart from this script, and GitHub's raw CDN
+# can serve the two from different revisions for a few minutes after a push --
+# which would block the install over a difference that does not matter. What
+# actually needs catching is a truncated download, and that is caught by
+# looking for markers from the start, middle and end of the file.
+MIN_LINES=1400
 
 say()  { printf '%s\n' "$*"; }
 rule() { say "------------------------------------------------------------"; }
@@ -119,15 +122,26 @@ if [ ${RC} -ne 0 ] || [ ! -s "${TMP}" ]; then
     exit 1
 fi
 
-# Download to a temporary name and only move it into place once the line
-# count proves it is complete. A half-written .mq5 left in the Experts folder
-# is worse than none: it compiles to confusing errors that look like bugs.
+# Download to a temporary name and only move it into place once it is shown
+# to be complete. A half-written .mq5 left in the Experts folder is worse than
+# none: it compiles to confusing errors that look like bugs in the EA.
+#
+# Three markers from the beginning, the middle and the very end of the file.
+# A truncated transfer keeps the head and loses the tail, so the last of them
+# is the one that does the real work.
 LINES=$(wc -l < "${TMP}" | tr -d ' ')
-if [ "${LINES}" != "${EXPECTED_LINES}" ]; then
-    bad "got ${LINES} lines, expected ${EXPECTED_LINES} -- the file is incomplete"
+INCOMPLETE=""
+
+[ "${LINES}" -lt "${MIN_LINES}" ] && INCOMPLETE="only ${LINES} lines"
+grep -q "int OnInit()" "${TMP}"       || INCOMPLETE="no OnInit"
+grep -q "void OnTick()" "${TMP}"      || INCOMPLETE="no OnTick"
+grep -q "END OF FILE: GoldScalpAssistant" "${TMP}" || INCOMPLETE="the tail is missing"
+
+if [ -n "${INCOMPLETE}" ]; then
+    bad "the download is incomplete (${INCOMPLETE})"
     rm -f "${TMP}"
-    say "  Nothing was installed. Run this script again; if the number is"
-    say "  still wrong, send me what it says."
+    say "  Nothing was installed, so nothing is broken. Run this script"
+    say "  again. If it keeps saying this, send me what it printed."
     exit 1
 fi
 

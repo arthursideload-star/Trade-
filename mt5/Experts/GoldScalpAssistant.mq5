@@ -1647,3 +1647,5 @@ void DrawDashboard(const datetime utc)
                             : (q == QUALITY_PRIME ? clrLimeGreen : clrSilver));
 }
 //+------------------------------------------------------------------+
+//--- END OF FILE: GoldScalpAssistant --- (the install script greps for this
+//--- line to prove the download was not truncated; keep it last)

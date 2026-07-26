@@ -500,14 +500,44 @@ class TestTheInstallScriptStaysTrue(unittest.TestCase):
         with open(cls.SCRIPT, encoding="utf-8") as fh:
             cls.text = fh.read()
 
-    def test_the_expected_line_count_matches_the_ea(self):
+    def test_every_marker_it_greps_for_exists_in_the_ea(self):
+        """The completeness check is only a check while the markers are real.
+
+        An exact line count was tried first and was wrong: the script and the
+        EA are fetched moments apart, and GitHub's raw CDN can briefly serve
+        them from different revisions, which would block the install over a
+        difference that does not matter. Markers survive that; a truncated
+        transfer still loses the last of them.
+        """
+        with open(EA_PATH, encoding="utf-8") as fh:
+            ea = fh.read()
+        markers = re.findall(r'grep -q "([^"]+)" "\$\{TMP\}"', self.text)
+        self.assertGreaterEqual(len(markers), 3,
+                                "too few completeness markers to catch a "
+                                "truncated download")
+        for marker in markers:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, ea,
+                              f"the script looks for {marker!r}, which is not "
+                              f"in the EA -- every download would be rejected")
+
+    def test_the_end_marker_really_is_at_the_end(self):
+        """It is the marker that catches truncation, which is the failure
+        mode that actually happens. Anything appended after it would let a
+        cut-off file pass."""
+        with open(EA_PATH, encoding="utf-8") as fh:
+            lines = [ln for ln in fh.read().splitlines() if ln.strip()]
+        self.assertIn("END OF FILE: GoldScalpAssistant", "\n".join(lines[-2:]),
+                      "the end marker is no longer at the end of the EA")
+
+    def test_the_line_floor_is_below_the_real_file(self):
         with open(EA_PATH, encoding="utf-8") as fh:
             lines = sum(1 for _ in fh)
-        match = re.search(r"EXPECTED_LINES=(\d+)", self.text)
-        self.assertIsNotNone(match, "EXPECTED_LINES is gone from the script")
-        self.assertEqual(int(match.group(1)), lines,
-                         "the script would reject the very file it just "
-                         "downloaded")
+        match = re.search(r"MIN_LINES=(\d+)", self.text)
+        self.assertIsNotNone(match, "MIN_LINES is gone from the script")
+        self.assertLess(int(match.group(1)), lines,
+                        "the floor is above the real file, so every download "
+                        "would be rejected")
 
     def test_it_downloads_from_the_branch_this_project_develops_on(self):
         self.assertIn("claude/trading-bot-plan-4uj86r", self.text)
@@ -518,9 +548,11 @@ class TestTheInstallScriptStaysTrue(unittest.TestCase):
         look like bugs in the EA. The file must only be moved into place
         after the line count proves it is whole."""
         move = self.text.index('mv "${TMP}" "${TARGET}"')
-        check = self.text.index('if [ "${LINES}" != "${EXPECTED_LINES}" ]')
+        check = self.text.index('if [ -n "${INCOMPLETE}" ]')
         self.assertLess(check, move,
                         "the script installs the file before checking it")
+        # And it must download to a scratch name, not straight onto the target.
+        self.assertIn('TMP="${TARGET}.part"', self.text)
 
     def test_it_never_hard_codes_a_credential(self):
         """The script prints the container's own environment. It must not
