@@ -392,7 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="extra adverse fill as a fraction of the spread")
     b.add_argument("--style", choices=("scalp", "intraday", "swing"),
                    default="scalp")
-    b.add_argument("--min-confidence", type=float, default=0.50)
+    b.add_argument("--min-confidence", type=float, default=0.60)
     b.add_argument("--max-trades", type=int, default=4)
     b.set_defaults(func=cmd_backtest)
 

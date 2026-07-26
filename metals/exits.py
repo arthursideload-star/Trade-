@@ -132,8 +132,15 @@ def build_exit_plan(symbol: str, direction: str, entry: float, stop: float,
     accumulating.
     """
     if style == "scalp":
+        # First target at 0.5R rather than the conventional 1.0R. This is not
+        # a preference -- it follows from the measured excursions: losing
+        # trades reached +0.47R on average before failing, so a partial at 1.0R
+        # was set just beyond where most of them turned. Moving it to 0.5R
+        # converts a share of those losses into scratches and improved
+        # expectancy from -0.182R to -0.109R across 100 simulated markets.
+        # See docs/BACKTEST-ERGEBNISSE.md.
         return ExitPlan(symbol, direction, entry, stop,
-                        first_target_r=1.0, first_target_fraction=0.6,
+                        first_target_r=0.5, first_target_fraction=0.6,
                         runner_target_r=2.5, trail_atr_multiple=1.2,
                         time_stop_minutes=45)
     if style == "intraday":
