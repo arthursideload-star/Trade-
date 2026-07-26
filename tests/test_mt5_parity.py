@@ -31,8 +31,11 @@ UTC = timezone.utc
 MT5_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                        "mt5")
 EA_PATH = os.path.join(MT5_DIR, "Experts", "GoldScalpAssistant.mq5")
-RISK_PATH = os.path.join(MT5_DIR, "Include", "GoldScalp", "Risk.mqh")
-SESSIONS_PATH = os.path.join(MT5_DIR, "Include", "GoldScalp", "Sessions.mqh")
+# The EA is one self-contained file: no include folder to create, which makes
+# it installable by copying a single file. The limits therefore live in the EA
+# itself and are read from there.
+RISK_PATH = EA_PATH
+SESSIONS_PATH = EA_PATH
 
 
 # --- Literal ports of the MQL5 helpers --------------------------------------
@@ -245,9 +248,21 @@ class TestConstantsMatchTheSource(unittest.TestCase):
 
 
 class TestSourceFilesExistAndAreSane(unittest.TestCase):
-    def test_files_are_present(self):
-        for path in (EA_PATH, RISK_PATH, SESSIONS_PATH):
-            self.assertTrue(os.path.exists(path), path)
+    def test_the_ea_is_a_single_self_contained_file(self):
+        """One file, no include folder.
+
+        Installing from a phone-driven remote desktop is fiddly enough
+        without creating directory trees; and one copy of each risk limit is
+        the whole point of the parity checks above.
+        """
+        self.assertTrue(os.path.exists(EA_PATH), EA_PATH)
+        self.assertFalse(os.path.isdir(os.path.join(MT5_DIR, "Include")),
+                         "the Include folder is back -- the limits now exist "
+                         "twice and can drift apart")
+        with open(EA_PATH, encoding="utf-8") as fh:
+            text = fh.read()
+        for forbidden in ("GoldScalp\\Risk.mqh", "GoldScalp\\Sessions.mqh"):
+            self.assertNotIn(forbidden, text)
 
     def test_ea_defaults_to_advisor_mode(self):
         """Shipping an EA that trades on first launch would put an unproven
@@ -272,10 +287,23 @@ class TestSourceFilesExistAndAreSane(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(float(match.group(1)), plan.first_target_r)
 
-    def test_sessions_include_declares_its_dependency(self):
-        with open(SESSIONS_PATH, encoding="utf-8") as fh:
+    def test_state_is_recovered_after_a_reload(self):
+        """Without recovery a restart orphans an open position and resets the
+        daily counters, so the caps can be bypassed by reloading."""
+        with open(EA_PATH, encoding="utf-8") as fh:
             text = fh.read()
-        self.assertIn("GoldScalp\\Risk.mqh", text)
+        self.assertIn("AdoptExistingPosition", text)
+        self.assertIn("RebuildDayState", text)
+        # Both must be called from OnInit, not merely defined.
+        init = text[text.index("int OnInit()"):text.index("void OnDeinit")]
+        self.assertIn("RebuildDayState(utc)", init)
+        self.assertIn("AdoptExistingPosition(utc)", init)
+
+    def test_an_adopted_position_without_a_stop_is_closed(self):
+        """R7 has no exception for a position the EA did not open itself."""
+        with open(EA_PATH, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("adopted a position with NO stop loss", text)
 
     def test_no_martingale_anywhere_in_the_ea(self):
         """R6 as a source-level check: nothing may scale size after a loss."""

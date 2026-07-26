@@ -2,27 +2,30 @@
 //|                                        GoldScalpAssistant.mq5    |
 //|                                             Trade- project        |
 //|                                                                  |
-//| Gold scalping assistant for MetaTrader 5.                        |
+//| Gold scalping assistant for MetaTrader 5. ONE FILE -- copy it to  |
+//| MQL5/Experts and press F7. No include folder to create.           |
 //|                                                                  |
-//| Implements the same setups and the same hard risk rules as the   |
-//| Python package in metals/, so that what is tested there and what  |
-//| runs here are the same system rather than two similar ones.       |
+//| Implements the same setups and the same hard risk limits as the   |
+//| Python package in metals/, so that what is measured there and     |
+//| what runs here are the same system rather than two similar ones.  |
+//| tests/test_mt5_parity.py checks that the limits below still equal |
+//| their Python counterparts.                                        |
 //|                                                                  |
 //| MODES                                                             |
-//|   Advisor  - draws the setup, prints the plan, alerts. Places no  |
-//|              orders. This is the default and the honest starting  |
-//|              point: it lets you compare its judgement against     |
-//|              your own before it is allowed to spend anything.     |
-//|   Auto     - places and manages the trade itself.                 |
+//|   Advisor - draws the setup, sizes it, prints the plan, alerts.   |
+//|             Places no orders. The default, and the honest place   |
+//|             to start: it lets you compare its judgement against   |
+//|             your own before it is allowed to spend anything.      |
+//|   Auto    - places and manages the trade itself.                  |
 //|                                                                  |
 //| READ BEFORE ENABLING AUTO                                         |
 //| The strategy behind this EA has NOT been shown to have a positive |
-//| expectancy. It was evaluated across 100 simulated markets and     |
-//| every configuration lost money, including one with zero spread.   |
-//| That evaluation could not test its core bet (see                  |
+//| expectancy. It was evaluated across 100 simulated markets in 17   |
+//| configurations and every one lost money, including a variant with |
+//| zero spread. That evaluation could not test its core bet (see     |
 //| docs/BACKTEST-ERGEBNISSE.md), so the result is inconclusive, not  |
-//| damning -- but "inconclusive" is not "profitable". Run it in      |
-//| Advisor mode on a demo account and gather your own evidence.      |
+//| damning -- but "inconclusive" is not "profitable". Demo only,     |
+//| until you have your own numbers over at least 30 trades.          |
 //|                                                                  |
 //| What this EA does reliably is enforce discipline: position sizes  |
 //| that are correct, stops that survive normal noise, a daily loss   |
@@ -31,22 +34,41 @@
 //+------------------------------------------------------------------+
 #property copyright "Trade- project"
 #property link      "https://github.com/arthursideload-star/Trade-"
-#property version   "1.00"
+#property version   "1.10"
 #property strict
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
-#include <GoldScalp\Risk.mqh>
-#include <GoldScalp\Sessions.mqh>
 
-//+------------------------------------------------------------------+
-//| Inputs                                                            |
-//|                                                                  |
-//| Note what is NOT an input: risk per trade, the daily loss limit,  |
-//| the minimum reward/risk, the maximum trades per day. Those live   |
-//| in Risk.mqh as compile-time constants. A risk limit you can edit  |
-//| from the settings dialog mid-session is not a limit.               |
-//+------------------------------------------------------------------+
+//====================================================================
+// SECTION 1 -- HARD LIMITS
+//
+// These are #defines, not inputs, on purpose. A risk limit you can
+// change from the settings dialog at 15:30 on a bad day is not a
+// limit. Changing one requires editing this file and recompiling,
+// which leaves a trace and takes a minute of thought.
+//====================================================================
+
+#define RISK_PER_TRADE_PCT      1.0    // R1
+#define DAILY_LOSS_LIMIT_PCT    3.0    // R2
+#define DAILY_WIN_TARGET_PCT    2.0    // stop on a good day too
+#define MIN_REWARD_RISK         2.0    // R3
+#define MAX_TRADES_PER_DAY      4
+#define MAX_CONSECUTIVE_LOSSES  2
+#define COOLDOWN_AFTER_LOSS_MIN 20
+#define MAX_OPEN_POSITIONS      1      // one scalp at a time
+
+// Metal-specific (M1-M6 in the Python package)
+#define MIN_STOP_ATR_MULTIPLE   0.8    // M1: tighter than this is noise
+#define STOP_BUFFER_ATR         0.35   // M2: beyond the level, never on it
+#define MAX_SPREAD_ATR_FRACTION 0.15   // M3
+#define MAX_SPREAD_PCT_OF_STOP  10.0   // S6 spread gate
+#define FRIDAY_FLAT_HOUR_UTC    19     // M5: a stop does not cover a gap
+
+//====================================================================
+// SECTION 2 -- INPUTS
+//====================================================================
+
 enum ENUM_RUN_MODE
 {
    MODE_ADVISOR = 0,   // Advisor - signals only, places no orders
@@ -56,30 +78,31 @@ enum ENUM_RUN_MODE
 input group "=== Operation ==="
 input ENUM_RUN_MODE InpMode            = MODE_ADVISOR; // Run mode
 input long          InpMagic           = 20260726;     // Magic number
-input bool          InpPrimeOnly       = true;         // Trade prime windows only
-input bool          InpAlerts          = true;         // Pop-up alert on a signal
-input bool          InpDashboard       = true;         // Draw the on-chart panel
+input bool          InpPrimeOnly       = true;         // Prime windows only
+input bool          InpAlerts          = true;         // Pop-up on a signal
+input bool          InpDashboard       = true;         // On-chart panel
 
-input group "=== Setups (all are M5) ==="
+input group "=== Setups (all read M5) ==="
 input bool          InpUseS2           = true;  // S2 Pullback Window Break
 input bool          InpUseS4           = true;  // S4 Round Number Fade
 input bool          InpUseS5           = true;  // S5 Momentum Continuation
 
 input group "=== Exits ==="
 input double        InpFirstTargetR    = 0.5;   // First target in R (measured: 0.5 beats 1.0)
-input double        InpFirstTargetPct  = 60.0;  // Percent closed at the first target
+input double        InpFirstTargetPct  = 60.0;  // Percent closed at first target
 input double        InpRunnerTargetR   = 2.5;   // Runner target in R
 input double        InpTrailAtrMult    = 1.2;   // Trail distance in ATR
-input int           InpTimeStopMinutes = 45;    // Close regardless of P/L after N minutes
+input int           InpTimeStopMinutes = 45;    // Close regardless after N minutes
 
 input group "=== Filters ==="
 input int           InpAtrPeriod       = 14;    // ATR period (M5)
-input int           InpNewsBlackoutMin = 30;    // Minutes blocked around :30 data times
+input int           InpNewsBlackoutMin = 30;    // Minutes around the data windows
 input bool          InpBlockNewsWindow = true;  // Apply the news blackout
 
-//+------------------------------------------------------------------+
-//| Globals                                                           |
-//+------------------------------------------------------------------+
+//====================================================================
+// SECTION 3 -- GLOBALS
+//====================================================================
+
 CTrade         trade;
 CPositionInfo  pos;
 
@@ -89,9 +112,18 @@ int      hEma21 = INVALID_HANDLE;
 int      hEma50 = INVALID_HANDLE;
 
 datetime lastBarTime = 0;
+
+struct DayState
+{
+   datetime day_start;
+   double   start_equity;
+   int      trades_taken;
+   int      consecutive_losses;
+   datetime last_close_time;
+   bool     last_was_loss;
+};
 DayState day;
 
-//--- Managed-position state. One scalp at a time, so a single record.
 struct ManagedPosition
 {
    ulong    ticket;
@@ -107,9 +139,7 @@ struct ManagedPosition
 };
 ManagedPosition managed;
 
-string   lastSignalText = "";
-datetime lastSignalTime = 0;
-string   lastNote       = "";
+string lastNote = "";
 
 //--- Log a reason once rather than on every bar.
 void Note(const string text)
@@ -119,7 +149,475 @@ void Note(const string text)
    Print(text);
 }
 
-//+------------------------------------------------------------------+
+//====================================================================
+// SECTION 4 -- TIME AND SESSIONS
+//
+// Two things here are easy to get wrong and both silently break every
+// time-dependent setup:
+//
+// 1. Broker server time is NOT UTC. It is commonly GMT+2/+3 and it
+//    shifts with the broker's own daylight saving. Everything below
+//    works in UTC and converts once, at the edge.
+// 2. London and New York shift on different dates. Hard-coding the
+//    overlap to a UTC range puts every London-open setup an hour out
+//    for several weeks a year.
+//
+// The daylight-saving arithmetic here is checked hourly across four
+// years against the Python implementation in tests/test_mt5_parity.py.
+//====================================================================
+
+int ServerOffsetSeconds()
+{
+   return (int)(TimeTradeServer() - TimeGMT());
+}
+
+datetime ServerToUtc(const datetime server_time)
+{
+   return server_time - ServerOffsetSeconds();
+}
+
+int DaysInMonth(const int year, const int month)
+{
+   const int days[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+   if(month == 2)
+   {
+      const bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+      return leap ? 29 : 28;
+   }
+   return days[month - 1];
+}
+
+datetime LastSundayOfMonth(const int year, const int month)
+{
+   MqlDateTime dt;
+   dt.year = year;
+   dt.mon  = month;
+   dt.day  = DaysInMonth(year, month);
+   dt.hour = 0; dt.min = 0; dt.sec = 0;
+   const datetime last_day = StructToTime(dt);
+   MqlDateTime out;
+   TimeToStruct(last_day, out);
+   return last_day - out.day_of_week * 86400;   // day_of_week: 0 = Sunday
+}
+
+datetime NthSundayOfMonth(const int year, const int month, const int n)
+{
+   MqlDateTime dt;
+   dt.year = year; dt.mon = month; dt.day = 1;
+   dt.hour = 0; dt.min = 0; dt.sec = 0;
+   const datetime first = StructToTime(dt);
+   MqlDateTime out;
+   TimeToStruct(first, out);
+   const int to_sunday = (7 - out.day_of_week) % 7;
+   return first + (to_sunday + (n - 1) * 7) * 86400;
+}
+
+bool EuSummerTime(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   const datetime start = LastSundayOfMonth(dt.year, 3)  + 3600;   // 01:00 UTC
+   const datetime end   = LastSundayOfMonth(dt.year, 10) + 3600;
+   return (utc >= start && utc < end);
+}
+
+bool UsDaylightTime(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   const datetime start = NthSundayOfMonth(dt.year, 3, 2)  + 7 * 3600;
+   const datetime end   = NthSundayOfMonth(dt.year, 11, 1) + 6 * 3600;
+   return (utc >= start && utc < end);
+}
+
+int LondonOffsetHours(const datetime utc)  { return EuSummerTime(utc) ? 1 : 0; }
+int NewYorkOffsetHours(const datetime utc) { return UsDaylightTime(utc) ? -4 : -5; }
+
+int LocalHour(const datetime utc, const int offset_hours)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc + offset_hours * 3600, dt);
+   return dt.hour;
+}
+
+enum SessionQuality
+{
+   QUALITY_PRIME,
+   QUALITY_GOOD,
+   QUALITY_MARGINAL,
+   QUALITY_AVOID
+};
+
+bool MarketOpen(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   const int wd = dt.day_of_week;        // 0 = Sunday
+   if(wd == 6) return false;             // Saturday
+   if(wd == 0) return dt.hour >= 22;     // Sunday evening open
+   if(wd == 5 && dt.hour >= 21) return false;
+   return true;
+}
+
+bool InRollover(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   return (dt.hour >= 21 && dt.hour < 23);
+}
+
+SessionQuality ClassifySession(const datetime utc, string &label)
+{
+   if(!MarketOpen(utc))
+   {
+      label = "market closed";
+      return QUALITY_AVOID;
+   }
+   if(InRollover(utc))
+   {
+      label = "daily rollover: spreads widen severalfold, swap is charged";
+      return QUALITY_AVOID;
+   }
+
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   const int ldn = LocalHour(utc, LondonOffsetHours(utc));
+   const int nyc = LocalHour(utc, NewYorkOffsetHours(utc));
+
+   const bool london_kz = (ldn >= 7  && ldn < 10);
+   const bool ny_kz     = (nyc >= 8  && nyc < 11);
+   const bool overlap   = (ldn >= 13 && ldn < 17) && (nyc >= 8 && nyc < 12);
+
+   if(overlap)
+   {
+      label = "London/New York overlap -- tightest spreads of the day";
+      return QUALITY_PRIME;
+   }
+   if(ny_kz)
+   {
+      label = "New York killzone -- largest ranges, real participation";
+      return QUALITY_PRIME;
+   }
+   if(london_kz)
+   {
+      label = "London killzone -- the session's move usually starts here";
+      return QUALITY_PRIME;
+   }
+   if(dt.day_of_week == 5 && dt.hour >= FRIDAY_FLAT_HOUR_UTC)
+   {
+      label = "Friday late -- weekend gap risk, a stop does not cover a gap";
+      return QUALITY_AVOID;
+   }
+   if(dt.hour < 7)
+   {
+      // Measured across 100 simulated markets as the worst session by a wide
+      // margin. Excluded rather than merely discounted.
+      label = "Asian session -- thin for gold, breakouts fail more often";
+      return QUALITY_MARGINAL;
+   }
+
+   label = "regular session hours";
+   return QUALITY_GOOD;
+}
+
+bool IsTradableSession(const datetime utc, const bool prime_only, string &label)
+{
+   const SessionQuality q = ClassifySession(utc, label);
+   if(q == QUALITY_AVOID) return false;
+   if(q == QUALITY_MARGINAL)
+   {
+      label = "marginal session: " + label;
+      return false;
+   }
+   if(prime_only && q != QUALITY_PRIME)
+   {
+      label = "not a prime window: " + label;
+      return false;
+   }
+   return true;
+}
+
+//====================================================================
+// SECTION 5 -- RISK AND SIZING
+//====================================================================
+
+//--- Broker constraints a scalping stop routinely collides with.
+//--- SYMBOL_TRADE_STOPS_LEVEL is the minimum distance a stop may sit
+//--- from price. On gold it is commonly 10-50 points = 0.10-0.50
+//--- USD/oz. A tighter stop is simply rejected by the server -- a
+//--- failure that does not exist in a backtest and bites immediately.
+double MinStopDistance(const string symbol)
+{
+   const long   stops_level = SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   const long   freeze      = SymbolInfoInteger(symbol, SYMBOL_TRADE_FREEZE_LEVEL);
+   const double point       = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   const double spread      = SymbolInfoDouble(symbol, SYMBOL_ASK)
+                            - SymbolInfoDouble(symbol, SYMBOL_BID);
+   const double from_level  = (double)MathMax(stops_level, freeze) * point;
+   return from_level + spread;
+}
+
+//--- Position size from risk, using the broker's own tick value.
+//--- This deliberately does NOT hard-code a contract size. The Python
+//--- side has to assume 100 oz per lot and warn about it; here the
+//--- terminal knows the real figure, so ask it. This is the one place
+//--- the MT5 version is strictly better than the Python one.
+double LotsForRisk(const string symbol, const double stop_distance,
+                   const double risk_money, string &why)
+{
+   const double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   const double tick_size  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   const double vol_min    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   const double vol_max    = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   const double vol_step   = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+   if(tick_value <= 0.0 || tick_size <= 0.0 || stop_distance <= 0.0)
+   {
+      why = "cannot size: tick value/size unavailable or stop distance is zero";
+      return 0.0;
+   }
+
+   const double loss_per_lot = (stop_distance / tick_size) * tick_value;
+   if(loss_per_lot <= 0.0)
+   {
+      why = "cannot size: computed loss per lot is not positive";
+      return 0.0;
+   }
+
+   // Always round DOWN. Rounding up exceeds the risk limit, which is the one
+   // direction the error must never take.
+   double lots = MathFloor((risk_money / loss_per_lot) / vol_step) * vol_step;
+   lots = NormalizeDouble(lots, 2);
+
+   if(lots < vol_min)
+   {
+      why = StringFormat(
+         "position rounds to %.4f lots, below the broker minimum of %.2f. "
+         "A %.2f stop on this balance cannot be taken within %.1f%% risk. "
+         "That is an account-size constraint, not a signal problem -- do not "
+         "solve it by widening risk.",
+         lots, vol_min, stop_distance, RISK_PER_TRADE_PCT);
+      return 0.0;
+   }
+   if(lots > vol_max) lots = vol_max;
+
+   why = "";
+   return lots;
+}
+
+double DayPnLPercent()
+{
+   if(day.start_equity <= 0.0) return 0.0;
+   return (AccountInfoDouble(ACCOUNT_EQUITY) - day.start_equity)
+          / day.start_equity * 100.0;
+}
+
+//--- Hard stops first and exclusively: once one fires, the softer
+//--- reasons are suppressed. Listing them alongside a hard stop only
+//--- invites the trader to negotiate with it.
+bool ShouldStopTrading(string &reason)
+{
+   const double pnl = DayPnLPercent();
+
+   if(pnl <= -DAILY_LOSS_LIMIT_PCT)
+   {
+      reason = StringFormat(
+         "R2: day at %.2f%%, the -%.1f%% limit is reached. Finished until the "
+         "next session. This rule exists because the trade taken to recover a "
+         "bad day is the one that turns a bad day into a bad month.",
+         pnl, DAILY_LOSS_LIMIT_PCT);
+      return true;
+   }
+   if(pnl >= DAILY_WIN_TARGET_PCT)
+   {
+      reason = StringFormat(
+         "Day target reached at +%.2f%%. Stopping. Giving back a good day is "
+         "the most common way a good week is lost.", pnl);
+      return true;
+   }
+   if(day.consecutive_losses >= MAX_CONSECUTIVE_LOSSES)
+   {
+      reason = StringFormat(
+         "%d losses in a row. Two consecutive losses usually mean the regime "
+         "no longer matches the setups, not that the next trade is due.",
+         day.consecutive_losses);
+      return true;
+   }
+   if(day.trades_taken >= MAX_TRADES_PER_DAY)
+   {
+      reason = StringFormat(
+         "%d trades today, the daily cap. Past this point you are trading "
+         "boredom, not setups.", day.trades_taken);
+      return true;
+   }
+   reason = "";
+   return false;
+}
+
+bool InCooldown(const datetime utc, string &reason)
+{
+   if(!day.last_was_loss || day.last_close_time == 0) return false;
+   const int elapsed = (int)((utc - day.last_close_time) / 60);
+   if(elapsed >= COOLDOWN_AFTER_LOSS_MIN) return false;
+   reason = StringFormat(
+      "cooldown: last trade was a loss %d minutes ago, waiting %d. The trade "
+      "straight after a loss is statistically the worst of the day.",
+      elapsed, COOLDOWN_AFTER_LOSS_MIN);
+   return true;
+}
+
+//====================================================================
+// SECTION 6 -- STATE RECOVERY
+//
+// The EA is reloaded on every timeframe change, parameter edit,
+// terminal restart and VPS migration. Without recovery two things
+// break, and both matter far more in Auto mode than they look:
+//
+//   * an open position becomes unmanaged -- no partial, no
+//     break-even, no trail, no time stop. Only the original stop
+//     protects it, which is the worst of both worlds.
+//   * the day counters reset to zero, so the daily trade cap and the
+//     loss limit can be silently exceeded by restarting.
+//
+// Both are reconstructed from the terminal's own records on init.
+//====================================================================
+
+datetime StartOfDayUtc(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   dt.hour = 0; dt.min = 0; dt.sec = 0;
+   return StructToTime(dt);
+}
+
+//--- Rebuild today's counters from the deal history.
+void RebuildDayState(const datetime utc)
+{
+   day.day_start          = StartOfDayUtc(utc);
+   day.trades_taken       = 0;
+   day.consecutive_losses = 0;
+   day.last_close_time    = 0;
+   day.last_was_loss      = false;
+
+   const datetime from_server = day.day_start + ServerOffsetSeconds();
+   if(!HistorySelect(from_server, TimeTradeServer() + 60))
+   {
+      day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      return;
+   }
+
+   double realised = 0.0;
+   const int deals = HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      const ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0) continue;
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) != InpMagic) continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol) continue;
+
+      const long entry_type = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      if(entry_type == DEAL_ENTRY_IN)
+      {
+         day.trades_taken++;
+         continue;
+      }
+      if(entry_type != DEAL_ENTRY_OUT) continue;
+
+      const double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT)
+                          + HistoryDealGetDouble(ticket, DEAL_SWAP)
+                          + HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+      realised += profit;
+      day.last_close_time = ServerToUtc(
+         (datetime)HistoryDealGetInteger(ticket, DEAL_TIME));
+      day.last_was_loss = (profit < 0.0);
+      if(profit < 0.0) day.consecutive_losses++;
+      else             day.consecutive_losses = 0;
+   }
+
+   // Equity at the start of the day, derived backwards from what has been
+   // realised since. Not exact when other EAs trade the same account, which
+   // is one reason to give this EA an account to itself.
+   day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY) - realised;
+   if(day.start_equity <= 0.0)
+      day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   if(day.trades_taken > 0)
+      PrintFormat("recovered day state: %d trade(s) already taken today, "
+                  "%d consecutive loss(es), day P/L %.2f%%",
+                  day.trades_taken, day.consecutive_losses, DayPnLPercent());
+}
+
+//--- Adopt a position this EA opened before the reload.
+bool AdoptExistingPosition(const datetime utc)
+{
+   ZeroMemory(managed);
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      if(!pos.SelectByIndex(i)) continue;
+      if(pos.Symbol() != _Symbol || pos.Magic() != InpMagic) continue;
+
+      const bool is_long = (pos.PositionType() == POSITION_TYPE_BUY);
+      managed.ticket         = pos.Ticket();
+      managed.entry          = pos.PriceOpen();
+      managed.initial_stop   = pos.StopLoss();
+      managed.initial_volume = pos.Volume();
+      managed.opened_at      = ServerToUtc(pos.Time());
+      managed.setup_id       = "adopted";
+
+      if(managed.initial_stop <= 0.0)
+      {
+         // A position with no stop is the one situation this EA must never
+         // leave alone. Close it rather than manage something whose risk is
+         // undefined (R7).
+         Print("adopted a position with NO stop loss. Closing it: a position "
+               "without a defined invalidation is not a trade, it is an open "
+               "bill.");
+         trade.PositionClose(managed.ticket);
+         ZeroMemory(managed);
+         return false;
+      }
+
+      managed.risk_per_unit = MathAbs(managed.entry - managed.initial_stop);
+
+      // Whether the partial was already taken cannot be read back directly.
+      // A stop at or beyond entry means break-even was set, which only
+      // happens after the first target fills -- so infer from that, and
+      // err towards "already done" so the partial is never taken twice.
+      managed.first_target_done = is_long
+         ? (managed.initial_stop >= managed.entry - _Point)
+         : (managed.initial_stop <= managed.entry + _Point);
+
+      if(managed.first_target_done)
+      {
+         // Break-even is in place, so the original risk is unknown. Rebuild
+         // it from ATR rather than from a stop that has already moved.
+         double atr[];
+         if(CopyBuffer(hAtr, 0, 1, 1, atr) > 0 && atr[0] > 0.0)
+            managed.risk_per_unit = atr[0] * MIN_STOP_ATR_MULTIPLE;
+      }
+
+      managed.first_target = is_long
+         ? managed.entry + managed.risk_per_unit * InpFirstTargetR
+         : managed.entry - managed.risk_per_unit * InpFirstTargetR;
+      managed.runner_target = is_long
+         ? managed.entry + managed.risk_per_unit * InpRunnerTargetR
+         : managed.entry - managed.risk_per_unit * InpRunnerTargetR;
+
+      PrintFormat("adopted open position #%I64u (%s %.2f lots from %s). "
+                  "First target %s. Management resumes.",
+                  managed.ticket, (is_long ? "long" : "short"),
+                  managed.initial_volume,
+                  TimeToString(pos.Time(), TIME_DATE | TIME_MINUTES),
+                  (managed.first_target_done ? "already taken" : "still ahead"));
+      return true;
+   }
+   return false;
+}
+
+//====================================================================
+// SECTION 7 -- LIFECYCLE
+//====================================================================
+
 int OnInit()
 {
    trade.SetExpertMagicNumber(InpMagic);
@@ -139,35 +637,36 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   ResetDay(day, ServerToUtc(TimeTradeServer()));
-   ZeroMemory(managed);
+   const datetime utc = ServerToUtc(TimeTradeServer());
+   RebuildDayState(utc);
+   AdoptExistingPosition(utc);
 
-   //--- Sanity checks that are worth failing loudly on.
    if(StringFind(_Symbol, "XAU") < 0 && StringFind(_Symbol, "GOLD") < 0)
       Print("WARNING: this EA is built for gold. Symbol is ", _Symbol,
-            " -- the ATR bands, round-number grid and session logic assume "
-            "XAU/USD and will be wrong elsewhere.");
+            " -- the ATR bands, the round-number grid and the session logic "
+            "assume XAU/USD and will be wrong elsewhere.");
 
-   if(Period() != PERIOD_M5)
-      Print("NOTE: chart timeframe is ", EnumToString((ENUM_TIMEFRAMES)Period()),
-            ". The EA reads M5 regardless, so this is cosmetic -- but the "
-            "drawings will not line up with what it is reading.");
+   if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
+      Print("WARNING: algo trading is disabled for this account. Nothing will "
+            "be placed even in Auto mode.");
 
-   PrintFormat("GoldScalpAssistant started in %s mode. "
-               "Risk %.1f%%/trade, daily stop -%.1f%%, daily target +%.1f%%, "
-               "max %d trades/day.",
+   const bool is_demo =
+      (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO);
+   if(InpMode == MODE_AUTO && !is_demo && !MQLInfoInteger(MQL_TESTER))
+      Print("WARNING: Auto mode on a LIVE account. This strategy has no "
+            "demonstrated positive expectancy -- see "
+            "docs/BACKTEST-ERGEBNISSE.md. Demo is where this belongs.");
+
+   PrintFormat("GoldScalpAssistant %s | %s | risk %.1f%%/trade, daily stop "
+               "-%.1f%%, daily target +%.1f%%, max %d trades/day",
                (InpMode == MODE_ADVISOR ? "ADVISOR (no orders)" : "AUTO"),
+               (is_demo ? "DEMO" : "LIVE"),
                RISK_PER_TRADE_PCT, DAILY_LOSS_LIMIT_PCT,
                DAILY_WIN_TARGET_PCT, MAX_TRADES_PER_DAY);
-
-   if(InpMode == MODE_AUTO)
-      Print("AUTO MODE: this strategy has not been shown to have a positive "
-            "expectancy. See docs/BACKTEST-ERGEBNISSE.md. Demo only.");
 
    return INIT_SUCCEEDED;
 }
 
-//+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
    IndicatorRelease(hAtr);
@@ -177,7 +676,6 @@ void OnDeinit(const int reason)
    ObjectsDeleteAll(0, "GSA_");
 }
 
-//+------------------------------------------------------------------+
 void OnTick()
 {
    const datetime utc = ServerToUtc(TimeTradeServer());
@@ -186,69 +684,41 @@ void OnTick()
 
    // Managing an open position happens every tick; looking for a new one
    // happens once per closed bar. Exits must not wait for a bar close.
-   if(HasOpenPosition())
+   if(managed.ticket != 0)
       ManageOpenPosition(utc);
 
-   if(InpDashboard)
-      DrawDashboard(utc);
+   if(InpDashboard) DrawDashboard(utc);
 
    const datetime bar = iTime(_Symbol, PERIOD_M5, 0);
-   if(bar == lastBarTime)
-      return;
+   if(bar == lastBarTime) return;
    lastBarTime = bar;
 
-   if(!HasOpenPosition())
+   if(managed.ticket == 0)
       LookForSetup(utc);
 }
 
-//+------------------------------------------------------------------+
-//| Day rollover                                                      |
-//+------------------------------------------------------------------+
 void RollDayIfNeeded(const datetime utc)
 {
-   MqlDateTime now, start;
-   TimeToStruct(utc, now);
-   TimeToStruct(day.day_start, start);
-   if(now.year != start.year || now.mon != start.mon || now.day != start.day)
-   {
-      PrintFormat("New session. Yesterday closed at %.2f%%.", DayPnLPercent(day));
-      ResetDay(day, utc);
-   }
+   if(StartOfDayUtc(utc) == day.day_start) return;
+   PrintFormat("New session. Yesterday closed at %.2f%% over %d trade(s).",
+               DayPnLPercent(), day.trades_taken);
+   day.day_start          = StartOfDayUtc(utc);
+   day.start_equity       = AccountInfoDouble(ACCOUNT_EQUITY);
+   day.trades_taken       = 0;
+   day.consecutive_losses = 0;
+   day.last_close_time    = 0;
+   day.last_was_loss      = false;
 }
 
-//+------------------------------------------------------------------+
-//| Position helpers                                                  |
-//+------------------------------------------------------------------+
-bool HasOpenPosition()
-{
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      if(!pos.SelectByIndex(i)) continue;
-      if(pos.Symbol() == _Symbol && pos.Magic() == InpMagic)
-         return true;
-   }
-   return false;
-}
+//====================================================================
+// SECTION 8 -- EXIT MANAGEMENT
+//====================================================================
 
-int CountOpenPositions()
-{
-   int n = 0;
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      if(!pos.SelectByIndex(i)) continue;
-      if(pos.Symbol() == _Symbol && pos.Magic() == InpMagic) n++;
-   }
-   return n;
-}
-
-//+------------------------------------------------------------------+
-//| Exit management: partial, break-even, trail, time stop.           |
-//+------------------------------------------------------------------+
 void ManageOpenPosition(const datetime utc)
 {
    if(!pos.SelectByTicket(managed.ticket))
    {
-      // The position closed outside our control (stop hit, manual close).
+      // Closed outside our control: stop hit, manual close, margin call.
       RecordClosedTrade();
       ZeroMemory(managed);
       return;
@@ -259,7 +729,8 @@ void ManageOpenPosition(const datetime utc)
                                   : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
    //--- Time stop. A scalp that has not worked inside its own horizon is no
-   //--- longer the trade that was entered.
+   //--- longer the trade that was entered; it is a swing trade with a
+   //--- scalping stop, which is the worst combination.
    const int age_min = (int)((utc - managed.opened_at) / 60);
    if(age_min >= InpTimeStopMinutes)
    {
@@ -281,8 +752,7 @@ void ManageOpenPosition(const datetime utc)
    {
       const bool hit = is_long ? (price >= managed.first_target)
                                : (price <= managed.first_target);
-      if(hit)
-         TakePartialAndMoveToBreakEven();
+      if(hit) TakePartialAndMoveToBreakEven(is_long, price);
       return;   // never trail on the same tick the partial fills
    }
 
@@ -295,77 +765,65 @@ void ManageOpenPosition(const datetime utc)
       return;
    }
 
-   //--- Trail the remainder.
    TrailRunner(is_long, price);
 }
 
-//+------------------------------------------------------------------+
-void TakePartialAndMoveToBreakEven()
+void TakePartialAndMoveToBreakEven(const bool is_long, const double price)
 {
    const double vol_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
    const double vol_min  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double part = managed.initial_volume * InpFirstTargetPct / 100.0;
-   part = MathFloor(part / vol_step) * vol_step;
-
+   double part = MathFloor((pos.Volume() * InpFirstTargetPct / 100.0) / vol_step)
+                 * vol_step;
    const double remaining = pos.Volume() - part;
 
-   // If either side of the split would fall under the broker minimum, a
-   // partial is impossible. Closing the whole thing at the first target is
-   // the honest fallback -- better a small win than an order the server
-   // rejects while the price walks away.
+   // If either side of the split falls under the broker minimum, a partial is
+   // impossible. Closing in full is the honest fallback -- a small win beats
+   // an order the server rejects while price walks away.
    if(part < vol_min || remaining < vol_min)
    {
       CloseAll(StringFormat(
          "first target reached but a partial is not possible: %.2f/%.2f lots "
-         "against a %.2f minimum. Closing in full.",
-         part, remaining, vol_min));
+         "against a %.2f minimum. Closing in full.", part, remaining, vol_min));
       return;
    }
 
    if(!trade.PositionClosePartial(managed.ticket, part))
    {
-      PrintFormat("partial close failed: %d %s",
-                  trade.ResultRetcode(), trade.ResultRetcodeDescription());
+      PrintFormat("partial close failed: %d %s", trade.ResultRetcode(),
+                  trade.ResultRetcodeDescription());
       return;
    }
 
    managed.first_target_done = true;
-   PrintFormat("banked %.0f%% at %.2f (%.1fR). Remainder runs.",
+   PrintFormat("banked %.0f%% at %.2f (%.2fR). Remainder runs.",
                InpFirstTargetPct, managed.first_target, InpFirstTargetR);
 
-   //--- Break-even, respecting the broker's minimum stop distance.
    const double min_dist = MinStopDistance(_Symbol);
-   const bool   is_long  = (pos.PositionType() == POSITION_TYPE_BUY);
-   const double price    = is_long ? SymbolInfoDouble(_Symbol, SYMBOL_BID)
-                                   : SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double be = managed.entry;
-   if(MathAbs(price - be) < min_dist)
+   if(MathAbs(price - managed.entry) < min_dist)
    {
       Print("break-even stop is inside the broker's minimum stop distance; "
-            "leaving the original stop in place until price moves further");
+            "leaving the original stop until price moves further");
       return;
    }
-   if(!trade.PositionModify(managed.ticket, NormalizeDouble(be, _Digits),
+   if(!trade.PositionModify(managed.ticket,
+                            NormalizeDouble(managed.entry, _Digits),
                             pos.TakeProfit()))
-      PrintFormat("break-even modify failed: %d %s",
-                  trade.ResultRetcode(), trade.ResultRetcodeDescription());
+      PrintFormat("break-even modify failed: %d %s", trade.ResultRetcode(),
+                  trade.ResultRetcodeDescription());
    else
-      Print("stop moved to break-even -- the remainder is now a free option, "
-            "which is the point of taking the partial");
+      Print("stop to break-even -- the remainder is now a free option, which "
+            "is the point of taking the partial");
 }
 
-//+------------------------------------------------------------------+
 void TrailRunner(const bool is_long, const double price)
 {
    double atr[];
    if(CopyBuffer(hAtr, 0, 0, 1, atr) < 1) return;
-   const double distance = atr[0] * InpTrailAtrMult;
-   const double min_dist = MinStopDistance(_Symbol);
-   const double use_dist = MathMax(distance, min_dist);
-
-   const double current = pos.StopLoss();
-   double candidate = is_long ? (price - use_dist) : (price + use_dist);
-   candidate = NormalizeDouble(candidate, _Digits);
+   const double use_dist = MathMax(atr[0] * InpTrailAtrMult,
+                                   MinStopDistance(_Symbol));
+   const double current  = pos.StopLoss();
+   double candidate = NormalizeDouble(
+      is_long ? (price - use_dist) : (price + use_dist), _Digits);
 
    const bool improved = is_long ? (candidate > current + _Point)
                                  : (candidate < current - _Point);
@@ -380,7 +838,6 @@ void TrailRunner(const bool is_long, const double price)
    }
 }
 
-//+------------------------------------------------------------------+
 void CloseAll(const string why)
 {
    if(!trade.PositionClose(managed.ticket))
@@ -394,12 +851,10 @@ void CloseAll(const string why)
    ZeroMemory(managed);
 }
 
-//+------------------------------------------------------------------+
-//| Record the outcome for the day-state rules.                       |
-//+------------------------------------------------------------------+
 void RecordClosedTrade()
 {
-   if(!HistorySelect(day.day_start, TimeTradeServer() + 60))
+   if(!HistorySelect(day.day_start + ServerOffsetSeconds(),
+                     TimeTradeServer() + 60))
       return;
 
    double profit = 0.0;
@@ -420,20 +875,19 @@ void RecordClosedTrade()
 
    day.last_close_time = ServerToUtc(TimeTradeServer());
    day.last_was_loss   = (profit < 0.0);
-   if(profit < 0.0)
-      day.consecutive_losses++;
-   else
-      day.consecutive_losses = 0;
+   if(profit < 0.0) day.consecutive_losses++;
+   else             day.consecutive_losses = 0;
 
    PrintFormat("trade closed, result %.2f %s. Day %.2f%%, %d trades, %d "
-               "consecutive losses.",
-               profit, AccountInfoString(ACCOUNT_CURRENCY),
-               DayPnLPercent(day), day.trades_taken, day.consecutive_losses);
+               "consecutive loss(es).", profit,
+               AccountInfoString(ACCOUNT_CURRENCY), DayPnLPercent(),
+               day.trades_taken, day.consecutive_losses);
 }
 
-//+------------------------------------------------------------------+
-//| Signal search                                                     |
-//+------------------------------------------------------------------+
+//====================================================================
+// SECTION 9 -- SETUP DETECTION
+//====================================================================
+
 struct Setup
 {
    bool     found;
@@ -450,17 +904,8 @@ void LookForSetup(const datetime utc)
 {
    string reason;
 
-   //--- Hard stops first.
-   if(ShouldStopTrading(day, utc, reason))
-   {
-      Note("STOP: " + reason);
-      return;
-   }
-   if(InCooldown(day, utc, reason))
-   {
-      Note(reason);
-      return;
-   }
+   if(ShouldStopTrading(reason))       { Note("STOP: " + reason); return; }
+   if(InCooldown(utc, reason))         { Note(reason);            return; }
 
    string session_label;
    if(!IsTradableSession(utc, InpPrimeOnly, session_label))
@@ -468,7 +913,6 @@ void LookForSetup(const datetime utc)
       Note("not trading: " + session_label);
       return;
    }
-
    if(InpBlockNewsWindow && InNewsBlackout(utc, reason))
    {
       Note(reason);
@@ -493,8 +937,7 @@ void LookForSetup(const datetime utc)
       return;
    }
 
-   Setup s;
-   ZeroMemory(s);
+   Setup s; ZeroMemory(s);
    if(InpUseS2 && !s.found) s = DetectS2(atr_value);
    if(InpUseS5 && !s.found) s = DetectS5(atr_value);
    if(InpUseS4 && !s.found) s = DetectS4(atr_value);
@@ -504,24 +947,21 @@ void LookForSetup(const datetime utc)
       return;
    }
 
-   ExecuteOrAdvise(s, atr_value, utc, session_label);
+   ExecuteOrAdvise(s, atr_value, session_label);
 }
 
-//+------------------------------------------------------------------+
-//| S2 - Pullback Window Break                                        |
-//| EMA stack sets direction, 1-3 counter-trend candles form the      |
-//| pullback, the break of its extreme is the entry. The depth cap is |
-//| the point: a pullback deeper than three bars is a reversal in     |
-//| progress, not a pause.                                            |
-//+------------------------------------------------------------------+
+//--- S2: EMA stack sets direction, 1-3 counter-trend candles form the
+//--- pullback, the break of its extreme is the entry. The depth cap is
+//--- the point: a pullback deeper than three bars is a reversal in
+//--- progress, not a pause.
 Setup DetectS2(const double atr_value)
 {
    Setup s; ZeroMemory(s);
 
    double e9[], e21[], e50[], e21_prev[];
-   if(CopyBuffer(hEma9,  0, 1, 1, e9)  < 1) return s;
-   if(CopyBuffer(hEma21, 0, 1, 1, e21) < 1) return s;
-   if(CopyBuffer(hEma50, 0, 1, 1, e50) < 1) return s;
+   if(CopyBuffer(hEma9,  0, 1, 1, e9)       < 1) return s;
+   if(CopyBuffer(hEma21, 0, 1, 1, e21)      < 1) return s;
+   if(CopyBuffer(hEma50, 0, 1, 1, e50)      < 1) return s;
    if(CopyBuffer(hEma21, 0, 6, 1, e21_prev) < 1) return s;
 
    const bool up   = (e9[0] > e21[0] && e21[0] > e50[0]);
@@ -529,7 +969,7 @@ Setup DetectS2(const double atr_value)
    if(!up && !down) return s;
 
    //--- Slope filter. A flat stack is a range wearing a trend's clothes;
-   //--- without this the setup fires all day in chop and loses on the spread.
+   //--- without this the setup fires all day in chop and loses on spread.
    const double slope = (e21[0] - e21_prev[0]) / atr_value;
    if(MathAbs(slope) < 0.25) return s;
    if((up && slope < 0) || (down && slope > 0)) return s;
@@ -556,9 +996,7 @@ Setup DetectS2(const double atr_value)
       extreme = up ? MathMin(extreme, r[i].low)  : MathMax(extreme, r[i].high);
    }
 
-   //--- The most recent closed bar must break the pullback extreme.
-   const double last_close = r[0].close;
-   const bool broke = up ? (last_close > trigger) : (last_close < trigger);
+   const bool broke = up ? (r[0].close > trigger) : (r[0].close < trigger);
    if(!broke) return s;
 
    s.found            = true;
@@ -568,23 +1006,18 @@ Setup DetectS2(const double atr_value)
    s.entry            = up ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                            : SymbolInfoDouble(_Symbol, SYMBOL_BID);
    s.structural_level = extreme;
-   s.evidence         = StringFormat(
-      "EMA9/21/50 stacked %s, 21-EMA slope %+.2f x ATR, %d-bar pullback broken "
-      "at %.2f", (up ? "up" : "down"), slope, counter, trigger);
-   s.failure_mode     = "The EMA stack is flat and the 'trend' is a range. The "
-                        "slope filter exists for this.";
+   s.evidence = StringFormat(
+      "EMA9/21/50 stacked %s, 21-EMA slope %+.2f x ATR, %d-bar pullback "
+      "broken at %.2f", (up ? "up" : "down"), slope, counter, trigger);
+   s.failure_mode = "The EMA stack is flat and the 'trend' is a range. The "
+                    "slope filter exists for this.";
    return s;
 }
 
-//+------------------------------------------------------------------+
-//| S5 - Momentum Continuation after an impulse bar                   |
-//|                                                                  |
-//| Same family as the well-known volatility-expansion scalpers: a    |
-//| single bar of at least 1.5x ATR closing in the outer 20% of its   |
-//| range is a repricing, not noise. The shallow retracement that     |
-//| follows is the entry, with a natural invalidation at the impulse  |
-//| bar's origin.                                                     |
-//+------------------------------------------------------------------+
+//--- S5: a bar of at least 1.5x ATR closing in the outer 20% of its
+//--- range is a repricing, not noise. The shallow retracement that
+//--- follows is the entry, invalidated at the impulse bar's origin.
+//--- Same family as the well-known volatility-expansion scalpers.
 Setup DetectS5(const double atr_value)
 {
    Setup s; ZeroMemory(s);
@@ -614,14 +1047,12 @@ Setup DetectS5(const double atr_value)
    const double third     = is_long ? (r[impulse].low + range / 3.0)
                                     : (r[impulse].high - range / 3.0);
 
-   //--- Invalidated if anything since closed beyond the impulse origin.
    for(int i = 0; i < impulse; i++)
    {
-      if(is_long && r[i].close < origin) return s;
+      if(is_long  && r[i].close < origin) return s;
       if(!is_long && r[i].close > origin) return s;
    }
 
-   //--- Price must have retraced into the impulse bar's near third.
    const bool in_zone = is_long ? (r[0].low <= third) : (r[0].high >= third);
    if(!in_zone) return s;
 
@@ -632,22 +1063,19 @@ Setup DetectS5(const double atr_value)
    s.entry            = is_long ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                                 : SymbolInfoDouble(_Symbol, SYMBOL_BID);
    s.structural_level = origin;
-   s.evidence         = StringFormat(
+   s.evidence = StringFormat(
       "impulse bar %.1f x ATR closing at %.0f%% of its range, retraced into "
       "its near third without breaking the origin at %.2f",
       range / atr_value, close_pos * 100.0, origin);
-   s.failure_mode     = "The impulse was a news spike. Those retrace fully and "
-                        "continue through far more often than session-flow "
-                        "impulses. If a release landed in the last 30 minutes, "
-                        "this setup does not apply.";
+   s.failure_mode = "The impulse was a news spike. Those retrace fully and "
+                    "continue through far more often than session-flow "
+                    "impulses.";
    return s;
 }
 
-//+------------------------------------------------------------------+
-//| S4 - Round Number Fade                                            |
-//| Gold respects its 10 and 50 handles because that is where resting |
-//| orders actually sit. First or second touch only.                  |
-//+------------------------------------------------------------------+
+//--- S4: gold respects its 10 and 50 handles because that is where
+//--- resting orders sit. First or second touch only -- after that the
+//--- level is being accumulated against, not defended.
 Setup DetectS4(const double atr_value)
 {
    Setup s; ZeroMemory(s);
@@ -656,32 +1084,27 @@ Setup DetectS4(const double atr_value)
    ArraySetAsSeries(r, true);
    if(CopyRates(_Symbol, PERIOD_M5, 1, 13, r) < 13) return s;
 
-   const double price  = r[0].close;
-   const double handle = MathRound(price / 10.0) * 10.0;
-   if(MathAbs(price - handle) > atr_value * 1.5) return s;
+   const double handle = MathRound(r[0].close / 10.0) * 10.0;
+   if(MathAbs(r[0].close - handle) > atr_value * 1.5) return s;
 
-   //--- Require an extended approach: this is a first-touch setup.
    const double run = MathAbs(r[0].close - r[12].open);
    if(run < atr_value * 2.0) return s;
    const bool approaching_up = (r[0].close > r[12].open);
 
-   //--- Rejection candle at the handle on the last closed bar.
    const double range = r[0].high - r[0].low;
    if(range <= 0.0) return s;
    const double body  = MathAbs(r[0].close - r[0].open);
    const double upper = r[0].high - MathMax(r[0].open, r[0].close);
    const double lower = MathMin(r[0].open, r[0].close) - r[0].low;
 
-   bool rejected_down = (upper >= atr_value * 0.6 && upper > lower * 2.0
-                         && body / range < 0.45 && r[0].high >= handle);
-   bool rejected_up   = (lower >= atr_value * 0.6 && lower > upper * 2.0
-                         && body / range < 0.45 && r[0].low <= handle);
+   const bool rejected_down = (upper >= atr_value * 0.6 && upper > lower * 2.0
+                               && body / range < 0.45 && r[0].high >= handle);
+   const bool rejected_up   = (lower >= atr_value * 0.6 && lower > upper * 2.0
+                               && body / range < 0.45 && r[0].low <= handle);
 
-   if(approaching_up && !rejected_down) return s;
-   if(!approaching_up && !rejected_up)  return s;
+   if(approaching_up  && !rejected_down) return s;
+   if(!approaching_up && !rejected_up)   return s;
 
-   //--- Count touches. After the second the handle is being accumulated
-   //--- against rather than defended, and the next attempt usually goes through.
    int touches = 0;
    for(int i = 0; i < 12; i++)
       if(r[i].low <= handle && r[i].high >= handle) touches++;
@@ -694,30 +1117,24 @@ Setup DetectS4(const double atr_value)
    s.entry            = s.is_long ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                                   : SymbolInfoDouble(_Symbol, SYMBOL_BID);
    s.structural_level = approaching_up ? r[0].high : r[0].low;
-   s.evidence         = StringFormat(
+   s.evidence = StringFormat(
       "%.1f x ATR run into the %.0f handle, rejection candle, touch %d of a "
       "maximum 2", run / atr_value, handle, touches);
-   s.failure_mode     = "The handle breaks and becomes support. After the "
-                        "second test it is being accumulated against.";
+   s.failure_mode = "The handle breaks and becomes support. After the second "
+                    "test it is being accumulated against.";
    return s;
 }
 
-//+------------------------------------------------------------------+
-//| News blackout                                                     |
-//|                                                                  |
-//| MQL5 has an economic calendar, but it is not available in the     |
-//| Strategy Tester and its availability varies by broker. So this is |
-//| a deliberately crude time-based guard: the 08:30 and 10:00 New    |
-//| York data windows and 14:00 FOMC, blocked either side.            |
-//|                                                                  |
-//| It WILL miss a surprise release, a rescheduled print, and every   |
-//| non-US event. It is a floor under the veto, not a substitute for  |
-//| looking at a calendar before the session.                          |
-//+------------------------------------------------------------------+
+//--- News blackout. MQL5's economic calendar is unavailable in the
+//--- Strategy Tester and varies by broker, so this is a deliberately
+//--- crude time-based guard around the New York data windows.
+//---
+//--- It WILL miss a surprise release, a rescheduled print and every
+//--- non-US event. A floor under the veto, not a substitute for
+//--- looking at a calendar before the session.
 bool InNewsBlackout(const datetime utc, string &reason)
 {
-   const int ny_offset = NewYorkOffsetHours(utc);
-   const datetime ny   = utc + ny_offset * 3600;
+   const datetime ny = utc + NewYorkOffsetHours(utc) * 3600;
    MqlDateTime dt;
    TimeToStruct(ny, dt);
 
@@ -742,11 +1159,12 @@ bool InNewsBlackout(const datetime utc, string &reason)
    return false;
 }
 
-//+------------------------------------------------------------------+
-//| Turn a setup into a plan, then either advise or execute.          |
-//+------------------------------------------------------------------+
+//====================================================================
+// SECTION 10 -- FROM SETUP TO ORDER
+//====================================================================
+
 void ExecuteOrAdvise(const Setup &s, const double atr_value,
-                     const datetime utc, const string session_label)
+                     const string session_label)
 {
    //--- M2: the stop sits beyond the structural level, never on it. Gold
    //--- reaches through obvious levels to collect the stops resting there.
@@ -754,14 +1172,14 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
                            : (s.structural_level + atr_value * STOP_BUFFER_ATR);
 
    //--- M1: never tighter than MIN_STOP_ATR_MULTIPLE. A stop inside one ATR
-   //--- is noise, not risk -- a normal wick takes it out before the idea
-   //--- resolves. Widening shrinks the position, which is the correct trade.
+   //--- is noise, not risk. Widening shrinks the position, which is correct:
+   //--- fewer ounces at a survivable distance beats more at a distance that
+   //--- gets hit by noise.
    const double floor_dist = atr_value * MIN_STOP_ATR_MULTIPLE;
    if(MathAbs(s.entry - stop) < floor_dist)
       stop = s.is_long ? (s.entry - floor_dist) : (s.entry + floor_dist);
 
-   //--- Broker minimum stop distance. This is the constraint that does not
-   //--- exist in a backtest and rejects the order live.
+   //--- The broker constraint that does not exist in a backtest.
    const double min_dist = MinStopDistance(_Symbol);
    if(MathAbs(s.entry - stop) < min_dist)
    {
@@ -785,7 +1203,7 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       return;
    }
 
-   const double first_target  = s.is_long
+   const double first_target = s.is_long
       ? s.entry + risk_per_unit * InpFirstTargetR
       : s.entry - risk_per_unit * InpFirstTargetR;
    const double runner_target = s.is_long
@@ -794,14 +1212,15 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
 
    //--- The blended reward/risk is the honest headline. A plan taking 60% at
    //--- 0.5R and 40% at 2.5R is 1.3R, not 2.5R.
-   const double frac = InpFirstTargetPct / 100.0;
-   const double blended = frac * InpFirstTargetR + (1.0 - frac) * InpRunnerTargetR;
+   const double frac    = InpFirstTargetPct / 100.0;
+   const double blended = frac * InpFirstTargetR
+                        + (1.0 - frac) * InpRunnerTargetR;
 
-   const double balance    = AccountInfoDouble(ACCOUNT_BALANCE);
-   const double risk_money = balance * RISK_PER_TRADE_PCT / 100.0;
+   const double risk_money = AccountInfoDouble(ACCOUNT_BALANCE)
+                           * RISK_PER_TRADE_PCT / 100.0;
    string size_problem;
-   const double lots = LotsForRisk(_Symbol, risk_per_unit, risk_money, size_problem);
-
+   const double lots = LotsForRisk(_Symbol, risk_per_unit, risk_money,
+                                   size_problem);
    if(lots <= 0.0)
    {
       Note("cannot size: " + size_problem);
@@ -812,9 +1231,9 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       "%s %s  %s\n"
       "  Entry  %.2f\n"
       "  Stop   %.2f   (%.2f = 1R, %.2f x ATR)\n"
-      "  T1     %.2f   -> close %.0f%%  (%.1fR)\n"
+      "  T1     %.2f   -> close %.0f%%  (%.2fR)\n"
       "  T2     %.2f   -> runner, stop to break-even after T1  (%.1fR)\n"
-      "  Size   %.2f lots  (%.2f %s at risk = %.2f%%)\n"
+      "  Size   %.2f lots  (%.2f %s at risk = %.1f%%)\n"
       "  Blended R:R 1:%.2f\n"
       "  Why:   %s\n"
       "  Fails: %s\n"
@@ -823,19 +1242,16 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       s.entry, stop, risk_per_unit, risk_per_unit / atr_value,
       first_target, InpFirstTargetPct, InpFirstTargetR,
       runner_target, InpRunnerTargetR,
-      lots, risk_money, AccountInfoString(ACCOUNT_CURRENCY), RISK_PER_TRADE_PCT,
-      blended, s.evidence, s.failure_mode, session_label);
+      lots, risk_money, AccountInfoString(ACCOUNT_CURRENCY),
+      RISK_PER_TRADE_PCT, blended, s.evidence, s.failure_mode, session_label);
 
-   lastSignalText = plan;
-   lastSignalTime = utc;
    Print(plan);
+   DrawSetup(s, stop, first_target, runner_target);
 
    if(InpAlerts && !MQLInfoInteger(MQL_TESTER))
       Alert(StringFormat("%s %s %s @ %.2f  SL %.2f  %.2f lots",
                          s.id, (s.is_long ? "LONG" : "SHORT"), _Symbol,
                          s.entry, stop, lots));
-
-   DrawSetup(s, stop, first_target, runner_target);
 
    if(InpMode == MODE_ADVISOR)
    {
@@ -843,15 +1259,9 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       return;
    }
 
-   if(CountOpenPositions() >= MAX_OPEN_POSITIONS)
-   {
-      Note("already at the position limit");
-      return;
-   }
-
    //--- Place with the stop attached. Never send a naked order and add the
    //--- stop afterwards: the gap between the two is exactly when gold moves.
-   bool ok = s.is_long
+   const bool ok = s.is_long
       ? trade.Buy(lots, _Symbol, 0.0, stop, 0.0, s.id + " " + s.name)
       : trade.Sell(lots, _Symbol, 0.0, stop, 0.0, s.id + " " + s.name);
 
@@ -862,10 +1272,9 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       return;
    }
 
-   // ResultOrder() is an order ticket and ResultDeal() is a deal ticket --
-   // neither is the position ticket that PositionModify and PositionClose
-   // need. Resolve it by symbol and magic, which is unambiguous because this
-   // EA holds at most one position.
+   //--- ResultOrder() is an order ticket and ResultDeal() a deal ticket --
+   //--- neither is the position ticket that PositionModify and PositionClose
+   //--- need. Resolve by symbol and magic, unambiguous with one position.
    managed.ticket = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
@@ -878,8 +1287,8 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    }
    if(managed.ticket == 0)
    {
-      Print("order filled but the position could not be resolved. Managing it "
-            "by hand is now required -- check the Trade tab.");
+      Print("order filled but the position could not be resolved. It has a "
+            "stop attached, but the EA cannot manage it -- check the Trade tab.");
       return;
    }
 
@@ -890,7 +1299,7 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    managed.runner_target     = runner_target;
    managed.first_target_done = false;
    managed.initial_volume    = lots;
-   managed.opened_at         = utc;
+   managed.opened_at         = ServerToUtc(TimeTradeServer());
    managed.setup_id          = s.id;
 
    day.trades_taken++;
@@ -898,19 +1307,9 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
                managed.ticket, day.trades_taken, MAX_TRADES_PER_DAY);
 }
 
-//+------------------------------------------------------------------+
-//| Chart drawing                                                     |
-//+------------------------------------------------------------------+
-void DrawSetup(const Setup &s, const double stop, const double t1,
-               const double t2)
-{
-   const string tag = "GSA_setup_";
-   ObjectsDeleteAll(0, tag);
-   DrawLine(tag + "entry", s.entry, clrDodgerBlue, "entry");
-   DrawLine(tag + "stop",  stop,    clrCrimson,    "stop (1R)");
-   DrawLine(tag + "t1",    t1,      clrLimeGreen,  "T1");
-   DrawLine(tag + "t2",    t2,      clrSeaGreen,   "T2");
-}
+//====================================================================
+// SECTION 11 -- CHART OUTPUT
+//====================================================================
 
 void DrawLine(const string name, const double price, const color clr,
               const string text)
@@ -922,43 +1321,57 @@ void DrawLine(const string name, const double price, const color clr,
    ObjectSetString(0, name, OBJPROP_TEXT, text);
 }
 
+void DrawSetup(const Setup &s, const double stop, const double t1,
+               const double t2)
+{
+   ObjectsDeleteAll(0, "GSA_setup_");
+   DrawLine("GSA_setup_entry", s.entry, clrDodgerBlue, "entry");
+   DrawLine("GSA_setup_stop",  stop,    clrCrimson,    "stop (1R)");
+   DrawLine("GSA_setup_t1",    t1,      clrLimeGreen,  "T1");
+   DrawLine("GSA_setup_t2",    t2,      clrSeaGreen,   "T2");
+}
+
 void DrawDashboard(const datetime utc)
 {
    string session_label;
    const SessionQuality q = ClassifySession(utc, session_label);
    string stop_reason;
-   const bool stopped = ShouldStopTrading(day, utc, stop_reason);
+   const bool stopped = ShouldStopTrading(stop_reason);
 
    const string quality_text =
-      (q == QUALITY_PRIME)    ? "PRIME" :
-      (q == QUALITY_GOOD)     ? "good"  :
+      (q == QUALITY_PRIME)    ? "PRIME"    :
+      (q == QUALITY_GOOD)     ? "good"     :
       (q == QUALITY_MARGINAL) ? "marginal" : "AVOID";
+
+   const string position_text = (managed.ticket == 0)
+      ? "no position"
+      : StringFormat("in %s, T1 %s", managed.setup_id,
+                     (managed.first_target_done ? "taken" : "pending"));
 
    const string text = StringFormat(
       "GoldScalpAssistant  [%s]\n"
       "Session: %s (%s)\n"
       "Day: %+.2f%%   Trades: %d/%d   Losses in a row: %d\n"
+      "%s\n"
       "%s",
       (InpMode == MODE_ADVISOR ? "ADVISOR" : "AUTO"),
       quality_text, session_label,
-      DayPnLPercent(day), day.trades_taken, MAX_TRADES_PER_DAY,
-      day.consecutive_losses,
+      DayPnLPercent(), day.trades_taken, MAX_TRADES_PER_DAY,
+      day.consecutive_losses, position_text,
       (stopped ? "STOPPED: " + stop_reason : "running"));
 
-   const string name = "GSA_panel";
-   if(ObjectFind(0, name) < 0)
+   if(ObjectFind(0, "GSA_panel") < 0)
    {
-      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-      ObjectSetInteger(0, name, OBJPROP_XDISTANCE, 10);
-      ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 20);
-      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
-      ObjectSetString(0, name, OBJPROP_FONT, "Consolas");
+      ObjectCreate(0, "GSA_panel", OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, "GSA_panel", OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, "GSA_panel", OBJPROP_XDISTANCE, 10);
+      ObjectSetInteger(0, "GSA_panel", OBJPROP_YDISTANCE, 20);
+      ObjectSetInteger(0, "GSA_panel", OBJPROP_FONTSIZE, 9);
+      ObjectSetString(0, "GSA_panel", OBJPROP_FONT, "Consolas");
    }
-   ObjectSetString(0, name, OBJPROP_TEXT, text);
-   ObjectSetInteger(0, name, OBJPROP_COLOR,
+   ObjectSetString(0, "GSA_panel", OBJPROP_TEXT, text);
+   ObjectSetInteger(0, "GSA_panel", OBJPROP_COLOR,
                     stopped ? clrCrimson
                             : (q == QUALITY_PRIME ? clrLimeGreen : clrSilver));
 }
-
 //+------------------------------------------------------------------+

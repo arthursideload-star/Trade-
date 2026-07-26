@@ -646,3 +646,66 @@ ueber 5 % — die Fehler, die diese Community-Datensaetze tatsaechlich haben.
 | O18 | Backtest auf echten historischen M5-Daten | **Werkzeug fertig** — Datei herunterladen und `--source file` |
 | O21 | EA auf echten Broker-Ticks im Strategietester pruefen | offen |
 | O22 | Advisor- gegen Auto-Modus vergleichen (stimmen die Signale mit der Chat-Analyse ueberein?) | offen |
+
+---
+
+## 2026-07-26 (4) — Mobil, Einzeldatei, Neustart-Festigkeit
+
+### E37: Expert Advisors laufen nicht auf dem Handy — sachliche Feststellung
+
+**Frage des Nutzers:** Kann er einen EA (den aus dem MQL5-Markt oder unseren) auf dem Handy
+installieren?
+
+**Antwort: nein.** Die MT5-App fuer iOS und Android hat keine EA-Engine, ebensowenig das
+MT5-Webterminal. Das ist keine Einstellung, sondern eine Plattform-Eigenschaft, und sie gilt
+fuer jeden Expert Advisor gleichermassen.
+
+**Der Weg, der vom iPad aus funktioniert:** ein Windows-VPS, ferngesteuert per
+Remote-Desktop-App. Dokumentiert in `mt5/MOBILE-SETUP.md`. Das ist ohnehin die richtige
+Loesung fuer einen 24/7-Bot — ein EA auf dem eigenen Laptop hoert auf zu arbeiten, sobald
+der Deckel zugeht.
+
+**Empfohlene Reihenfolge, ausdruecklich in der Anleitung:** erst `/trade` im Chat mit
+manueller Ausfuehrung (kostet nichts, man sieht jede Entscheidung), dann EA im Advisor-Modus
+am PC, dann VPS mit Auto-Modus auf Demo, echtes Geld zuletzt. Direkt einen Auto-Bot auf
+einen VPS zu stellen ist technisch machbar und lehrreich ungefaehr null.
+
+### E38: Der EA ist eine einzige, in sich geschlossene Datei
+
+**Entscheidung:** `Risk.mqh` und `Sessions.mqh` wurden in `GoldScalpAssistant.mq5`
+zusammengefuehrt, der `Include`-Ordner entfernt.
+
+**Zwei Gruende:**
+1. **Installation.** Eine Datei nach `MQL5/Experts` kopieren statt einen Verzeichnisbaum
+   anzulegen. Ueber eine Fernwartungsverbindung vom iPad ist das ein spuerbarer Unterschied.
+2. **Eine Kopie jedes Risikolimits.** Zwei Dateien mit denselben Konstanten koennen
+   auseinanderlaufen. Ein Test prueft jetzt zusaetzlich, dass der `Include`-Ordner nicht
+   zurueckkehrt.
+
+### E39: Zustandswiederherstellung beim Neuladen
+
+**Gefunden beim Durchsehen fuer den Auto-Betrieb:** Der EA wird bei jedem
+Zeitrahmenwechsel, jeder Parameteraenderung, jedem Terminal-Neustart und jeder
+VPS-Migration neu geladen. Ohne Vorkehrung waeren dabei zwei Dinge kaputt:
+
+- Eine **offene Position waere unverwaltet** — kein Teilgewinn, kein Break-even, kein
+  Trailing, kein Zeitstop. Nur der urspruengliche Stop haette noch gegriffen.
+- Die **Tageszaehler stuenden auf null**, das Trade-Limit und das Verlustlimit liessen sich
+  also durch einen Neustart umgehen.
+
+**Behoben:** `RebuildDayState()` rekonstruiert Trade-Zahl, Verlustserie und Tages-P/L aus der
+Deal-Historie; `AdoptExistingPosition()` uebernimmt eine bestehende Position und setzt die
+Verwaltung fort. Ob der Teilgewinn schon genommen wurde, wird daran abgelesen, ob der Stop
+bereits auf Einstand steht — im Zweifel gilt "schon genommen", damit nie doppelt verkauft
+wird.
+
+**Eine Ausnahme ohne Verhandlung:** Findet der EA beim Start eine Position **ohne Stop**,
+schliesst er sie. Regel R7 hat keine Ausnahme fuer eine Position, die der EA nicht selbst
+eroeffnet hat.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O23 | VPS-Anbieter auswaehlen, sobald der Auto-Betrieb ansteht | offen (erst nach Schritt 1 und 2 der Reihenfolge) |
+| O24 | Neustart-Wiederherstellung im echten Terminal pruefen (EA neu laden, waehrend eine Position offen ist) | offen |

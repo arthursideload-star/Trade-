@@ -27,19 +27,25 @@ handeln, in denen Golds Spread die Kante auffrisst.
 
 ---
 
+## Geht das auf dem Handy?
+
+**Nein.** Die MT5-App für iOS und Android hat keine EA-Engine — das gilt für jeden Expert
+Advisor, auch für gekaufte aus dem MQL5-Markt. Der Weg, der vom iPad aus funktioniert
+(Windows-VPS per Fernwartung), steht in **[MOBILE-SETUP.md](./MOBILE-SETUP.md)**.
+
 ## Installation
 
-### 1. Dateien kopieren
+### 1. Eine Datei kopieren
 
 In MT5: **Datei → Datenverzeichnis öffnen**. Dann:
 
 ```
 MQL5/Experts/GoldScalpAssistant.mq5        ← aus mt5/Experts/
-MQL5/Include/GoldScalp/Risk.mqh            ← aus mt5/Include/GoldScalp/
-MQL5/Include/GoldScalp/Sessions.mqh        ← aus mt5/Include/GoldScalp/
 ```
 
-Den Ordner `MQL5/Include/GoldScalp/` musst du anlegen.
+Das ist alles. Der EA ist **eine einzige, in sich geschlossene Datei** — kein
+Include-Ordner, nichts anzulegen. Das ist Absicht: Installation über eine
+Fernwartungsverbindung ist umständlich genug ohne Verzeichnisbäume.
 
 ### 2. Kompilieren
 
@@ -67,7 +73,7 @@ auch im Advisor-Modus werden dann keine Meldungen erzeugt.
 ## Einstellungen
 
 Was **nicht** einstellbar ist: Risiko pro Trade, Tagesverlustlimit, Mindest-CRV, maximale
-Trades pro Tag. Die stehen als Konstanten in `Risk.mqh`. Ein Risikolimit, das man um 15:30
+Trades pro Tag. Die stehen als `#define`-Konstanten oben in der EA-Datei. Ein Risikolimit, das man um 15:30
 an einem schlechten Tag im Einstellungsdialog ändern kann, ist kein Limit.
 
 | Einstellung | Standard | Bedeutung |
@@ -142,6 +148,30 @@ Python-Paket muss 100 Unzen pro Lot annehmen und ausdrücklich davor warnen — 
 echten Wert. **An dieser einen Stelle ist die MT5-Version strikt besser.**
 
 ---
+
+## Neustart-Festigkeit
+
+Der EA wird bei **jedem** Zeitrahmenwechsel, jeder Parameteränderung, jedem
+Terminal-Neustart und jeder VPS-Migration neu geladen. Ohne Vorkehrung passiert dabei
+zweierlei, und beides wiegt im Auto-Modus schwer:
+
+- Eine **offene Position wäre unverwaltet** — kein Teilgewinn, kein Break-even, kein
+  Trailing, kein Zeitstop. Nur der ursprüngliche Stop schützt sie noch, also das Schlechteste
+  aus beiden Welten.
+- Die **Tageszähler stünden auf null**, das Trade-Limit und das Verlustlimit ließen sich
+  also durch einen Neustart umgehen.
+
+Beides wird beim Start aus den Aufzeichnungen des Terminals rekonstruiert:
+
+- `RebuildDayState()` zählt die heutigen Deals mit unserer Magic-Nummer und stellt
+  Trade-Zahl, Verlustserie und Tages-P/L wieder her.
+- `AdoptExistingPosition()` übernimmt eine bestehende Position und setzt die Verwaltung
+  fort. Ob der Teilgewinn schon genommen wurde, liest der EA daran ab, ob der Stop bereits
+  auf Einstand steht — im Zweifel gilt „schon genommen", damit er nie doppelt verkauft.
+
+**Eine Ausnahme ohne Verhandlung:** Findet der EA beim Start eine Position **ohne Stop**,
+schließt er sie. Eine Position ohne definierte Invalidierung ist kein Trade, sondern eine
+offene Rechnung (Regel R7) — das gilt auch für eine, die er nicht selbst eröffnet hat.
 
 ## Was der EA anders macht als ein Backtest
 

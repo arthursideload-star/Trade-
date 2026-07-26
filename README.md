@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest und MetaTrader-EA implementiert
-und getestet (268 Tests). Nächster Schritt: Backtest auf echter Historie, dann Journal-Modul.
+und getestet (292 Tests). Nächster Schritt: Backtest auf echter Historie, dann Journal-Modul.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
 > Erwartungswert**. Siehe [docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md).
@@ -23,8 +23,13 @@ und Positionsgröße — und sagt ausdrücklich, **wann du aufhören sollst**. D
 
 ## In MetaTrader 5
 
-Der Assistent läuft auch direkt als Expert Advisor — gleiche Setups, gleiche Risikoregeln.
-Installation und Einstellungen: **[mt5/README.md](./mt5/README.md)**.
+Der Assistent läuft auch direkt als Expert Advisor — gleiche Setups, gleiche Risikoregeln,
+**eine einzige Datei** nach `MQL5/Experts` kopieren. Installation und Einstellungen:
+**[mt5/README.md](./mt5/README.md)**.
+
+**Auf dem Handy geht ein EA nicht** — die MT5-App hat keine EA-Engine, das gilt für jeden
+Expert Advisor. Der Weg, der vom iPad aus funktioniert:
+**[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**.
 
 **Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
 So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
@@ -67,6 +72,7 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/GOLD-SCALPING.md](./docs/GOLD-SCALPING.md)** | Scalping: Setups S1–S6, Ausstiege, wann aufhören, Backtest-Methodik |
 | **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
 | **[mt5/README.md](./mt5/README.md)** | Expert Advisor für MetaTrader 5: Installation, Einstellungen, Strategietester |
+| **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)** | Warum ein EA auf dem Handy nicht geht, und wie es vom iPad aus trotzdem funktioniert |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |
@@ -121,9 +127,11 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-268 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+292 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
-Lookahead.
+Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
+deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die
+getestete Implementierung geprüft, dazu jedes Risikolimit gegen sein Python-Gegenstück.
 
 ## Hinweis
 
