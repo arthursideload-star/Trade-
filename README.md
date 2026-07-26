@@ -3,8 +3,13 @@
 Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/USD)**.
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
-**Aktueller Stand:** Analyse-Engine implementiert und getestet (191 Tests). Wissensbasis und
-Datenquellen-Anbindung stehen. Nächster Schritt: Journal-Modul.
+**Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest und MetaTrader-EA implementiert
+und getestet (268 Tests). Nächster Schritt: Backtest auf echter Historie, dann Journal-Modul.
+
+> **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
+> Erwartungswert**. Siehe [docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md).
+> Belegt ist bislang die Regeldisziplin — korrekte Größen, haltbare Stops, ein Tageslimit
+> das greift. Das ist wertvoll und nicht dasselbe wie eine Kante.
 
 ## Im Chat
 
@@ -16,6 +21,15 @@ Claude analysiert Gold, sagt **hoch / runter / abwarten**, nennt Einstieg, Stop,
 und Positionsgröße — und sagt ausdrücklich, **wann du aufhören sollst**. Definiert in
 [.claude/commands/trade.md](./.claude/commands/trade.md).
 
+## In MetaTrader 5
+
+Der Assistent läuft auch direkt als Expert Advisor — gleiche Setups, gleiche Risikoregeln.
+Installation und Einstellungen: **[mt5/README.md](./mt5/README.md)**.
+
+**Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
+So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
+darf. Der Auto-Modus ist eine bewusste Umschaltung, kein Standard.
+
 ## Auf der Kommandozeile
 
 ```bash
@@ -25,8 +39,14 @@ python -m metals check                          # Was ist erreichbar? Welche Ses
 python -m metals setups scalp                   # Der Scalping-Katalog S1–S6
 python -m metals ratio                          # Gold/Silber-Ratio und Regime
 python -m metals rules                          # Risikoregeln und Kontraktspezifikationen
-python -m metals backtest --source live         # Backtest auf echten Kerzen
+python -m metals backtest --source live         # Backtest, letzte ~60 Tage
+python -m metals backtest --source file \
+    --file XAU_5m_data.csv --tz broker_gmt3     # Backtest auf echter Historie
 ```
+
+Für ein Mehrjahresfenster brauchst du eine **heruntergeladene Datei** — jede kostenlose
+Live-API kappt Intraday-Historie bei 30–60 Tagen. Quellen und die Zeitzonenfalle:
+[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md).
 
 Keine Installation nötig — reine Standardbibliothek, Python 3.11+.
 
@@ -46,10 +66,11 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/GOLD-SILBER.md](./docs/GOLD-SILBER.md)** | Wissensbasis Edelmetalle: Treiber, Sessions, Setups G1–G12, Risiko, typische Fehler |
 | **[docs/GOLD-SCALPING.md](./docs/GOLD-SCALPING.md)** | Scalping: Setups S1–S6, Ausstiege, wann aufhören, Backtest-Methodik |
 | **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
+| **[mt5/README.md](./mt5/README.md)** | Expert Advisor für MetaTrader 5: Installation, Einstellungen, Strategietester |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |
-| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E23 mit Begründungen |
+| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E36 mit Begründungen |
 | **[PLAN.md](./PLAN.md)** | Architektur und Roadmap |
 | **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 
@@ -57,12 +78,15 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 
 ```
 Datenquellen  →  Deterministische Rechner  →  Setup-Erkennung  →  Veto-Ebene  →  Sizing
-(28 Quellen,     (metals/indicators.py,       (metals/setups.py)  (News, R2,     (metals/risk.py)
- 7 Kategorien)    levels.py, patterns.py)                          Session)
-                                    ↓
-                          Claude liest, ordnet ein, erklärt
-                                    ↓
+(28 Quellen +    (indicators, levels,         (setups G1–G12,     (News, R2,     (risk.py,
+ Datei-Import)    patterns)                    scalping S1–S6)     Session)       exits.py)
+                                    ↓                                  ↓
+                       Claude liest, ordnet ein, erklärt      metals/backtest.py
+                                    ↓                          (prüft dieselben Regeln)
                         Empfehlungskarte  →  du entscheidest  →  MT5
+                                                                  ↑
+                                              mt5/GoldScalpAssistant.mq5
+                                              (dieselben Setups, dieselben Limits)
 ```
 
 Die Rechner liefern die harten Zahlen, Claude liefert Einordnung und Begründung. Die
@@ -97,8 +121,9 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-191 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
-aufgezeichnete Antwortformate geprüft.
+268 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
+Lookahead.
 
 ## Hinweis
 

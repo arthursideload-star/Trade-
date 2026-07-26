@@ -196,17 +196,47 @@ def cmd_backtest(args: argparse.Namespace) -> int:
         max_trades_per_day=args.max_trades,
     )
 
-    if args.source == "live":
+    if args.source == "file":
+        from .sources.history import HistoryError, load, resample
+        if not args.file:
+            print("--source file needs --file <path>", file=sys.stderr)
+            return 1
+        if not args.tz:
+            print("--source file needs --tz. There is no default on purpose: "
+                  "the wrong timezone silently corrupts every session rule.\n"
+                  "  Dukascopy / EODHD / Twelve Data -> utc\n"
+                  "  HistData                        -> us_eastern_no_dst\n"
+                  "  MetaTrader or Kaggle bulk export -> broker_gmt2 / broker_gmt3\n"
+                  "  or a signed offset such as '+3'", file=sys.stderr)
+            return 1
+        try:
+            m5, load_report = load(args.file, args.tz, args.symbol,
+                                   args.file_timeframe)
+        except HistoryError as exc:
+            print(f"could not load {args.file}: {exc}", file=sys.stderr)
+            return 1
+        print(load_report.render())
+        print()
+        if args.file_timeframe != "5m":
+            m5 = resample(m5, "5m")
+            print(f"resampled {args.file_timeframe} -> 5m, {len(m5)} bars\n")
+        if load_report.warnings:
+            print("Proceeding despite the warnings above. Read them -- a "
+                  "timezone or gap problem produces a plausible-looking "
+                  "backtest that is wrong.\n")
+        source_label = f"REAL data from {args.file} ({len(m5)} bars, {args.tz})"
+
+    elif args.source == "live":
         from .sources.prices import fetch_candles
         client = HttpClient()
         try:
             m5 = fetch_candles(args.symbol, "5m", args.bars, client).series
         except Exception as exc:  # noqa: BLE001
             print(f"could not fetch live candles: {exc}", file=sys.stderr)
-            print("\nFall back to the simulated market with --source sim, but "
-                  "read the health warning in metals/simulate.py first: "
-                  "simulated results test the machinery, not the strategy.",
-                  file=sys.stderr)
+            print("\nNote that free live APIs cap intraday history at 30-60 "
+                  "days, so --source live cannot produce a multi-year window. "
+                  "For that, download a file and use --source file (see "
+                  "docs/DATENQUELLEN.md).", file=sys.stderr)
             return 1
         source_label = f"live ({m5.source}, {len(m5)} bars)"
     else:
@@ -225,7 +255,7 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     result = run(m5, cfg, data_source=source_label)
     print(report(result))
 
-    if args.source != "live":
+    if args.source == "sim":
         print("\n" + "!" * 72)
         print("These numbers come from a SIMULATED market. They show whether")
         print("the machinery works -- signals fire, R multiples and costs are")
@@ -381,9 +411,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     b = sub.add_parser("backtest", help="run the scalping setups over history")
     b.add_argument("symbol", nargs="?", default="XAUUSD")
-    b.add_argument("--source", choices=("sim", "live"), default="sim",
-                   help="'live' fetches real candles; 'sim' uses the synthetic "
-                        "market (machinery test only -- see simulate.py)")
+    b.add_argument("--source", choices=("sim", "live", "file"), default="sim",
+                   help="'file' reads a downloaded history file (the only way "
+                        "to get a multi-year M5 window); 'live' fetches recent "
+                        "candles from an API; 'sim' uses the synthetic market "
+                        "(machinery test only -- see simulate.py)")
+    b.add_argument("--file", default=None,
+                   help="path to a downloaded OHLCV file")
+    b.add_argument("--tz", default=None,
+                   help="source timezone: utc | us_eastern_no_dst | "
+                        "broker_gmt2 | broker_gmt3 | a signed offset like '+3'")
+    b.add_argument("--file-timeframe", default="5m",
+                   help="timeframe of the file; anything higher-resolution is "
+                        "resampled to 5m")
     b.add_argument("--bars", type=int, default=5000)
     b.add_argument("--seed", type=int, default=42)
     b.add_argument("--spread", type=float, default=0.20,

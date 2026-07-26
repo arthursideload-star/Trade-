@@ -76,6 +76,47 @@ darf den Assistenten nicht stumm schalten.
 - **Liefert:** Spot mit Bid/Ask, LBMA-AM-Fix-Historie
 - **Einsatz:** Als Preis-Gegenprobe gegen den Kerzen-Anbieter.
 
+### Historische M5-Dateien — die einzige Quelle für ein Mehrjahresfenster
+
+**Der wichtigste Punkt zuerst:** Praktisch jede kostenlose Live-API begrenzt Intraday-Historie
+auf die letzten 30–60 Tage. yfinance kappt bei 60 Tagen, TraderMade kostenlos bei 2 Tagen,
+Alpha Vantage hat für Spot-Gold gar keinen echten Intraday-Endpunkt, Finnhub hat den
+Forex-Candle-Endpunkt weitgehend hinter Bezahlpläne verschoben.
+
+**Für 2024–2025 durchgehend brauchst du eine Datei.** Geladen mit
+`metals/sources/history.py`, im Backtest über `--source file`.
+
+| Quelle | Kosten | Tiefe | Zeitzone | Bemerkung |
+|---|---|---|---|---|
+| **Dukascopy** (`pip install dukascopy-python`, MIT) | frei | ~2003 bis heute, kein Limit | **UTC** | Beste freie Quelle mit nachvollziehbarer Herkunft. Schweizer Bank, echte Tickdaten zu Bars verrechnet |
+| **Kaggle** `novandraanugrah/xauusd-gold-price-historical-data` | frei, **CC0** | 2004 bis ~2025/26 | **Brokerzeit, undokumentiert** | Schnellster Weg zu einer fertigen CSV. `XAU_5m_data.csv`, Spalten `Date,Open,High,Low,Close,Volume`, MetaTrader-Zeitformat. Community-Upload, ungeprüft |
+| **HistData.com** | frei | viele Jahre, Monatsdateien | **US Eastern, ohne Sommerzeit** | Nur M1 — muss auf M5 hochgerechnet werden. Statusbericht listet Lücken |
+| **EODHD** | Freistufe 20 Aufrufe/Tag | M5 ab Oktober 2020 | UTC | Günstigste tiefe M5-Historie. 600-Tage-Fenster pro Anfrage — zwei Aufrufe decken 2024–2025 |
+| **Twelve Data** | frei 800/Tag, Grow ab 29 €/Mon | Metalle intraday wenige Monate bis ~1 Jahr | konfigurierbar (UTC setzen!) | Sauberstes offizielles Python-SDK. 5.000 Bars pro Anfrage = ~17 Handelstage, also viel Paginierung |
+| **MT5 deines Brokers** | frei | brokerabhängig (100.000 Bars bis ~2005) | **Brokerzeit** | Kommt deinen echten Fills am nächsten. Export: Extras → Verlaufsdaten |
+| Stooq M5 | frei | nur ~2.000 Bars (~1 Monat) | — | Zu flach |
+
+**Die Zeitzonenfalle.** Die Quellen widersprechen sich, und eine falsch verschobene Reihe
+zerstört jede Session-Regel **lautlos** — die London-Open-Setups würden mitten in der
+Asien-Session feuern, und an den Zahlen sieht man nichts.
+
+Deshalb hat `load()` **keinen Standardwert** für die Zeitzone. Sie muss angegeben werden:
+
+```bash
+python -m metals backtest --source file --file XAU_5m_data.csv --tz broker_gmt3
+```
+
+Der Lader prüft gegen: Er rechnet nach, ob die volatilsten Stunden dort liegen, wo sie bei
+Gold liegen müssen (12:00–17:00 UTC, der London/NY-Overlap), und warnt, wenn nicht. Dazu
+werden Duplikate, unmögliche OHLC-Zeilen, Wochenend-Bars, Lücken und absurde Sprünge
+gemeldet.
+
+**Volumen-Vorbehalt:** Alle Spot-Gold-Quellen liefern **Tick-Volumen**, nicht gehandelte
+Kontrakte. Echtes Volumen gibt es nur bei COMEX-Futures (GC), und dafür nur kostenpflichtig.
+
+**Spot ≠ Futures:** XAU/USD-Spot und GC-Futures korrelieren, sind aber nicht identisch
+(Basis, Roll-Lücken). Niemals in einer Reihe mischen.
+
 ---
 
 ## 2. Makro — die Ebene, die Gold erklärt

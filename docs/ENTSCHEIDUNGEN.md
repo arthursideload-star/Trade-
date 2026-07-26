@@ -560,3 +560,89 @@ nicht wegdiskutiert.
 | O18 | Backtest auf echten historischen M5-Daten | **offen — im interaktiven Chat mit `--source live`** |
 | O19 | Setup-Konfidenzen auf echten Daten kalibrieren | offen |
 | O20 | Ausstiegsstruktur final festlegen, nachdem echte Daten vorliegen | offen |
+
+---
+
+## 2026-07-26 (3) — MetaTrader-Anbindung und echte Historie
+
+### E32: Expert Advisor fuer MT5, startet im Advisor-Modus
+
+**Entscheidung (Nutzer):** Der Bot soll direkt in MetaTrader nutzbar sein. Umgesetzt als
+`mt5/Experts/GoldScalpAssistant.mq5` mit den Setups S2, S4, S5 und denselben harten
+Risikoregeln wie das Python-Paket.
+
+**Standardmodus ist ADVISOR, nicht AUTO.** Der EA zeichnet, rechnet und meldet, platziert
+aber keine Order. Begruendung: Die Strategie hat keinen nachgewiesenen positiven
+Erwartungswert (E28-E30). Ein EA, der beim ersten Start selbstaendig handelt, setzt eine
+Behauptung um, die noch nicht belegt ist. Der Advisor-Modus erlaubt es, die Einschaetzung
+des Systems gegen die eigene zu halten, bevor es etwas ausgeben darf.
+
+### E33: Positionsgroesse in MT5 ueber den Tickwert des Brokers
+
+**Entscheidung:** Der EA rechnet die Losgroesse ueber `SYMBOL_TRADE_TICK_VALUE` und
+`SYMBOL_TRADE_TICK_SIZE`, nicht ueber eine angenommene Kontraktgroesse.
+
+**Begruendung:** Das Python-Paket muss 100 Unzen pro Lot annehmen und ausdruecklich davor
+warnen (offener Punkt O14). Das Terminal kennt den echten Wert. An dieser einen Stelle ist
+die MT5-Version strikt besser als die Python-Version, und die Silber-Kontraktgroessenfrage
+loest sich dort von selbst.
+
+### E34: Drei Broker-Randbedingungen, die es im Backtest nicht gibt
+
+Aus der Analyse des freien MQL5-Produkts "Gold Scalper for MT5" (Nachfolger des
+Goldfinch-EA) uebernommen — dessen dokumentierte Risiken betreffen diesen Code direkt:
+
+1. **Mindest-Stop-Abstand** (`SYMBOL_TRADE_STOPS_LEVEL`). Bei Gold oft 10-50 Punkte. Ein
+   Scalping-Stop darunter wird vom Server abgelehnt. Der EA weitet den Stop und
+   protokolliert es.
+2. **Teilgewinn kann unmoeglich sein.** Faellt eine Seite der 60/40-Teilung unter die
+   Mindest-Lotgroesse, geht kein Teilverkauf. Der EA schliesst dann vollstaendig und nennt
+   den Grund — besser ein kleiner Gewinn als eine abgelehnte Order, waehrend der Preis
+   weglaeuft.
+3. **Phantom-Trades bei duenner Tick-Dichte.** Im Strategietester erzeugt jede Modellierung
+   ausser "Jeder Tick basierend auf realen Ticks" bei Scalping Trades, die live nicht
+   zustande kaemen. Steht als Warnung in `mt5/README.md`.
+
+**Fachliche Bestaetigung nebenbei:** Goldfinch handelt Volatilitaets-Expansion — die
+Traegheit nach einer ploetzlichen Preisbeschleunigung. Das ist dieselbe Idee wie Setup S5,
+unabhaengig entstanden. Und: Der EA hat Pflicht-Stop, kein Martingale, kein Grid — dieselben
+Grundsaetze wie R6/R7 hier.
+
+### E35: Historische Daten kommen aus einer Datei, nicht aus einer API
+
+**Sachlage** (aus der Nutzer-Recherche, PDF vom 2026-07-26): Praktisch jede kostenlose
+Live-API begrenzt Intraday-Historie auf 30-60 Tage. yfinance 60 Tage, TraderMade kostenlos
+2 Tage, Alpha Vantage hat fuer Spot-Gold gar keinen Intraday-Endpunkt, Finnhub hat den
+Forex-Candle-Endpunkt weitgehend hinter Bezahlplaene verschoben.
+
+**Entscheidung:** Neues Modul `metals/sources/history.py` laedt heruntergeladene Dateien.
+Unterstuetzt die Formate, in denen diese Downloads tatsaechlich ankommen: Dukascopy (UTC),
+Kaggle/MetaTrader (Brokerzeit), HistData (US Eastern ohne Sommerzeit), generisch.
+
+**Empfohlene Quellen:** Dukascopy (`dukascopy-python`, MIT, nachvollziehbare Herkunft, UTC,
+keine Tiefenbegrenzung) oder der Kaggle-Datensatz `novandraanugrah/xauusd-gold-price-
+historical-data` (CC0, fertige CSV, aber Community-Upload und Brokerzeit).
+
+### E36: Die Zeitzone hat bewusst keinen Standardwert
+
+**Entscheidung:** `history.load()` verlangt die Quell-Zeitzone als Pflichtargument. Kein
+Default, kein Raten.
+
+**Begruendung:** Die Quellen widersprechen sich (UTC / US Eastern ohne DST / Brokerzeit
+undokumentiert), und eine falsch verschobene Reihe zerstoert jede Session-Regel **lautlos**.
+Die London-Open-Setups wuerden mitten in der Asien-Session feuern, und an den Backtest-Zahlen
+sieht man nichts. Ein falscher Standardwert ist schlimmer als ein Fehler.
+
+**Zusaetzliche Absicherung:** Der Lader rechnet nach, ob die volatilsten Stunden dort liegen,
+wo sie bei Gold liegen muessen (12:00-17:00 UTC, London/NY-Overlap), und warnt, wenn nicht.
+Dazu Pruefung auf Duplikate, unmoegliche OHLC-Zeilen, Wochenend-Bars, Luecken und Spruenge
+ueber 5 % — die Fehler, die diese Community-Datensaetze tatsaechlich haben.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O14 | Kontraktgroesse XAGUSD | **im MT5-EA geloest** (Tickwert des Brokers); im Python-Paket weiterhin offen |
+| O18 | Backtest auf echten historischen M5-Daten | **Werkzeug fertig** — Datei herunterladen und `--source file` |
+| O21 | EA auf echten Broker-Ticks im Strategietester pruefen | offen |
+| O22 | Advisor- gegen Auto-Modus vergleichen (stimmen die Signale mit der Chat-Analyse ueberein?) | offen |

@@ -152,11 +152,17 @@ wird der komplette Ausstiegsplan **vor** dem Einstieg festgelegt.
 
 | Element | Scalp | Intraday | Swing |
 |---|---|---|---|
-| Erstes Ziel | 1,0R | 1,5R | 2,0R |
+| Erstes Ziel | **0,5R** | 1,5R | 2,0R |
 | Anteil dort | 60 % | 50 % | 50 % |
 | Runner-Ziel | 2,5R | 3,0R | 4,0R |
 | Trailing | 1,2 × ATR | 1,5 × ATR | 2,0 × ATR |
 | Zeitstop | 45 Min | 240 Min | 1 Tag |
+
+Das erste Ziel beim Scalp steht auf **0,5R statt der üblichen 1,0R**, weil es gemessen ist:
+Verlierer erreichten im Schnitt +0,47R, bevor sie scheiterten — das Teilziel bei 1,0R lag
+also knapp jenseits des Punktes, an dem die meisten drehten. Verschiebung auf 0,5R:
+Erwartungswert −0,182 → −0,109R, verlierende Läufe 94 % → 83 %. Vollständig in
+`docs/BACKTEST-ERGEBNISSE.md` Abschnitt 6b.
 
 ### III.2 Das „gemischte CRV" — die ehrliche Zahl
 
@@ -306,6 +312,37 @@ werden muss, um korrekt eingebaut zu werden.
 | [JoelPasapera/ExpertAdvisory](https://github.com/JoelPasapera/ExpertAdvisory) | — | Ansatz schneller Massen-Backtests über lange Historien |
 | [soloshun/Quantitative-XAUUSD-Strategy](https://github.com/soloshun/Quantitative-XAUUSD-Strategy) | — | Session-Dynamik als eigene Modellierungsfrage |
 | [clayandthepotter/ai-gold-scalper](https://github.com/clayandthepotter/ai-gold-scalper) | — | Regime-Erkennung als eigene Schicht vor der Setup-Auswahl |
+| [MQL5 „Gold Scalper for MT5"](https://www.mql5.com/en/market/product/178437) (Goldfinch-Nachfolger) | kostenlos, geschlossen | Broker-Randbedingungen, die es im Backtest nicht gibt — siehe unten |
+
+### Was das freie MQL5-Produkt lehrt
+
+„Gold Scalper for MT5" ist die neueste Fassung des vor rund zehn Jahren erschienenen
+**Goldfinch-EA**. Er handelt **Volatilitäts-Expansion**: die Trägheit im Preis nach einer
+plötzlichen Beschleunigung.
+
+**Bestätigung nebenbei:** Das ist exakt die Idee hinter Setup **S5** hier — unabhängig
+entstanden. Und der EA hat **Pflicht-Stop, kein Martingale, kein Grid** — dieselben
+Grundsätze wie R6/R7. Wo zwei unabhängige Systeme zum selben Aufbau kommen, ist das ein
+schwaches, aber echtes Argument dafür.
+
+**Wertvoller sind die dokumentierten Risiken**, weil sie diesen Code direkt betreffen und im
+Python-Backtest gar nicht auftreten können:
+
+| Risiko | Was es bedeutet | Umsetzung hier |
+|---|---|---|
+| **Mindest-Stop-Abstand** | `SYMBOL_TRADE_STOPS_LEVEL`: bei Gold oft 10–50 Punkte. Ein engerer Stop wird vom Server **abgelehnt** | EA weitet den Stop und protokolliert es |
+| **Phantom-Trades bei dünner Tick-Dichte** | Im Strategietester erzeugt jede Modellierung außer „reale Ticks" Trades, die live nie zustande kämen | Warnung in `mt5/README.md` |
+| **Variable Spreads und Slippage** | Reduzieren den Erwartungswert eines Scalps direkt | S6-Spread-Gate, Kosten immer im Backtest |
+| **Requotes und Netzlatenz** | Der Preis beim Absenden ist nicht der Preis beim Füllen | Deviation 20 Punkte, Stop wird **mit** der Order gesendet |
+
+Der letzte Punkt ist der wichtigste und im EA ausdrücklich umgesetzt: **Nie eine nackte Order
+senden und den Stop danach nachtragen.** Die Lücke zwischen beidem ist genau der Moment, in
+dem sich Gold bewegt.
+
+**Und eine Einordnung, die dazugehört:** „Scalping auf Ticks ist von Natur aus riskant"
+steht in der Produktbeschreibung selbst. Ein Anbieter, der das schreibt, statt Renditen zu
+versprechen, verdient mehr Vertrauen als einer mit Gewinnkurven — auch wenn das nichts
+darüber sagt, ob die Strategie funktioniert.
 
 ### Kritische Einordnung der veröffentlichten Zahlen
 
