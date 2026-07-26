@@ -84,8 +84,11 @@ Container. Das ist die häufigste Verwechslung — dazu gleich mehr in A4.
 
 Beim Projekt `metatrader-5-iore` auf **Zugriff → Öffnen ↗** tippen.
 
-Es öffnet sich ein neuer Tab mit einer Adresse wie `http://168…….…:3000`. Die `3000` am Ende
+Es öffnet sich ein neuer Tab mit einer Adresse wie `http://<deine-IP>:32768`. Die Zahl hinten
 ist die Tür-Nummer, hinter der MT5 sitzt — nicht wundern.
+
+> In den Containerdetails steht sie als **`32768:3000`**. Links die Tür von außen, rechts die
+> von innen. Nach außen zählt die linke.
 
 **Was jetzt passiert, hängt davon ab, wie das Template eingerichtet wurde:**
 
@@ -94,18 +97,65 @@ ist die Tür-Nummer, hinter der MT5 sitzt — nicht wundern.
   Aber lies A2 trotzdem, der Sicherheitshinweis gilt dann erst recht.
 - **Es lädt gar nicht / „Verbindung fehlgeschlagen"** → siehe „Häufige Probleme" unten.
 
-### A2. Falls nach Zugangsdaten gefragt wird
+### A2. Der Anmeldedialog — und warum er immer wiederkommt
 
-Das sind **nicht** dein Hostinger-Login und **nicht** das Root-Passwort. Es sind zwei Werte,
-die beim Bereitstellen des Templates gesetzt wurden und `CUSTOM_USER` und `PASSWORD` heißen.
+Es erscheint ein dunkles Kästchen: **„Bei 168.…….… anmelden — Dein Passwort wird
+unverschlüsselt übertragen"**, darunter *Benutzername* und *Passwort*.
 
-Nachsehen: Docker Manager → beim Projekt auf **Verwalten** → dort nach
-**Umgebungsvariablen** (englisch *Environment variables*) suchen. Dort stehen beide.
+**Das ist die häufigste Sackgasse der ganzen Einrichtung.** Typischer Ablauf: man tippt
+seinen Namen oder seine E-Mail ein, tippt auf *Anmelden*, die Seite lädt kurz — und derselbe
+Dialog steht wieder da, diesmal leer. Es sieht aus, als würde nichts passieren.
 
-> **Kurz und ernst gemeint:** Diese Adresse ist aus dem ganzen Internet erreichbar, und
-> gleich hängt ein Handelskonto daran. Wenn dort ein kurzes oder offensichtliches Passwort
-> steht, ändere es **jetzt**, bevor du in A3 dein Konto verbindest. Und nimm nicht dasselbe
-> wie beim Root-Zugang — sonst hat wer das eine hat, auch das andere.
+**Es passiert sehr wohl etwas.** Der Server prüft, lehnt ab und fragt erneut. Das ist eine
+HTTP-Basisauthentifizierung; abgelehnt heißt hier „nochmal", nicht „Fehler". Es gibt keine
+Meldung *„Passwort falsch"* — der leere Dialog **ist** die Meldung.
+
+**Es sind weder dein Name noch deine E-Mail, weder dein Hostinger-Login noch das
+Root-Passwort.** Es sind zwei Werte namens `CUSTOM_USER` und `PASSWORD`, die beim
+Bereitstellen des Templates gesetzt wurden.
+
+**Weg 1 — im YAML-Editor nachsehen (ohne Tippen):**
+
+Docker Manager → beim Projekt **Verwalten** → auf der Seite nach unten scrollen, bis unter
+den Containerdetails die Reiter **Visueller Editor** / **`.yaml-Editor`** erscheinen →
+auf **`.yaml-Editor`** tippen. Dort steht die Konfiguration im Klartext, darin zwei Zeilen
+dieser Art:
+
+```yaml
+    environment:
+      - CUSTOM_USER=…
+      - PASSWORD=…
+```
+
+Was hinter dem `=` steht, gehört in den Dialog.
+
+**Weg 2 — den Container selbst fragen:**
+
+In den Containerdetails auf **Terminal ↗** und eintippen:
+
+```bash
+env | grep -iE "custom_user|password"
+```
+
+Es kommen zwei Zeilen der Form `CUSTOM_USER=…` und `PASSWORD=…`.
+
+> **Das Terminal fragt nicht nach diesem Passwort.** Es geht über das Hostinger-Panel, an der
+> Anmeldung vorbei. Praktische Folge: Du kannst **A4 (EA installieren) sofort machen**, auch
+> wenn du noch nicht in MT5 hineinkommst.
+
+**Weg 3 — falls beide Werte leer oder gar nicht vorhanden sind:** Dann probiere
+Benutzername `abc`, Passwort `abc`. Das ist der Standard der Basis-Images, auf denen dieses
+Template aufbaut. Falls auch das nicht geht: im `.yaml-Editor` eigene Werte eintragen und
+das Projekt neu bereitstellen.
+
+**Beim Eintippen aufpassen:** iOS macht aus dem ersten Buchstaben gern einen Großbuchstaben
+und hängt Leerzeichen an. Beides bricht die Anmeldung. Groß-/Kleinschreibung zählt.
+
+> **Kurz und ernst gemeint:** Der Dialog sagt selbst, dass das Passwort **unverschlüsselt**
+> übertragen wird (`http://`, nicht `https://`), und gleich hängt ein Handelskonto daran.
+> Für ein Demokonto in zwei Tagen ist das vertretbar. Für echtes Geld ist es das nicht —
+> dann braucht es vorher einen verschlüsselten Zugang. Und nimm hier **nicht** dasselbe
+> Passwort wie beim Root-Zugang oder beim Broker.
 
 ### A3. Beim Broker anmelden
 
@@ -133,6 +183,10 @@ Verbindung". Und oben in der Kontoübersicht muss **Demo** stehen.
 
 Jetzt die einzige Stelle, an der du tippen statt tippen-auf-Knöpfe machst. Ist halb so wild —
 ich erkläre jede Zeile.
+
+> **Das geht auch, wenn A2 noch klemmt.** Das Terminal läuft über das Hostinger-Panel und
+> fragt nicht nach dem MT5-Passwort. Wenn du im Anmeldedialog feststeckst, mach hier weiter
+> und hol A2 danach nach — dann ist die Datei schon da, wenn du reinkommst.
 
 **Ein „Terminal" ist ein schwarzes Fenster mit einer Eingabezeile.** Du schreibst einen
 Befehl, drückst **Enter**, und der Computer antwortet mit Text. Immer nur **eine Zeile auf
@@ -505,7 +559,9 @@ du behalten willst, vorher sichern:
 
 | Symptom | Was los ist und was du tust |
 |---|---|
-| „Öffnen" fragt nach Passwort, du kennst keins | Docker Manager → beim Projekt **Verwalten** → **Umgebungsvariablen**. Dort stehen `CUSTOM_USER` und `PASSWORD` |
+| **Anmeldedialog kommt nach jedem Versuch leer zurück** | Zugangsdaten falsch. Das ist die Fehlermeldung — eine andere gibt es nicht. Siehe A2 |
+| „Öffnen" fragt nach Passwort, du kennst keins | **Verwalten → `.yaml-Editor`**, Zeilen `CUSTOM_USER=` und `PASSWORD=`. Oder im Container-Terminal `env \| grep -iE "custom_user\|password"` |
+| Zugangsdaten stimmen, es geht trotzdem nicht | iOS-Autokorrektur: Großbuchstabe am Anfang oder Leerzeichen am Ende. Groß-/Kleinschreibung zählt |
 | „Öffnen" lädt nicht, „Verbindung fehlgeschlagen" | Container gestoppt. Docker Manager → Status prüfen. Steht dort nicht „In Betrieb": *Weitere Aktionen → Starten* |
 | Terminal antwortet `No such file or directory` bei `ls -d /config/.wine` | Du bist im **VPS-Terminal** statt im Container. Tab zu, den Terminal-Knopf **bei „Zugriff"** nehmen, nicht den oben auf der Seite |
 | `wget: command not found` | Seltener Fall, anderes Image. Stattdessen `curl -L -o GoldScalpAssistant.mq5 <dieselbe Adresse>` |
