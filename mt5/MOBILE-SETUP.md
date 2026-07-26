@@ -16,6 +16,7 @@ anderen.
 | **MT5 iOS / Android App** | ❌ **nein** |
 | **MT5 Webterminal** | ❌ **nein** |
 | **Windows-VPS, ferngesteuert vom iPad** | ✅ **ja — das ist dein Weg** |
+| **MT5-Docker-Container auf einem VPS, bedient im Browser** | ✅ **ja — und am wenigsten Aufwand** |
 
 Was auf dem Handy **schon** geht: Charts ansehen, Trades manuell eröffnen und schließen,
 Positionen überwachen, Push-Benachrichtigungen empfangen. Nur eben nichts Automatisches.
@@ -26,6 +27,12 @@ Positionen überwachen, Push-Benachrichtigungen empfangen. Nur eben nichts Autom
 
 Du mietest einen kleinen Windows-Server, steuerst ihn per Fernwartungs-App vom iPad, und
 MT5 läuft dort dauerhaft — auch wenn dein iPad aus ist.
+
+> **Kürzerer Weg, falls dein Anbieter ihn hat:** Manche VPS-Anbieter (unter anderem
+> Hostinger) bieten MT5 als **Docker-Template** an. Dann läuft MT5 unter Wine in einem
+> Container und wird über **KasmVNC direkt im Browser** bedient — kein Windows, keine
+> Remote-Desktop-App, nur Safari. Schritt für Schritt in
+> **[VPS-SETUP.md](./VPS-SETUP.md)**, Teil A.
 
 **Das ist ohnehin die richtige Lösung für einen 24/7-Bot.** Ein EA auf dem eigenen Laptop
 hört auf zu arbeiten, sobald der Deckel zugeht oder das WLAN wackelt.

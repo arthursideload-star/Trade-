@@ -1,34 +1,119 @@
 # VPS-Setup — MT5 auf Hostinger, gesteuert vom iPad
 
-Ziel: MetaTrader 5 läuft auf deinem VPS dauerhaft, du bedienst ihn per
-Remote-Desktop-App vom iPad, der EA arbeitet weiter wenn dein iPad aus ist.
-
-**Zeitbedarf:** 30–60 Minuten beim ersten Mal.
+Ziel: MetaTrader 5 läuft auf deinem VPS dauerhaft, du bedienst ihn vom iPad, der EA arbeitet
+weiter wenn dein iPad aus ist.
 
 ---
 
-## Schritt 0 — Welches Betriebssystem hast du?
+## Schritt 0 — Welchen Weg hast du?
 
-Das entscheidet alles Weitere. Schau im Hostinger-Kundenbereich unter **VPS → dein Server →
-Übersicht** nach.
+| Was auf dem VPS läuft | Weg | Zeitbedarf |
+|---|---|---|
+| **Hostinger Docker-Template „MetaTrader 5"** | **Teil A** | ~15 Minuten |
+| Windows Server | Teil B | ~30 Minuten |
+| Nacktes Ubuntu/Debian, kein Template | Teil C | ~60 Minuten |
 
-| OS | Weg |
-|---|---|
-| **Windows Server** | Teil A. Einfach: MT5 herunterladen, fertig. |
-| **Ubuntu / Debian / AlmaLinux** | Teil B. Etwas mehr Arbeit, funktioniert aber gut. |
-
-Hostinger verkauft überwiegend **Linux-VPS** (KVM-Pläne). Wenn du nicht ausdrücklich Windows
-gewählt hast, ist es Linux → **Teil B**.
-
-Falls dein Plan einen OS-Wechsel erlaubt und Windows dabei ist: Das spart dir Teil B
-komplett. Im Panel unter **Betriebssystem → Neu installieren** nachsehen. Achtung: Dabei
-wird der Server zurückgesetzt.
+Nachsehen im Hostinger-Panel unter **VPS → dein Server → Docker Manager**. Steht dort ein
+Projekt namens `metatrader-5-…` auf **„In Betrieb"**, ist es **Teil A** — dann ist MT5 schon
+installiert und du überspringst B und C komplett.
 
 ---
 
-## Teil A — Windows-VPS
+## Teil A — MT5 läuft schon als Docker-Container
 
-### A1. Verbinden
+Das Hostinger-Template ist MetaTrader 5 unter Wine, bedient über **KasmVNC im Browser**
+(Port 3000). Es braucht keinen Remote-Desktop, keine App — nur Safari auf dem iPad.
+
+### A1. MT5 öffnen
+
+Hostinger-Panel → **VPS → Docker Manager** → beim Projekt `metatrader-5-…` auf
+**Zugriff → Öffnen**.
+
+Es fragt nach Benutzername und Passwort. Das sind die, die bei der Bereitstellung des
+Templates gesetzt wurden (`CUSTOM_USER` / `PASSWORD`) — nicht dein Root-Passwort. Wenn du sie
+nicht mehr weißt: **Verwalten → Umgebungsvariablen**.
+
+> **Sicherheit, kurz und ernst:** Dieser Port ist aus dem ganzen Internet erreichbar und
+> dahinter liegt ein Handelskonto. Wenn das Passwort schwach oder Standard ist, ändere es
+> jetzt, bevor irgendein Konto verbunden wird. Nicht dasselbe wie das Root-Passwort nehmen.
+
+### A2. Beim Broker anmelden
+
+In MT5: **Datei → Handelskonto öffnen** bzw. **Mit Handelskonto verbinden** → Login,
+Passwort und Server deines **Demokontos** eintragen.
+
+Steht PuPrime nicht in der Serverliste: Servernamen von Hand eintippen. Er steht in der
+Kontoeröffnungs-E-Mail.
+
+### A3. EA in den Container kopieren
+
+Das geht ohne Datei-Upload — der Container holt sich die Datei selbst. Im Hostinger-Panel
+beim Docker-Projekt auf **Zugriff → Terminal**, dann:
+
+```bash
+find / -type d -path "*MQL5/Experts" 2>/dev/null
+```
+
+Erwartet wird ein Pfad in dieser Art:
+
+```
+/config/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts
+```
+
+Diesen Pfad unten einsetzen (die Anführungszeichen sind wegen der Leerzeichen nötig):
+
+```bash
+cd "/config/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
+wget -O GoldScalpAssistant.mq5 \
+  https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/trading-bot-plan-4uj86r/mt5/Experts/GoldScalpAssistant.mq5
+wc -l GoldScalpAssistant.mq5
+```
+
+**Erwartet: `1377 GoldScalpAssistant.mq5`.** Steht dort eine andere Zahl oder eine Fehlermeldung,
+ist die Datei nicht vollständig angekommen — dann nicht weitermachen, sondern mir die Ausgabe
+schicken.
+
+> Findet `find` mehrere Pfade, nimm den unter `Program Files/MetaTrader 5/`. Findet es gar
+> keinen, öffne in MT5 **Datei → Datenverzeichnis öffnen** — der Pfad steht dann in der
+> Titelzeile des Fensters.
+
+### A4. Kompilieren
+
+Zurück im MT5-Fenster im Browser: den **IDE-Knopf** in der Symbolleiste (öffnet MetaEditor;
+**F4** funktioniert über VNC oft nicht, weil der Browser die Taste abfängt).
+
+Links im Navigator unter *Experts* auf `GoldScalpAssistant.mq5` → **Kompilieren** (oder F7).
+
+**Erwartet: `0 errors, 0 warnings`.**
+
+> **Wenn Fehler kommen:** Zeilennummern und Text abschreiben oder abfotografieren und mir
+> schicken. Ich kann hier nicht kompilieren — das ist der erste echte Test des EA.
+
+### A5. Auf den Chart
+
+- **XAUUSD** öffnen, Zeitrahmen **M5**
+- EA aus dem Navigator auf den Chart ziehen
+- Reiter **Allgemein**: Haken bei *Algo-Trading erlauben* → OK
+- In der Symbolleiste **Algo-Trading** grün schalten
+
+Oben links erscheint das Panel. Steht dort `[ADVISOR]` — richtig, so soll es anfangen.
+
+### A6. Weiterlaufen lassen
+
+Hier ist es einfacher als bei Windows: **Browser-Tab einfach zumachen.** Der Container läuft
+auf dem VPS weiter, MT5 ebenfalls. VNC ist nur die Fernbedienung.
+
+Nicht tun: im Docker Manager auf *Stoppen* oder *Neu starten*.
+
+Zum Prüfen: Tab schließen, 10 Minuten warten, wieder öffnen. Ist das Panel aktuell, läuft es.
+
+**Weiter bei Schritt E.**
+
+---
+
+## Teil B — Windows-VPS
+
+### B1. Verbinden
 
 Auf dem iPad die App **„Windows App"** (früher *Microsoft Remote Desktop*) aus dem App Store
 installieren — kostenlos.
@@ -37,35 +122,38 @@ Neue Verbindung anlegen mit den Daten aus dem Hostinger-Panel:
 - **PC-Name:** die IP-Adresse deines VPS
 - **Benutzerkonto:** `Administrator` + dein VPS-Passwort
 
-### A2. MT5 installieren
+### B2. MT5 installieren
 
 Im Remote-Desktop den Browser öffnen → PuPrime-Kundenbereich → **MT5 für Windows**
 herunterladen → installieren → mit deinem **Demokonto** anmelden.
 
-Weiter bei **Schritt C**.
+Weiter bei **Schritt D**.
 
 ---
 
-## Teil B — Linux-VPS (Ubuntu)
+## Teil C — Linux-VPS ohne Template
 
-Drei Dinge sind nötig: eine grafische Oberfläche, ein Fernzugang dorthin, und MT5 über Wine.
+Nur nötig, wenn kein MT5-Docker-Projekt existiert. Drei Dinge fehlen: eine grafische
+Oberfläche, ein Fernzugang dorthin, und MT5 über Wine.
 
-### B1. Per SSH verbinden
+> **Der bequemere Weg:** Statt das alles von Hand zu bauen, im Hostinger-Panel unter
+> **VPS → Katalog** nach *MetaTrader* suchen und das Template bereitstellen — dann bist du
+> bei Teil A. Das hier ist der Weg für den Fall, dass das Template nicht in Frage kommt.
 
-Auf dem iPad brauchst du eine SSH-App. **Termius** ist kostenlos und funktioniert gut.
+### C1. Per SSH verbinden
 
-Verbindung anlegen mit IP, Benutzer `root` und dem Passwort aus dem Hostinger-Panel.
+Auf dem iPad eine SSH-App — **Termius** ist kostenlos. Verbindung mit IP, Benutzer `root`
+und dem Passwort aus dem Hostinger-Panel.
 
-### B2. Desktop und Fernzugang installieren
-
-Diese Befehle nacheinander eingeben. Der zweite dauert einige Minuten.
+### C2. Desktop und Fernzugang installieren
 
 ```bash
 apt update && apt upgrade -y
 apt install -y xfce4 xfce4-goodies xrdp
 ```
 
-Bei einer Rückfrage nach dem Display-Manager: **lightdm** wählen.
+Bei der Rückfrage nach dem Display-Manager: **lightdm** wählen. Der zweite Befehl dauert
+einige Minuten.
 
 ```bash
 echo "xfce4-session" > ~/.xsession
@@ -76,17 +164,14 @@ ufw allow 3389/tcp
 
 Falls `ufw` nicht aktiv ist, ist auch das in Ordnung — dann ist der Port ohnehin offen.
 
-### B3. Vom iPad verbinden
+### C3. Vom iPad verbinden
 
-Jetzt dieselbe **„Windows App"** wie in Teil A:
-- **PC-Name:** deine VPS-IP
-- **Benutzer:** `root` + VPS-Passwort
+Dieselbe **„Windows App"** wie in Teil B, aber Benutzer `root` + VPS-Passwort. Du solltest
+einen XFCE-Desktop sehen.
 
-Du solltest einen XFCE-Desktop sehen.
+### C4. MT5 installieren
 
-### B4. MT5 installieren
-
-**Im Remote-Desktop** ein Terminal öffnen (Anwendungen → Terminal) und eingeben:
+**Im Remote-Desktop** ein Terminal öffnen (Anwendungen → Terminal):
 
 ```bash
 wget https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5ubuntu.sh
@@ -94,62 +179,42 @@ chmod +x mt5ubuntu.sh
 ./mt5ubuntu.sh
 ```
 
-Das ist das **offizielle Installationsskript von MetaQuotes**. Es installiert Wine und MT5
-und startet den Installer. Beim ersten Lauf dauert es 10–20 Minuten und lädt einiges herunter.
-
-Danach: MT5 startet, mit deinem **Demokonto** anmelden.
-
-> **Wenn PuPrime nicht in der Serverliste steht:** Im Anmeldedialog den Servernamen von Hand
-> eintippen. Er steht in deiner Kontoeröffnungs-E-Mail von PuPrime.
+Das ist das **offizielle Installationsskript von MetaQuotes**. Es installiert Wine und MT5.
+Beim ersten Lauf 10–20 Minuten. Danach mit dem **Demokonto** anmelden.
 
 ---
 
-## Schritt C — EA installieren (gilt für beide Wege)
+## Schritt D — EA installieren (Teil B und C)
 
-### C1. Datei auf den VPS holen
+### D1. Datei holen
 
 Im Browser **auf dem VPS** öffnen:
 
 ```
-https://github.com/arthursideload-star/Trade-/blob/claude/trading-bot-plan-4uj86r/mt5/Experts/GoldScalpAssistant.mq5
+https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/trading-bot-plan-4uj86r/mt5/Experts/GoldScalpAssistant.mq5
 ```
 
-Auf **Raw** klicken, dann Rechtsklick → **Seite speichern unter**.
+Rechtsklick → **Seite speichern unter**. Wohin? In MT5: **Datei → Datenverzeichnis öffnen** →
+Ordner `MQL5/Experts`.
 
-Wohin? In MT5: **Datei → Datenverzeichnis öffnen** → Ordner `MQL5/Experts`.
+Es ist **eine einzige Datei**, sonst nichts. 1377 Zeilen.
 
-Es ist **eine einzige Datei**, sonst nichts.
+### D2. Kompilieren
 
-### C2. Kompilieren
-
-In MT5 **F4** → MetaEditor öffnet sich → links `GoldScalpAssistant.mq5` anklicken → **F7**.
-
+In MT5 **F4** → MetaEditor → links `GoldScalpAssistant.mq5` → **F7**.
 Erwartet: `0 errors, 0 warnings`.
 
-> **Wenn Fehler kommen:** Schick mir die Zeilennummern und den Text. Ich kann hier nicht
-> kompilieren, also ist das der erste echte Test.
+### D3. Auf den Chart
 
-### C3. Auf den Chart
+Wie in A5: XAUUSD, M5, EA draufziehen, *Algo-Trading erlauben*, Knopf grün.
 
-- **XAUUSD** öffnen, Zeitrahmen **M5**
-- EA aus dem Navigator auf den Chart ziehen
-- Reiter **Allgemein**: Haken bei *Algo-Trading erlauben* → OK
-- In der Symbolleiste den Knopf **Algo-Trading** grün schalten
+### D4. Damit es nach dem Zumachen weiterläuft
 
-Oben links erscheint das Panel. Steht dort `[ADVISOR]` — richtig.
+**Wichtig, sonst war alles umsonst:** Trennst du die Remote-Desktop-Verbindung, läuft MT5
+weiter. Meldest du dich **ab**, nicht.
 
----
-
-## Schritt D — Damit es nach dem Zumachen weiterläuft
-
-**Wichtig, sonst war alles umsonst:** Wenn du die Remote-Desktop-Verbindung einfach trennst,
-läuft MT5 weiter. Wenn du dich **abmeldest**, nicht.
-
-- **Windows:** Im Remote-Desktop einfach das **X** oben schließen, *nicht* Start → Abmelden.
-- **Linux/xrdp:** Fenster schließen, *nicht* Abmelden. Die Sitzung bleibt.
-
-Zum Prüfen: iPad zuklappen, 10 Minuten warten, wieder verbinden. Steht MT5 noch da und ist
-das Panel aktuell, läuft es.
+- **Windows:** Im Remote-Desktop das **X** oben schließen, *nicht* Start → Abmelden.
+- **Linux/xrdp:** Fenster schließen, *nicht* Abmelden.
 
 ---
 
@@ -157,9 +222,9 @@ das Panel aktuell, läuft es.
 
 Reihenfolge, die etwas bringt:
 
-1. **Demokonto auf einen realistischen Betrag stellen.** Bei PuPrime im Kundenbereich ein
-   neues Demokonto mit **1.000 USD** anlegen. Nicht 100.000 — dann lernst du Größen, die du
-   später nie handeln wirst. Und nicht 55, dann lehnt der EA jeden Trade ab (siehe unten).
+1. **Demokonto auf einen realistischen Betrag stellen.** Beim Broker ein Demokonto mit
+   **1.000 USD** anlegen. Nicht 100.000 — dann lernst du Größen, die du später nie handeln
+   wirst. Und nicht 55, dann lehnt der EA jeden Trade ab (siehe unten).
 
 2. **Advisor-Modus laufen lassen.** Er meldet Setups, platziert aber nichts. Vergleiche seine
    Vorschläge mit dem, was du selbst gemacht hättest.
@@ -215,8 +280,6 @@ Grundlage, um Geld darauf zu setzen, das du zurückholen musst.
 
 ### Was ich stattdessen vorschlage
 
-Der VPS läuft ohnehin noch 1–2 Tage. Nutz ihn für das, wofür er taugt:
-
 - **Heute:** einrichten, Demo mit 1.000 USD, Advisor-Modus.
 - **Heute Abend:** zusehen, mitschreiben. Kostet nichts.
 - **Morgen:** Auto-Modus auf Demo, weiter beobachten.
@@ -228,14 +291,28 @@ Stunden Arbeit — und die dann in ein System zu stecken, dessen Kante noch nich
 ist die teure Reihenfolge. Wenn das Geld ohnehin da ist, ist gegen ein größeres Demokonto
 nichts einzuwenden; das kostet nämlich gar nichts.
 
+### Wenn der VPS ausläuft
+
+Läuft die Laufzeit ab, ist der Container weg — inklusive kompiliertem EA und Journal. Was
+du behalten willst, vorher sichern:
+
+- Die `.mq5` liegt ohnehin auf GitHub, die ist sicher.
+- **Journal und Kontoauszug** vor dem Ablauf exportieren: MT5 → **Kontohistorie →
+  Rechtsklick → Bericht → XLSX**, Datei über den Browser herunterladen.
+
 ---
 
 ## Häufige Probleme
 
 | Symptom | Ursache |
 |---|---|
+| Docker: „Öffnen" fragt nach Passwort, keins bekannt | Docker Manager → Verwalten → Umgebungsvariablen (`CUSTOM_USER` / `PASSWORD`) |
+| Docker: Seite lädt nicht | Container gestoppt. Docker Manager → Status prüfen, ggf. starten |
+| `wget` schreibt „Permission denied" | Im Container-Terminal statt im VPS-Terminal arbeiten (Zugriff → Terminal beim Projekt) |
+| `wc -l` zeigt nicht 1377 | Download unvollständig oder falscher Pfad. Datei löschen, erneut laden |
+| F4 öffnet nichts | Über VNC fängt der Browser die Taste ab — den **IDE-Knopf** in der Symbolleiste nutzen |
 | Remote Desktop verbindet nicht | Port 3389 blockiert. Hostinger-Panel → Firewall → 3389/TCP freigeben |
-| Linux: schwarzer Bildschirm nach dem Login | `echo "xfce4-session" > ~/.xsession` vergessen, dann `systemctl restart xrdp` |
+| Linux: schwarzer Bildschirm nach Login | `echo "xfce4-session" > ~/.xsession` vergessen, dann `systemctl restart xrdp` |
 | MT5 startet nicht (Linux) | Wine-Installation unvollständig. `./mt5ubuntu.sh` erneut ausführen |
 | EA-Panel erscheint nicht | Algo-Trading nicht grün, oder EA nicht auf den Chart gezogen |
 | Panel zeigt dauernd `AVOID` | Wochenende, Rollover (21–23 UTC) oder Markt geschlossen. Richtig so |

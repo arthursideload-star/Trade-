@@ -313,5 +313,37 @@ class TestSourceFilesExistAndAreSane(unittest.TestCase):
             self.assertNotIn(forbidden, text)
 
 
+class TestSetupGuideStaysTrue(unittest.TestCase):
+    """The VPS guide tells the user to verify the download by line count.
+
+    That check is only useful while the number is right, and the number
+    lives in prose that no compiler will ever look at.
+    """
+
+    GUIDE = os.path.join(MT5_DIR, "VPS-SETUP.md")
+
+    def _guide(self):
+        with open(self.GUIDE, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_stated_line_count_matches_the_file(self):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            lines = sum(1 for _ in fh)
+        self.assertIn(f"{lines} GoldScalpAssistant.mq5", self._guide(),
+                      "the guide's expected `wc -l` output no longer matches "
+                      "the EA -- a user following it would think the download "
+                      "failed")
+        self.assertIn(f"{lines} Zeilen", self._guide())
+
+    def test_the_download_url_points_at_the_file_that_exists(self):
+        """A raw URL cannot be resolved offline, so check its shape: the
+        branch this project develops on, and the path the EA really has."""
+        guide = self._guide()
+        self.assertIn("refs/heads/claude/trading-bot-plan-4uj86r"
+                      "/mt5/Experts/GoldScalpAssistant.mq5", guide)
+        self.assertTrue(EA_PATH.endswith(
+            os.path.join("mt5", "Experts", "GoldScalpAssistant.mq5")))
+
+
 if __name__ == "__main__":
     unittest.main()
