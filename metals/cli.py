@@ -1,0 +1,288 @@
+"""Command line interface.
+
+    python -m metals analyse XAUUSD --equity 10000
+    python -m metals quote XAGUSD
+    python -m metals ratio
+    python -m metals sources
+    python -m metals check
+    python -m metals rules
+    python -m metals size XAUUSD --entry 4500 --stop 4488 --target 4530 --equity 10000
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from datetime import datetime, timezone
+
+from .risk import RULES, AccountState, size_position
+from .sessions import classify
+from .sources.http import HttpClient
+from .sources.registry import SOURCES, coverage_report
+from .specs import SPECS, get_vol_profile
+
+
+def cmd_analyse(args: argparse.Namespace) -> int:
+    from .analyze import analyse
+
+    account = AccountState(
+        equity=args.equity,
+        realised_pnl_today=args.pnl_today,
+        open_positions=args.open_positions,
+        open_risk_pct=args.open_risk,
+    )
+    client = HttpClient(cache_ttl=args.cache_ttl)
+    try:
+        rec = analyse(args.symbol, account, client=client,
+                      spread_usd_oz=args.spread)
+    except Exception as exc:  # noqa: BLE001 - the CLI reports, it does not crash
+        print(f"analysis failed: {exc}", file=sys.stderr)
+        print("\nMost common causes:", file=sys.stderr)
+        print("  - no network access from this environment", file=sys.stderr)
+        print("  - TWELVEDATA_API_KEY not set and the fallback provider is "
+              "unreachable", file=sys.stderr)
+        return 1
+    print(rec.render())
+    print(f"\n({client.request_count} HTTP request(s) made)")
+    return 0 if rec.actionable or rec.action == "no_trade" else 1
+
+
+def cmd_quote(args: argparse.Namespace) -> int:
+    from .sources.prices import cross_check, fetch_quote
+
+    client = HttpClient()
+    quotes = []
+    for symbol in args.symbols:
+        try:
+            q = fetch_quote(symbol, client)
+            quotes.append(q)
+            spread = f"  spread {q.spread:.3f}" if q.spread is not None else ""
+            print(f"{q.symbol:8s} {q.price:>12,.3f}  ({q.source}){spread}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"{symbol:8s} unavailable: {exc}", file=sys.stderr)
+    if len(quotes) >= 2 and len({q.symbol for q in quotes}) == 1:
+        ok, note = cross_check(quotes)
+        print(f"\ncross-check: {'OK' if ok else 'MISMATCH'} -- {note}")
+    return 0 if quotes else 1
+
+
+def cmd_ratio(args: argparse.Namespace) -> int:
+    from . import gsr
+    from .sources.prices import fetch_candles
+
+    client = HttpClient()
+    try:
+        gold = fetch_candles("XAUUSD", "1d", 250, client).series
+        silver = fetch_candles("XAGUSD", "1d", 250, client).series
+        state = gsr.analyse(gold, silver)
+    except Exception as exc:  # noqa: BLE001
+        print(f"ratio unavailable: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Gold/Silver ratio: {state.ratio:.2f}  [{state.band}]")
+    print(f"  20-period trend: {state.trend_20}  (leader: {state.leader})")
+    print(f"  regime:          {state.regime}")
+    if state.zscore is not None:
+        print(f"  z-score:         {state.zscore:+.2f}")
+    if state.percentile is not None:
+        print(f"  percentile:      {state.percentile:.0f}")
+    for note in state.notes:
+        print(f"\n  {note}")
+    pair = gsr.pair_trade_note(state)
+    if pair:
+        print(f"\n  {pair}")
+    return 0
+
+
+def cmd_sources(args: argparse.Namespace) -> int:
+    by_cat: dict[str, list] = {}
+    for s in SOURCES.values():
+        by_cat.setdefault(s.category.value, []).append(s)
+
+    for cat in sorted(by_cat):
+        print(f"\n{cat.upper()}")
+        print("-" * 68)
+        for s in sorted(by_cat[cat], key=lambda x: x.priority):
+            mark = {"none": "free ", "free_key": "key  ", "paid": "paid "}[s.auth.value]
+            ready = ""
+            if s.env_var:
+                ready = " [READY]" if os.environ.get(s.env_var) else f" [needs {s.env_var}]"
+            print(f"  [{mark}] {s.name}{ready}")
+            print(f"           {s.url}")
+            if s.limit:
+                print(f"           limit: {s.limit}")
+            for p in s.provides:
+                print(f"           - {p}")
+            if s.caveat and args.verbose:
+                print(f"           caveat: {s.caveat}")
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Report what the assistant can currently see, and what is missing."""
+    report = coverage_report(dict(os.environ))
+    print("DATA COVERAGE")
+    print("-" * 68)
+    print(f"active sources:    {len(report['active'])}")
+    print(f"blocked sources:   {len(report['blocked'])}")
+    print(f"categories covered: {', '.join(report['categories_covered'])}")
+    if report["categories_missing"]:
+        print(f"categories MISSING: {', '.join(report['categories_missing'])}")
+
+    blocked = report["blocked"]
+    if blocked:
+        print("\nSet these to unlock more sources:")
+        seen: set[str] = set()
+        for key, env in blocked:
+            if env and env not in seen:
+                seen.add(env)
+                names = [s.name for s in SOURCES.values() if s.env_var == env]
+                print(f"  {env:24s} -> {', '.join(names)}")
+
+    print("\nSESSION")
+    print("-" * 68)
+    state = classify(datetime.now(timezone.utc))
+    print(f"  {state.session.value} ({state.quality.value})")
+    for r in state.reasons:
+        print(f"  - {r}")
+
+    if not args.no_network:
+        print("\nLIVE REACHABILITY")
+        print("-" * 68)
+        client = HttpClient(cache_ttl=0, retries=0, timeout=8.0)
+        _probe(client)
+    return 0
+
+
+def _probe(client: HttpClient) -> None:
+    from .sources.news import FEEDS, fetch_feed
+    from .sources.prices import fetch_quote
+
+    checks: list[tuple[str, object]] = [
+        ("gold spot", lambda: fetch_quote("XAUUSD", client)),
+        ("silver spot", lambda: fetch_quote("XAGUSD", client)),
+    ]
+    for key in list(FEEDS)[:3]:
+        checks.append((f"news:{key}", lambda k=key: fetch_feed(client, k)))
+
+    try:
+        from .sources.macro import fetch_series
+        checks.append(("macro:DFII10", lambda: fetch_series("DFII10", client)))
+    except Exception:  # noqa: BLE001
+        pass
+
+    for name, fn in checks:
+        try:
+            result = fn()  # type: ignore[operator]
+            detail = ""
+            if isinstance(result, list):
+                detail = f" ({len(result)} items)"
+            print(f"  OK    {name}{detail}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  FAIL  {name}: {str(exc)[:90]}")
+
+
+def cmd_rules(args: argparse.Namespace) -> int:
+    print("HARD RISK RULES (in code, not configuration -- changing one "
+          "requires a commit)")
+    print("=" * 68)
+    for key, text in RULES.items():
+        print(f"  {key:4s} {text}")
+    print("\nCONTRACT SPECIFICATIONS")
+    print("=" * 68)
+    for sym in ("XAUUSD", "XAGUSD"):
+        spec = SPECS[sym]
+        vol = get_vol_profile(sym)
+        print(f"  {spec.symbol}: 1 lot = {spec.contract_size_oz:,.0f} oz, "
+              f"1.00 USD/oz move = {spec.value_per_dollar_move:,.0f} USD/lot")
+        print(f"    typical H1 ATR band: {vol.band('h1')[0]:g} - "
+              f"{vol.band('h1')[2]:g} USD/oz")
+        print(f"    {spec.notes}")
+    return 0
+
+
+def cmd_size(args: argparse.Namespace) -> int:
+    account = AccountState(equity=args.equity, realised_pnl_today=args.pnl_today)
+    atr_value = args.atr
+    if atr_value is None:
+        vol = get_vol_profile(args.symbol)
+        atr_value = vol.band("h1")[1]
+        print(f"note: no --atr given, using the typical H1 value "
+              f"({atr_value:g} USD/oz) from the reference profile. Pass the "
+              f"real ATR from your chart for an accurate check.\n")
+
+    direction = "long" if args.target > args.entry else "short"
+    plan = size_position(
+        args.symbol, direction, args.entry, args.stop, args.target,
+        account, atr_value, risk_pct=args.risk, spread_usd_oz=args.spread,
+    )
+    print(plan.summary())
+    if plan.warnings:
+        print("\nWARNINGS")
+        for w in plan.warnings:
+            print(f"  ! {w}")
+    if plan.blocks:
+        print("\nBLOCKED")
+        for b in plan.blocks:
+            print(f"  x {b}")
+    return 0 if plan.approved else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="metals",
+        description="Gold and silver trading assistant -- deterministic "
+                    "calculators for XAU/USD and XAG/USD.",
+    )
+    sub = p.add_subparsers(dest="command", required=True)
+
+    a = sub.add_parser("analyse", help="full top-down analysis")
+    a.add_argument("symbol", nargs="?", default="XAUUSD")
+    a.add_argument("--equity", type=float, default=10_000.0)
+    a.add_argument("--risk", type=float, default=1.0)
+    a.add_argument("--pnl-today", type=float, default=0.0)
+    a.add_argument("--open-positions", type=int, default=0)
+    a.add_argument("--open-risk", type=float, default=0.0)
+    a.add_argument("--spread", type=float, default=None,
+                   help="current spread in USD per ounce, from your platform")
+    a.add_argument("--cache-ttl", type=float, default=60.0)
+    a.set_defaults(func=cmd_analyse)
+
+    q = sub.add_parser("quote", help="current spot price")
+    q.add_argument("symbols", nargs="*", default=["XAUUSD", "XAGUSD"])
+    q.set_defaults(func=cmd_quote)
+
+    r = sub.add_parser("ratio", help="gold/silver ratio state")
+    r.set_defaults(func=cmd_ratio)
+
+    s = sub.add_parser("sources", help="list every data source")
+    s.add_argument("-v", "--verbose", action="store_true")
+    s.set_defaults(func=cmd_sources)
+
+    c = sub.add_parser("check", help="what the assistant can currently see")
+    c.add_argument("--no-network", action="store_true")
+    c.set_defaults(func=cmd_check)
+
+    ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
+    ru.set_defaults(func=cmd_rules)
+
+    z = sub.add_parser("size", help="size a trade you already have levels for")
+    z.add_argument("symbol")
+    z.add_argument("--entry", type=float, required=True)
+    z.add_argument("--stop", type=float, required=True)
+    z.add_argument("--target", type=float, required=True)
+    z.add_argument("--equity", type=float, required=True)
+    z.add_argument("--risk", type=float, default=1.0)
+    z.add_argument("--atr", type=float, default=None)
+    z.add_argument("--spread", type=float, default=None)
+    z.add_argument("--pnl-today", type=float, default=0.0)
+    z.set_defaults(func=cmd_size)
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)

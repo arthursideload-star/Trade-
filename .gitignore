@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Environments -- API keys live here and must never be committed
+.env
+.env.*
+venv/
+.venv/
+
+# Local journal data (contains account figures)
+journal/
+*.journal.json

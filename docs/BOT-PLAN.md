@@ -1,8 +1,17 @@
 # Bau- und Betriebsplan des Trading-Assistenten
 
-Stand: 2026-07-25. Dieses Dokument ist so geschrieben, dass ein **neuer Chat** direkt danach
-bauen kann. Es verfeinert Phase A aus `PLAN.md` mit der Entscheidung, **Claude selbst als Gehirn**
-zu nutzen.
+Stand: 2026-07-25, aktualisiert 2026-07-26. Dieses Dokument ist so geschrieben, dass ein
+**neuer Chat** direkt danach bauen kann. Es verfeinert Phase A aus `PLAN.md` mit der
+Entscheidung, **Claude selbst als Gehirn** zu nutzen.
+
+> **Aktualisierung 2026-07-26 (Entscheidung E18):** Der Marktscope für Phase A ist von
+> „Forex allgemein" auf **Gold (XAU/USD) und Silber (XAG/USD)** verengt worden. Die
+> Architektur unten gilt unverändert; die konkrete Umsetzung liegt im Paket `metals/`, die
+> fachliche Grundlage in **[GOLD-SILBER.md](./GOLD-SILBER.md)** und der Quellenkatalog in
+> **[DATENQUELLEN.md](./DATENQUELLEN.md)**.
+>
+> **Stand der Sprints:** B1 bis B5 sind umgesetzt (Daten, Rechner, Muster, Orchestrierung,
+> News-Veto + Kalender). Offen ist B6 (Journal).
 
 ---
 
@@ -123,15 +132,20 @@ Direkt aus TRADING-WISSEN.md und den Projektgrundsätzen (CLAUDE.md: Risikolimit
 
 ## 5. Bau-Plan (Sprints für den neuen Chat)
 
-| Sprint | Inhalt | Ergebnis |
-|---|---|---|
-| **B1** | Projektgerüst als Claude-Code-Skills-Projekt; Twelve-Data-Anbindung; erste Kerzen | Daten fließen |
-| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen |
-| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt |
-| **B4** | Top-Down-Orchestrierung durch Claude + Empfehlungskarte (Teil XXVI.3) | Erste echte Empfehlung |
-| **B5** | News-MCP-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz |
-| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit |
-| **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale |
+| Sprint | Inhalt | Ergebnis | Stand |
+|---|---|---|---|
+| **B1** | Projektgerüst; Datenquellen-Anbindung mit Fallback-Ketten; erste Kerzen | Daten fließen | ✅ `metals/sources/` |
+| **B2** | Deterministische Rechner (Trend/Regime, Indikatoren, Level, ATR, Größe, R:R) | Zahlen stehen | ✅ `metals/indicators.py`, `levels.py`, `risk.py` |
+| **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt | ✅ `metals/patterns.py`, `setups.py` (G1–G12) |
+| **B4** | Top-Down-Orchestrierung + Empfehlungskarte | Erste echte Empfehlung | ✅ `metals/analyze.py` |
+| **B5** | News-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz | ✅ `metals/sources/news.py`, `calendar.py` |
+| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit | **offen** |
+| **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale | zurückgestellt |
+
+**Anmerkung zu B5:** Statt eines autorisierungspflichtigen MCP-Servers werden RSS-Feeds der
+Primärquellen (Fed, EZB) plus GDELT genutzt. Das braucht keinen Schlüssel, keine
+Autorisierung und keine Sitzungsbindung — und die Fed veröffentlicht ihre Statements selbst
+per RSS, also ist es zugleich die direktere Quelle.
 
 **Wichtig für den neuen Chat:** Zuerst den Branch `claude-trading-skills` als Vorlage ansehen —
 vieles (Position-Sizer, Technical-Analyst, Backtest-Expert) ist dort schon implementiert und kann
@@ -143,15 +157,20 @@ adaptiert statt neu gebaut werden.
 
 1. **Broker-Demo offen** (MT5, PuPrime oder später IC Markets) — zum Ausführen der Trades.
 2. **Claude-Sitzung öffnen** (Handy/iPad), Projekt geladen.
-3. **Fragen:** „Analysiere EUR/USD" (oder ein anderes Paar).
+3. **Fragen:** „Analysiere Gold" oder „Analysiere Silber".
 4. Claude liefert die **Empfehlungskarte**: Richtung, Konfidenz, Einstieg, Stop, Ziel, R:R,
-   Begründung, Warnungen.
+   Begründung, Warnungen, Datenqualität — und wie das Setup typischerweise scheitert.
 5. **Du entscheidest** und führst den Trade **manuell in MT5** aus.
 6. **Journal:** Ergebnis eintragen (Claude hilft dabei).
 7. **Wöchentlich:** Auswertung — funktioniert es? (Erwartungswert, Prozess-Treue).
 
-Bester Zeitpunkt: **London/NY-Overlap (ca. 12–16 Uhr UTC)** — engste Spreads, klarste Bewegungen
-(Teil XIII.2). News-Tage meiden (Teil XXIV).
+Bester Zeitpunkt: **London/NY-Overlap** — engste Spreads, klarste Bewegungen. Der genaue
+UTC-Zeitraum verschiebt sich mit der Sommerzeit und wird im Code berechnet
+(`python -m metals check` zeigt die aktuelle Session). News-Tage meiden.
+
+**Vor dem ersten Silber-Trade:** Kontraktgröße in der MT5-Symbolspezifikation prüfen. Sie
+beträgt bei den meisten Brokern 5.000 Unzen, bei manchen 1.000 — das ist ein Faktor 5 in der
+Positionsgröße (offener Punkt O14).
 
 ---
 
@@ -170,17 +189,23 @@ Bester Zeitpunkt: **London/NY-Overlap (ca. 12–16 Uhr UTC)** — engste Spreads
 
 ## 8. Bestätigte Roadmap (Nutzer-Entscheidungen)
 
-- **Phase A (jetzt):** **nur Forex**, Halbautomat als **Chat/Skills-Projekt**. Du klickst die
-  Trades selbst in MT5. Kein echtes Geld, PuPrime-Demo.
+- **Phase A (jetzt):** **Gold und Silber** (E18, zuvor Forex allgemein), Halbautomat als
+  **Chat/Skills-Projekt**. Du klickst die Trades selbst in MT5. Kein echtes Geld,
+  PuPrime-Demo.
 - **Phase A.5 (optional):** kleines **gehostetes Dashboard** für den Überblick, wenn gewünscht.
 - **Phase B (mit Startkapital):** **Vollautomat** 24/7, der möglichst täglich automatisch handelt,
   **plus Website/Dashboard**. Braucht dann Anthropic-API (Claude im Loop) oder einen
   deterministischen Bot — Entscheidung zu Phase-B-Start. Broker für echtes Geld dann festlegen
   (Empfehlung: IC Markets, Tier-1).
 
-## 9. Offene Punkte für den neuen Chat
+## 9. Offene Punkte
 
-- Twelve-Data-API-Key (kostenlos) anlegen.
-- Konkrete MCP-Namen/Autorisierung der beiden hinzugefügten Server (News, Disclosure) — in der
-  interaktiven Sitzung freigeben.
-- Aktien/Krypto-Marktscope erst nach bewährtem Forex-Halbautomaten.
+- **Kontraktgröße XAGUSD** beim eigenen Broker prüfen (O14) — vor dem ersten Silber-Trade.
+- **Twelve-Data-API-Key** (kostenlos) anlegen. Ohne ihn läuft alles über Yahoo/Stooq; mit ihm
+  ist die Kerzenqualität besser.
+- **Journal-Modul** (Sprint B6) implementieren.
+- **Live-Erreichbarkeit** der Endpunkte im interaktiven Chat prüfen: `python -m metals check`.
+  In der automatischen Build-Session ist das wegen der Netzwerk-Policy nicht möglich.
+- **Setup-Konfidenzen kalibrieren**, sobald 30+ Trades pro Setup im Journal stehen. Bis dahin
+  sind es begründete Schätzungen, keine Messwerte.
+- Aktien/Krypto-Marktscope erst nach bewährtem Metall-Halbautomaten.

@@ -363,3 +363,99 @@ hinzugefuegt): weltweite **Nachrichten** und **Disclosure-/"Insider"-Daten**.
 - **Phase A.5 (optional):** kleines gehostetes Dashboard fuer den Ueberblick.
 - **Phase B (mit Kapital):** Vollautomat 24/7 + Website/Dashboard. Autonomie-Technik und Kosten
   werden zu Phase-B-Start entschieden.
+
+---
+
+## 2026-07-26 — Spezialisierung auf Edelmetalle
+
+### E18: Marktfokus auf Gold (XAU/USD) und Silber (XAG/USD)
+
+**Entscheidung (Nutzer, 2026-07-26):** Der Assistent wird gezielt auf **Gold und Silber**
+ausgelegt statt auf Forex allgemein. Begruendung des Nutzers: schnelle Bewegungen in beide
+Richtungen, erkennbare Muster und Kerzen.
+
+**Umsetzung:** Neues Python-Paket `metals/` mit Kontraktspezifikationen, Indikatoren,
+Level-Erkennung, metallspezifischer Mustererkennung, Setup-Katalog G1–G12, Risikoregeln und
+Top-Down-Orchestrierung. Wissensbasis in `docs/GOLD-SILBER.md`.
+
+**Fachliche Einordnung, die zur Entscheidung gehoert:** Die Beobachtung des Nutzers stimmt —
+Gold bewegt sich normal 60–100 USD/oz am Tag, an Nachrichtentagen 150–300, deutlich mehr als
+die meisten Waehrungspaare. Dieselbe Volatilitaet macht aber jeden Groessenfehler um denselben
+Faktor teurer. Deshalb wurden sechs metallspezifische Risikoregeln **zusaetzlich** zu R1–R8
+fest im Code verankert (siehe E19). Ohne diese waere die Spezialisierung eine Risikoerhoehung
+statt einer Chancenverbesserung.
+
+**Was ausdruecklich nicht gilt:** "Schnell Geld machen" ist kein Projektziel und keine
+realistische Erwartung. Hoehere Volatilitaet erhoeht die Streuung der Ergebnisse, nicht ihren
+Erwartungswert. Der Erwartungswert kommt aus der Regeltreue.
+
+### E19: Sechs metallspezifische Risikoregeln M1–M6 im Code
+
+**Entscheidung:** Zusaetzlich zu R1–R8 gelten fuer Metalle:
+
+| # | Regel | Grund |
+|---|---|---|
+| M1 | Stop nie enger als 1,0 × ATR(14) | Enger ist Rauschen; ein normaler Docht nimmt ihn mit |
+| M2 | Stop 0,25 × ATR **jenseits** des Levels, nie darauf | Gold greift durch Levels, um Stops zu holen |
+| M3 | Kein Einstieg bei Spread > 15 % des ATR | Sonst wird die Kante an den Broker gezahlt |
+| M4 | Gold und Silber teilen **ein** Risikobudget von 1,5 % | Ihre Korrelation macht zwei Positionen zu einer |
+| M5 | Freitag ab 19:00 UTC flat | Wochenend-Gaps ≥ 5 USD in ~35 % der Wochen; ein Stop schuetzt nicht |
+| M6 | Stops nicht auf runden Zahlen | Orderfluss buendelt sich dort |
+
+**Ort:** `metals/risk.py`, als Modulkonstanten. Nach Projektregel (CLAUDE.md) nicht aus
+Konfiguration oder Umgebungsvariablen lesbar — eine Aenderung erfordert einen Commit.
+
+### E20: Kanonische Einheit ist USD pro Feinunze, nicht "Pips"
+
+**Entscheidung:** Im gesamten `metals/`-Paket wird nie in Pips gerechnet.
+
+**Begruendung:** Bei Gold ist "Pip" mehrdeutig. Ein Teil der Broker und Lehrquellen nennt 0,01
+einen Pip (1 USD pro Standardlot), ein anderer Teil 0,10 (10 USD pro Lot). Wer eine Formel aus
+der einen Quelle mit einer Zahl aus der anderen kombiniert, sizet um den Faktor 10 falsch. Die
+Umrechnung in Lots passiert genau einmal, in `metals/risk.size_position`, ueber die
+Kontraktgroesse in Unzen.
+
+### E21: Datenquellen — alle Kategorien ohne API-Schluessel abgedeckt
+
+**Entscheidung:** 28 Quellen in sieben Kategorien angebunden (`metals/sources/registry.py`,
+dokumentiert in `docs/DATENQUELLEN.md`). Jede Kategorie ist **ohne einen einzigen Schluessel**
+nutzbar; Schluessel verbessern Aufloesung und Zuverlaessigkeit.
+
+**Begruendung:** Der Assistent muss am ersten Tag funktionieren, ohne dass der Nutzer sich erst
+bei fuenf Anbietern registriert. Fallback-Ketten sorgen dafuer, dass ein erschoepftes
+Gratis-Kontingent den Assistenten nicht stumm schaltet.
+
+### E22: Das News-Veto versagt geschlossen
+
+**Entscheidung:** Ist die Nachrichtenebene nicht erreichbar, **blockiert** der Assistent, statt
+anzunehmen, dass nichts passiert ist.
+
+**Praezisierung nach einem Testfund:** GDELT allein zaehlt **nicht** als erreichbare
+Nachrichtenebene. GDELT misst weltweite Berichterstattungsmenge, nicht Schlagzeilen der Quellen,
+die Geldpolitik fuehren — ein Durchlauf, in dem nur GDELT antwortet, haette ein FOMC-Statement
+nicht gesehen. Erforderlich ist mindestens ein kuratierter Feed (Fed, EZB, Kitco, GoldSeek,
+Mining.com).
+
+**Begruendung:** Bei Gold blind durch einen CPI-Druck zu handeln ist der dokumentierte Weg, ein
+Konto in einer Kerze zu halbieren. Spreads weiten sich auf ein Vielfaches, und die erste
+Spike-Richtung ist in ueber 40 % der Faelle falsch.
+
+### E23: Kein Gold-Silber-Ratio-Pairtrade auf diesem Konto
+
+**Entscheidung:** Die Ratio wird zur **Regime-Erkennung und Instrumentenwahl** genutzt, nicht
+als Spread-Trade gehandelt.
+
+**Begruendung:** Der klassische Trade (bei Ratio > 80 Silber long / Gold short) braucht zwei
+Positionen, zwei Spreads und zwei Swaps bei einem Konvergenzhorizont von Monaten. Die
+historischen Extreme hielten ueber ein Jahr an — darauf laesst sich kein 1-%-Risiko-Stop legen.
+Der Code nennt diese Gruende ausdruecklich, wenn ein Extrem erreicht wird, statt den Trade
+kommentarlos vorzuschlagen oder ihn zu verschweigen.
+
+### Offene Punkte (Ergaenzung)
+
+| # | Frage | Status |
+|---|---|---|
+| O14 | Kontraktgroesse XAGUSD beim eigenen Broker (5.000 oder 1.000 Unzen?) | **offen — vor dem ersten Silber-Trade in MT5 pruefen** |
+| O15 | Setup-Konfidenzen sind kalibrierte Schaetzungen, keine gemessenen Trefferquoten | offen bis 30+ Trades pro Setup im Journal |
+| O16 | Journal-Modul (Erfassung, MAE/MFE, Prozess-Note) | noch nicht implementiert |
+| O17 | Live-Erreichbarkeit aller Endpunkte | in der Build-Session nicht pruefbar (Netzpolicy); im interaktiven Chat mit `python -m metals check` pruefen |
