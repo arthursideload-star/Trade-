@@ -30,8 +30,11 @@ handeln, in denen Golds Spread die Kante auffrisst.
 ## Geht das auf dem Handy?
 
 **Nein.** Die MT5-App für iOS und Android hat keine EA-Engine — das gilt für jeden Expert
-Advisor, auch für gekaufte aus dem MQL5-Markt. Der Weg, der vom iPad aus funktioniert
-(Windows-VPS per Fernwartung), steht in **[MOBILE-SETUP.md](./MOBILE-SETUP.md)**.
+Advisor, auch für gekaufte aus dem MQL5-Markt. Warum das so ist und welche Wege es
+stattdessen gibt: **[MOBILE-SETUP.md](./MOBILE-SETUP.md)**.
+
+Wenn du bereits einen VPS hast und ihn heute einrichten willst — Schritt für Schritt,
+Windows *und* Linux: **[VPS-SETUP.md](./VPS-SETUP.md)**.
 
 ## Installation
 

@@ -29,7 +29,9 @@ Der Assistent läuft auch direkt als Expert Advisor — gleiche Setups, gleiche 
 
 **Auf dem Handy geht ein EA nicht** — die MT5-App hat keine EA-Engine, das gilt für jeden
 Expert Advisor. Der Weg, der vom iPad aus funktioniert:
-**[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**.
+**[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**. Wenn ein VPS schon da ist, führt
+**[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** Schritt für Schritt durch die Einrichtung —
+Windows und Linux.
 
 **Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
 So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
@@ -44,6 +46,7 @@ python -m metals check                          # Was ist erreichbar? Welche Ses
 python -m metals setups scalp                   # Der Scalping-Katalog S1–S6
 python -m metals ratio                          # Gold/Silber-Ratio und Regime
 python -m metals rules                          # Risikoregeln und Kontraktspezifikationen
+python -m metals minimum XAUUSD --equity 55     # Reicht mein Konto für dieses Metall?
 python -m metals backtest --source live         # Backtest, letzte ~60 Tage
 python -m metals backtest --source file \
     --file XAU_5m_data.csv --tz broker_gmt3     # Backtest auf echter Historie
@@ -73,10 +76,11 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
 | **[mt5/README.md](./mt5/README.md)** | Expert Advisor für MetaTrader 5: Installation, Einstellungen, Strategietester |
 | **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)** | Warum ein EA auf dem Handy nicht geht, und wie es vom iPad aus trotzdem funktioniert |
+| **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS in 30–60 Minuten einrichten (Windows und Linux), EA installieren, erster Demo-Abend |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |
-| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E36 mit Begründungen |
+| **[docs/ENTSCHEIDUNGEN.md](./docs/ENTSCHEIDUNGEN.md)** | Entscheidungsprotokoll E1–E40 mit Begründungen |
 | **[PLAN.md](./PLAN.md)** | Architektur und Roadmap |
 | **[CLAUDE.md](./CLAUDE.md)** | Projektregeln für die Zusammenarbeit |
 

@@ -16,7 +16,8 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
-from .risk import RULES, AccountState, size_position
+from .risk import (MAX_RISK_PER_TRADE_PCT, RULES, AccountState,
+                   size_position)
 from .sessions import classify
 from .sources.http import HttpClient
 from .sources.registry import SOURCES, coverage_report
@@ -325,6 +326,70 @@ def cmd_setups(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_minimum(args: argparse.Namespace) -> int:
+    """What account size does this instrument need to be tradable at all?
+
+    Exists because "the account is too small" is the single most common
+    reason a plan fails before it starts, and it is far more convincing as a
+    table than as advice.
+    """
+    from .specs import get_spec, get_vol_profile
+
+    spec = get_spec(args.symbol)
+    vol = get_vol_profile(args.symbol)
+    low, typical, high = vol.band(args.timeframe)
+    min_lot = args.min_lot
+
+    print(f"MINIMUM ACCOUNT SIZE FOR {spec.symbol}")
+    print("=" * 72)
+    print(f"  1 lot = {spec.contract_size_oz:,.0f} oz, so the smallest position "
+          f"({min_lot} lots) is {min_lot * spec.contract_size_oz:.0f} oz.")
+    print(f"  A 1.00 USD/oz move on that position is "
+          f"{min_lot * spec.contract_size_oz:.2f} USD.")
+    print(f"  {args.timeframe.upper()} ATR band for {spec.symbol}: "
+          f"{low:g} - {high:g} USD/oz (typical {typical:g}).")
+    print()
+    print(f"  Risk limit is {MAX_RISK_PER_TRADE_PCT:.0f}% per trade (rule R1), "
+          f"and rule M1 puts the stop at no less than 1.0x ATR.")
+    print()
+    print(f"  {'stop (USD/oz)':>14}  {'risk at min lot':>16}  "
+          f"{'account needed':>16}")
+    print("  " + "-" * 68)
+
+    stops = args.stops or [round(typical * m, 1) for m in (0.8, 1.0, 1.5, 2.0, 3.0)]
+    for stop in stops:
+        risk = stop * min_lot * spec.contract_size_oz
+        needed = risk / (MAX_RISK_PER_TRADE_PCT / 100.0)
+        print(f"  {stop:>14.2f}  {risk:>15.2f} USD  {needed:>12,.0f} USD")
+
+    if args.equity:
+        print()
+        print(f"  YOUR ACCOUNT: {args.equity:,.2f}")
+        print("  " + "-" * 68)
+        blocked = 0
+        for stop in stops:
+            risk = stop * min_lot * spec.contract_size_oz
+            pct = risk / args.equity * 100.0
+            verdict = ("OK" if pct <= MAX_RISK_PER_TRADE_PCT
+                       else "REFUSED -- over the 1% limit")
+            if pct > MAX_RISK_PER_TRADE_PCT:
+                blocked += 1
+            print(f"  stop {stop:>6.2f} USD/oz -> risk {pct:>6.2f}% of equity"
+                  f"   {verdict}")
+        if blocked == len(stops):
+            print()
+            print("  Every realistic stop is refused at this balance. That is "
+                  "an account-size\n  constraint, not a signal problem, and it "
+                  "cannot be solved by picking a\n  tighter stop -- rule M1 "
+                  "floors the stop at 1.0x ATR because anything\n  tighter is "
+                  "taken out by normal noise before the idea resolves.")
+            print()
+            print("  The two honest options are a larger balance, or a demo "
+                  "account funded\n  with a realistic figure so the sizing "
+                  "behaves the way it would live.")
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -408,6 +473,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)
+
+    mn = sub.add_parser("minimum",
+                        help="what account size does this instrument need?")
+    mn.add_argument("symbol", nargs="?", default="XAUUSD")
+    mn.add_argument("--equity", type=float, default=None,
+                    help="check a specific balance against the limits")
+    mn.add_argument("--timeframe", default="m5",
+                    choices=("m5", "m15", "h1", "h4", "d1"))
+    mn.add_argument("--min-lot", type=float, default=0.01,
+                    help="your broker's minimum volume")
+    mn.add_argument("--stops", type=float, nargs="*", default=None,
+                    help="specific stop distances in USD per ounce")
+    mn.set_defaults(func=cmd_minimum)
 
     b = sub.add_parser("backtest", help="run the scalping setups over history")
     b.add_argument("symbol", nargs="?", default="XAUUSD")

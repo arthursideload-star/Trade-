@@ -336,6 +336,32 @@ hinzugefuegt): weltweite **Nachrichten** und **Disclosure-/"Insider"-Daten**.
 - **Session-Hinweis:** Autorisierungspflichtige MCP-Server verbinden sich nur in der
   interaktiven Claude-Sitzung des Nutzers, nicht in automatischen Build-Sessions.
 
+### E40: Mindestkontogroesse ist eine Rechnung, keine Meinung
+
+**Anlass:** Die Frage, ob mit 55 EUR live gestartet werden kann.
+
+**Befund aus dem eigenen Sizer (`size_position`):** Die kleinste Position bei Gold ist
+0,01 Lot = **eine Feinunze**. Ein Stop von 2/3/5 USD/oz kostet damit 2/3/5 USD, also
+3,6 % / 5,5 % / 9,1 % eines 55-EUR-Kontos. Regel R1 erlaubt 1 %. Jeder realistische Stop
+wird abgelehnt — und Regel M1 (Stop >= 1,0 x ATR) verhindert, dass man sich das durch einen
+engeren Stop zurechtlegt. Fuer Gold bei 1 % Risiko braucht es **rund 300 USD**.
+
+**Entscheidung:** Kein Sonderpfad, keine Ausnahme, kein hochgesetztes Limit. Stattdessen ein
+Kommando, das die Rechnung sichtbar macht statt sie zu behaupten:
+
+```
+python -m metals minimum XAUUSD --equity 55
+```
+
+Es zeigt die Stop-Distanzen, das Risiko bei Mindest-Lot und die noetige Kontogroesse — und
+fuer die eigene Einlage, welche Stops abgelehnt wuerden.
+
+**Warum das Limit nicht hochgesetzt wird:** Bei 5 % Risiko pro Trade sind vier
+Verlust-Trades in Folge — in den Backtests regelmaessig aufgetreten — ein Fuenftel des
+Kontos. Bei einem kleinen Konto ist das zufaellig verkraftbar; als Gewohnheit ist es der
+Mechanismus, an dem Konten verschwinden. Die Konsequenz ist ein Demokonto mit realistischem
+Betrag (1.000 USD), nicht ein weicheres Limit.
+
 ### Offene Punkte (Ergaenzung)
 
 | # | Frage | Status |
@@ -709,3 +735,4 @@ eroeffnet hat.
 |---|---|---|
 | O23 | VPS-Anbieter auswaehlen, sobald der Auto-Betrieb ansteht | offen (erst nach Schritt 1 und 2 der Reihenfolge) |
 | O24 | Neustart-Wiederherstellung im echten Terminal pruefen (EA neu laden, waehrend eine Position offen ist) | offen |
+| O25 | Kontogroesse fuer den Live-Start: mindestens ~300 USD, sonst lehnt der EA jeden Gold-Trade ab | offen (Entscheidung liegt beim Nutzer) |
