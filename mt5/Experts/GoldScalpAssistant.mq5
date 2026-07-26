@@ -549,6 +549,27 @@ string JournalHeader()
 
 bool journalBroken = false;   // stop retrying after a write failure
 
+//--- Advisor mode never opens a position, so the setup search runs on every
+//--- closed bar rather than stopping once a trade is on. A setup that stays
+//--- valid for six bars would be written six times, and every count in the
+//--- analysis -- how often S4 fires, which filter refuses most -- would be
+//--- measuring how long conditions persisted instead of how often they
+//--- arose. So a run of the identical signal is logged once, at its start.
+string   lastSignalKey = "";
+datetime lastSignalBar = 0;
+
+bool SignalIsARepeat(const string key)
+{
+   const datetime bar = iTime(_Symbol, PERIOD_M5, 0);
+   // Consecutive M5 bars are 300 seconds apart; anything longer means the
+   // run was interrupted and this is a fresh occurrence.
+   const bool repeat = (key == lastSignalKey) &&
+                       (bar - lastSignalBar <= 300);
+   lastSignalKey = key;
+   lastSignalBar = bar;
+   return repeat;
+}
+
 //--- ISO-8601 with a hyphen, not MetaTrader's dotted format, because the
 //--- Python side parses it with fromisoformat.
 string IsoUtc(const datetime utc)
@@ -610,6 +631,12 @@ void JournalSignal(const string setup_id, const bool is_long,
                    const double risk_per_unit, const double lots,
                    const bool taken, const string skip_reason)
 {
+   //--- A signal that was acted on is never suppressed: it corresponds to a
+   //--- real position and must pair up with its close row.
+   if(!taken &&
+      SignalIsARepeat(setup_id + (is_long ? "|L|" : "|S|") + skip_reason))
+      return;
+
    JournalAppend(StringFormat(
       "%s,signal,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,,,,",
       IsoUtc(ServerToUtc(TimeTradeServer())), _Symbol, CsvSafe(setup_id),

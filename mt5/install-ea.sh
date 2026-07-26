@@ -24,7 +24,7 @@ RAW="https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/${B
 # Checked against the real file by tests/test_mt5_parity.py, so that a
 # truncated download is caught here rather than by a confusing compiler error
 # forty minutes later.
-EXPECTED_LINES=1622
+EXPECTED_LINES=1649
 
 say()  { printf '%s\n' "$*"; }
 rule() { say "------------------------------------------------------------"; }

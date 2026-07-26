@@ -443,6 +443,24 @@ class TestJournalSchemaMatchesBothSides(unittest.TestCase):
             self.assertIn(call, ea, f"{call} is missing -- that field can "
                                     f"carry a comma into the CSV")
 
+    def test_a_persisting_setup_is_logged_once_not_once_per_bar(self):
+        """Advisor mode never opens a position, so the setup search keeps
+        running every bar instead of stopping while a trade is on. Without
+        this, a setup valid for six bars is written six times and every count
+        in the analysis measures how long conditions lasted rather than how
+        often they arose."""
+        ea = self._ea()
+        self.assertIn("bool SignalIsARepeat(", ea)
+        self.assertIn("SignalIsARepeat(", ea.split("void JournalSignal(", 1)[1])
+
+    def test_a_signal_that_was_traded_is_never_suppressed(self):
+        """It has to pair up with its close row, or the two halves of the
+        record stop matching."""
+        body = self._ea().split("void JournalSignal(", 1)[1].split("\n}", 1)[0]
+        guard = body[:body.index("JournalAppend")]
+        self.assertIn("if(!taken", guard.replace(" ", ""),
+                      "the repeat guard must exempt taken signals")
+
     def test_the_r_multiple_is_money_over_money_not_price_over_price(self):
         """Once a partial is taken, price distance stops being the risk that
         was actually run. Dividing by the money committed is the only
