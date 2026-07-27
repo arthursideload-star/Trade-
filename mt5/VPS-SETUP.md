@@ -116,10 +116,27 @@ Container. Das ist die häufigste Verwechslung — dazu gleich mehr in A4.
 Beim Projekt `metatrader-5-iore` auf **Zugriff → Öffnen ↗** tippen.
 
 Es öffnet sich ein neuer Tab mit einer Adresse wie `http://<deine-IP>:32768`. Die Zahl hinten
-ist die Tür-Nummer, hinter der MT5 sitzt — nicht wundern.
+ist die Tür-Nummer, hinter der MT5 sitzt.
 
-> In den Containerdetails steht sie als **`32768:3000`**. Links die Tür von außen, rechts die
-> von innen. Nach außen zählt die linke.
+> **Die Portnummer ändert sich.** In den Containerdetails steht sie als z. B. **`32768:3000`**
+> — links die Tür von außen, rechts die von innen; nach außen zählt die linke. Nach einem
+> *Neu bereitstellen* steht dort eine andere Zahl (aus 32768 wird dann etwa 32769). Merk dir
+> deshalb nicht die Zahl, sondern **wo sie steht**: Containerdetails, direkt über „Terminal".
+
+**Es gibt noch einen zweiten, besseren Weg hinein.** Im `.yaml-Editor` steht bei `labels:`
+eine Zeile mit `rule=Host(...)` und daneben `entrypoints=websecure`. Das heißt: Das Template
+richtet zusätzlich eine **verschlüsselte** Adresse ein, nach diesem Muster:
+
+```
+https://<projektname>.<dein-server>.hstgr.cloud
+```
+
+Also `https://metatrader-5-iore.` + dem Servernamen aus der Brotkrümel-Leiste ganz oben.
+Beide Teile findest du im **„Umgebung"**-Kasten unter dem YAML, in der Zeile `TRAEFIK_HOST=`.
+
+**Nimm diese Adresse, wenn sie lädt.** Sie ist `https`, also verschlüsselt. Bei der
+`http://IP:Port`-Variante warnt der Anmeldedialog zu Recht, dass dein Passwort im Klartext
+übertragen wird — fürs Demokonto verkraftbar, für echtes Geld nicht.
 
 **Was jetzt passiert, hängt davon ab, wie das Template eingerichtet wurde:**
 
@@ -145,30 +162,52 @@ Meldung *„Passwort falsch"* — der leere Dialog **ist** die Meldung.
 Root-Passwort.** Es sind zwei Werte namens `CUSTOM_USER` und `PASSWORD`, die beim
 Bereitstellen des Templates gesetzt wurden.
 
-**Weg 1 — im YAML-Editor nachsehen (ohne Tippen):**
+**Weg 1 — im YAML-Editor nachsehen. ACHTUNG, hier steht eine Falle:**
 
-Docker Manager → beim Projekt **Verwalten** → auf der Seite nach unten scrollen, bis unter
-den Containerdetails die Reiter **Visueller Editor** / **`.yaml-Editor`** erscheinen →
-auf **`.yaml-Editor`** tippen. Dort steht die Konfiguration im Klartext, darin zwei Zeilen
-dieser Art:
+Docker Manager → beim Projekt **Verwalten** → nach unten scrollen zu den Reitern
+**Visueller Editor** / **`.yaml-Editor`** → auf **`.yaml-Editor`**.
+
+Dort findest du diese Zeilen — und sie helfen dir **nicht**:
 
 ```yaml
     environment:
-      - CUSTOM_USER=…
-      - PASSWORD=…
+      CUSTOM_USER: ${ADMIN_USERNAME}
+      PASSWORD:    ${ADMIN_PASSWORD}
 ```
 
-Was hinter dem `=` steht, gehört in den Dialog.
+Das `${…}` heißt: „setz hier den Wert der Variable ADMIN_USERNAME ein". Der **echte Wert
+steht woanders** — das ist nur der Platzhalter. Wer hier nachschaut und `${ADMIN_USERNAME}`
+in den Dialog tippt, wird abgelehnt.
 
-**Weg 2 — den Container selbst fragen:**
+**Die echten Werte stehen direkt darunter.** Scroll unter dem schwarzen YAML-Kasten weiter,
+bis der nächste Kasten kommt — überschrieben mit **„Umgebung"**. Das ist die
+Variablen-Datei, und sie sieht so aus:
 
-In den Containerdetails auf **Terminal ↗** und eintippen:
+```
+1  TRAEFIK_HOST=srv…….hstgr.cloud
+2  ADMIN_USERNAME=…
+3  ADMIN_PASSWORD=…
+```
+
+**Diese beiden Werte** — hinter `ADMIN_USERNAME=` und `ADMIN_PASSWORD=` — gehören in den
+Anmeldedialog. Nicht die aus dem YAML-Kasten darüber.
+
+**Weg 2 — den Container selbst fragen (der zuverlässigste):**
+
+Im laufenden Container ist der Platzhalter längst durch den echten Wert ersetzt. Deshalb
+ist das hier der Weg, der immer funktioniert. In den Containerdetails auf **Terminal ↗**
+und eintippen:
 
 ```bash
-env | grep -iE "custom_user|password"
+env | grep -iE "user|pass|admin"
 ```
 
-Es kommen zwei Zeilen der Form `CUSTOM_USER=…` und `PASSWORD=…`.
+Absichtlich breit gesucht — je nach Template-Version heißen die Variablen `CUSTOM_USER`/
+`PASSWORD` oder `ADMIN_USERNAME`/`ADMIN_PASSWORD`. Nimm das Paar, das nach Benutzername und
+Passwort aussieht.
+
+> Das Installationsskript aus dem Schnellweg oben macht genau das und zeigt dir die Werte
+> ganz oben an. Wenn du es sowieso laufen lässt, brauchst du hier nichts zu tippen.
 
 > **Das Terminal fragt nicht nach diesem Passwort.** Es geht über das Hostinger-Panel, an der
 > Anmeldung vorbei. Praktische Folge: Du kannst **A4 (EA installieren) sofort machen**, auch

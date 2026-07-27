@@ -49,8 +49,15 @@ rule
 say ""
 say "1. Login for the MT5 browser window"
 rule
+# The compose file sets CUSTOM_USER: ${ADMIN_USERNAME}, so the panel's yaml
+# view shows only the placeholder -- the value lives in the deployment's env
+# file. Inside the running container the substitution has already happened,
+# which is why asking the process is the reliable route. Both naming schemes
+# are checked because which one survives depends on the template revision.
 CU=$(printenv CUSTOM_USER 2>/dev/null || true)
+[ -z "${CU}" ] && CU=$(printenv ADMIN_USERNAME 2>/dev/null || true)
 PW=$(printenv PASSWORD 2>/dev/null || true)
+[ -z "${PW}" ] && PW=$(printenv ADMIN_PASSWORD 2>/dev/null || true)
 
 if [ -n "${CU}" ] || [ -n "${PW}" ]; then
     say "  username: ${CU:-<empty>}"
@@ -59,9 +66,13 @@ if [ -n "${CU}" ] || [ -n "${PW}" ]; then
     say "  Type them exactly. Case matters, and a trailing space added by a"
     say "  phone keyboard is enough to be rejected."
 else
-    say "  CUSTOM_USER and PASSWORD are not set in this container."
-    say "  Try username 'abc' with password 'abc' -- the default of the base"
-    say "  image this template builds on."
+    say "  Not set under the names this script knows. Everything the container"
+    say "  has that looks like a credential:"
+    env | grep -iE "user|pass|admin" | grep -viE "^(PATH|HOME|PWD)=" |
+        sed 's/^/    /' || say "    (nothing)"
+    say ""
+    say "  If that is empty too, try username 'abc' with password 'abc' --"
+    say "  the default of the base image this template builds on."
 fi
 
 # --- 2. Where MetaTrader keeps its experts ---------------------------------
