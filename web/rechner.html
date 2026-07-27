@@ -1,0 +1,725 @@
+<title>Metall-Rechner — Gold und Silber</title>
+<style>
+  /* ---------------------------------------------------------------
+     Tokens. Every colour is defined once here and consumed through a
+     variable, so the two themes below stay in step.
+     --------------------------------------------------------------- */
+  :root {
+    --ground:      #EFEFEC;
+    --raised:      #FAFAF8;
+    --sunken:      #E4E4DF;
+    --ink:         #1A1D21;
+    --ink-soft:    #565C63;
+    --ink-faint:   #8A9099;
+    --rule:        #D5D5CE;
+    --brass:       #9A6E33;
+    --brass-soft:  #F0E4CF;
+    --prime:       #2F7D51;
+    --prime-bg:    #E1EFE6;
+    --good:        #4A6C80;
+    --good-bg:     #E2EBF0;
+    --marginal:    #B07D22;
+    --marginal-bg: #F6EAD2;
+    --avoid:       #A93F36;
+    --avoid-bg:    #F6E0DD;
+    --shadow:      0 1px 2px rgba(26,29,33,.06), 0 4px 16px rgba(26,29,33,.05);
+
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+            "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+            Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:      #14171A;
+      --raised:      #1C2024;
+      --sunken:      #0E1113;
+      --ink:         #E8E6E1;
+      --ink-soft:    #A2A8AF;
+      --ink-faint:   #6B7278;
+      --rule:        #2C3237;
+      --brass:       #D6A867;
+      --brass-soft:  #2E2820;
+      --prime:       #5FBF88;
+      --prime-bg:    #16291F;
+      --good:        #7FA8BF;
+      --good-bg:     #17242B;
+      --marginal:    #E0A93F;
+      --marginal-bg: #2C2314;
+      --avoid:       #E07B6F;
+      --avoid-bg:    #2E1917;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+    }
+  }
+  /* The viewer's own toggle must win over the OS preference, both ways. */
+  :root[data-theme="light"] {
+    --ground: #EFEFEC; --raised: #FAFAF8; --sunken: #E4E4DF;
+    --ink: #1A1D21; --ink-soft: #565C63; --ink-faint: #8A9099;
+    --rule: #D5D5CE; --brass: #9A6E33; --brass-soft: #F0E4CF;
+    --prime: #2F7D51; --prime-bg: #E1EFE6; --good: #4A6C80; --good-bg: #E2EBF0;
+    --marginal: #B07D22; --marginal-bg: #F6EAD2;
+    --avoid: #A93F36; --avoid-bg: #F6E0DD;
+    --shadow: 0 1px 2px rgba(26,29,33,.06), 0 4px 16px rgba(26,29,33,.05);
+  }
+  :root[data-theme="dark"] {
+    --ground: #14171A; --raised: #1C2024; --sunken: #0E1113;
+    --ink: #E8E6E1; --ink-soft: #A2A8AF; --ink-faint: #6B7278;
+    --rule: #2C3237; --brass: #D6A867; --brass-soft: #2E2820;
+    --prime: #5FBF88; --prime-bg: #16291F; --good: #7FA8BF; --good-bg: #17242B;
+    --marginal: #E0A93F; --marginal-bg: #2C2314;
+    --avoid: #E07B6F; --avoid-bg: #2E1917;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .wrap {
+    max-width: 34rem;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* --- masthead --- */
+  header { display: flex; flex-direction: column; gap: .35rem; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 750;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+  }
+  .sub { margin: 0; color: var(--ink-soft); font-size: .9rem; }
+
+  /* --- cards --- */
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: var(--shadow);
+  }
+  .card > h2 {
+    margin: 0 0 .75rem;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+
+  /* --- session gate: state carried by a stripe, not colour alone --- */
+  .gate {
+    border-left: 4px solid var(--rule);
+    display: flex; flex-direction: column; gap: .4rem;
+  }
+  .gate.prime    { border-left-color: var(--prime);    background: var(--prime-bg); }
+  .gate.good     { border-left-color: var(--good);     background: var(--good-bg); }
+  .gate.marginal { border-left-color: var(--marginal); background: var(--marginal-bg); }
+  .gate.avoid    { border-left-color: var(--avoid);    background: var(--avoid-bg); }
+
+  .gate-top { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+  .gate-state {
+    font-family: var(--mono);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  .gate.prime .gate-state    { color: var(--prime); }
+  .gate.good .gate-state     { color: var(--good); }
+  .gate.marginal .gate-state { color: var(--marginal); }
+  .gate.avoid .gate-state    { color: var(--avoid); }
+  .gate-clock {
+    font-family: var(--mono);
+    font-size: .8rem;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+  }
+  .gate-why { font-size: .875rem; color: var(--ink-soft); margin: 0; }
+
+  /* --- form --- */
+  .grid { display: grid; gap: .85rem; }
+  .grid.two { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 24rem) { .grid.two { grid-template-columns: 1fr; } }
+
+  label { display: flex; flex-direction: column; gap: .3rem; }
+  .lbl {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .hint { font-size: .72rem; color: var(--ink-faint); }
+
+  input[type="number"], select {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 1rem;
+    padding: .55rem .6rem;
+    background: var(--sunken);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 7px;
+    width: 100%;
+    min-width: 0;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+
+  /* segmented control */
+  .seg { display: flex; gap: 0; border: 1px solid var(--rule);
+         border-radius: 7px; overflow: hidden; }
+  .seg button {
+    flex: 1; padding: .55rem .4rem; border: 0; cursor: pointer;
+    background: var(--sunken); color: var(--ink-soft);
+    font-family: var(--mono); font-size: .8rem; letter-spacing: .04em;
+  }
+  .seg button + button { border-left: 1px solid var(--rule); }
+  .seg button[aria-pressed="true"] {
+    background: var(--brass); color: var(--ground); font-weight: 700;
+  }
+
+  /* --- verdict --- */
+  .verdict { border-left: 4px solid var(--rule); }
+  .verdict.ok      { border-left-color: var(--prime); background: var(--prime-bg); }
+  .verdict.blocked { border-left-color: var(--avoid); background: var(--avoid-bg); }
+  .verdict-head {
+    font-family: var(--mono); font-size: 1.05rem; font-weight: 700;
+    letter-spacing: .04em; margin: 0 0 .5rem;
+  }
+  .verdict.ok .verdict-head      { color: var(--prime); }
+  .verdict.blocked .verdict-head { color: var(--avoid); }
+  .reasons { margin: 0; padding-left: 1.1rem; font-size: .875rem;
+             color: var(--ink-soft); display: flex; flex-direction: column; gap: .3rem; }
+
+  /* --- the trade card: a table of figures --- */
+  .rows { display: flex; flex-direction: column; }
+  .row {
+    display: flex; align-items: baseline; gap: .75rem;
+    padding: .5rem 0; border-bottom: 1px solid var(--rule);
+  }
+  .row:last-child { border-bottom: 0; }
+  .row .k { font-size: .82rem; color: var(--ink-soft); flex: 1; }
+  .row .v {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 1rem; font-weight: 600; text-align: right; white-space: nowrap;
+  }
+  .row .u { font-family: var(--mono); font-size: .72rem; color: var(--ink-faint); }
+  .row.lead .v { font-size: 1.3rem; color: var(--brass); }
+  .row.dim .v  { color: var(--ink-soft); font-weight: 500; }
+
+  .stack { display: flex; flex-direction: column; gap: .5rem; }
+
+  details { border-top: 1px solid var(--rule); padding-top: .75rem; }
+  summary { cursor: pointer; font-size: .82rem; color: var(--brass);
+            font-family: var(--mono); letter-spacing: .04em; }
+  details p, details li { font-size: .85rem; color: var(--ink-soft); }
+
+  footer { font-size: .78rem; color: var(--ink-faint); text-align: left; }
+  footer strong { color: var(--ink-soft); }
+
+  code { font-family: var(--mono); font-size: .85em;
+         background: var(--sunken); padding: .1em .35em; border-radius: 4px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card { transition: background-color .2s ease, border-color .2s ease; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">XAU/USD · XAG/USD</span>
+    <h1>Metall-Rechner</h1>
+    <p class="sub">Kurs und Level ablesen, eintippen — der Rest wird gerechnet.
+      Dieselben harten Grenzen wie im Expert Advisor.</p>
+  </header>
+
+  <!-- The time gate comes first because that is the order the system
+       decides in: a setup inside a bad window is not a setup. -->
+  <section class="card gate" id="gate">
+    <div class="gate-top">
+      <span class="gate-state" id="gateState">…</span>
+      <span class="gate-clock" id="gateClock"></span>
+    </div>
+    <p class="gate-why" id="gateWhy"></p>
+  </section>
+
+  <section class="card">
+    <h2>Eingaben</h2>
+    <div class="grid">
+
+      <div>
+        <span class="lbl">Metall</span>
+        <div class="seg" id="symSeg" role="group" aria-label="Metall">
+          <button type="button" data-sym="XAUUSD" aria-pressed="true">Gold</button>
+          <button type="button" data-sym="XAGUSD" aria-pressed="false">Silber</button>
+        </div>
+      </div>
+
+      <div>
+        <span class="lbl">Richtung</span>
+        <div class="seg" id="dirSeg" role="group" aria-label="Richtung">
+          <button type="button" data-dir="long" aria-pressed="true">Long ▲</button>
+          <button type="button" data-dir="short" aria-pressed="false">Short ▼</button>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <label>
+          <span class="lbl">Kontostand</span>
+          <input type="number" id="equity" value="1000" min="0" step="any"
+                 inputmode="decimal">
+        </label>
+        <label>
+          <span class="lbl">Währung</span>
+          <select id="ccy">
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </label>
+      </div>
+
+      <label id="rateWrap" hidden>
+        <span class="lbl">EUR/USD-Kurs</span>
+        <input type="number" id="eurusd" value="1.08" min="0.5" max="2" step="0.0001"
+               inputmode="decimal">
+        <span class="hint">Nur zum Umrechnen deines Kontos. Aktuellen Kurs
+          nachsehen — ein alter Wert verzerrt die Größe.</span>
+      </label>
+
+      <label>
+        <span class="lbl">Aktueller Kurs</span>
+        <input type="number" id="price" value="4500" min="0" step="any"
+               inputmode="decimal">
+        <span class="hint">Von deinem Chart ablesen.</span>
+      </label>
+
+      <label>
+        <span class="lbl">Level, an dem die Idee falsch wäre</span>
+        <input type="number" id="level" value="4494" min="0" step="any"
+               inputmode="decimal">
+        <span class="hint" id="levelHint">Das Hoch/Tief oder die Zone, hinter der
+          dein Setup widerlegt ist — <em>nicht</em> dein Wunsch-Stop.</span>
+      </label>
+
+      <div class="grid two">
+        <label>
+          <span class="lbl">ATR (M5)</span>
+          <input type="number" id="atr" value="1.2" min="0" step="any"
+                 inputmode="decimal">
+          <span class="hint" id="atrHint"></span>
+        </label>
+        <label>
+          <span class="lbl">Spread</span>
+          <input type="number" id="spread" value="0.30" min="0" step="any"
+                 inputmode="decimal">
+          <span class="hint">USD je Unze</span>
+        </label>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="card verdict" id="verdict">
+    <p class="verdict-head" id="verdictHead">…</p>
+    <ul class="reasons" id="reasons"></ul>
+  </section>
+
+  <section class="card" id="tradeCard">
+    <h2>Handelsplan</h2>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <section class="card">
+    <h2>Warum diese Grenzen</h2>
+    <div class="stack">
+      <details>
+        <summary>1 % pro Trade (R1)</summary>
+        <p>Die Positionsgröße folgt aus dem Stop, nie umgekehrt. Zuerst steht
+          fest, wo die Idee widerlegt ist; erst danach, wie viel man kauft.
+          Wer die Größe zuerst wählt, verschiebt hinterher den Stop.</p>
+      </details>
+      <details>
+        <summary>Mindest-Stop 0,8 × ATR (M1)</summary>
+        <p>Ein engerer Stop wird von normalem Rauschen abgeräumt, bevor sich die
+          Idee entscheidet. Wird der Stop deshalb geweitet, schrumpft die
+          Position — das ist richtig so: weniger Unzen auf überlebbarer Distanz
+          schlägt mehr Unzen auf einer, die getroffen wird.</p>
+      </details>
+      <details>
+        <summary>Puffer hinter dem Level (M2)</summary>
+        <p>Der Stop sitzt 0,35 × ATR <em>hinter</em> dem Level, nie darauf. Gold
+          greift regelmäßig durch offensichtliche Level, um die Stops
+          einzusammeln, die dort liegen.</p>
+      </details>
+      <details>
+        <summary>Spread-Grenze (S6)</summary>
+        <p>Ist der Spread mehr als 10 % des Stops, frisst die Kostenseite den
+          Vorteil. Der Trade wird abgelehnt, nicht verkleinert.</p>
+      </details>
+      <details>
+        <summary>Ziele: 60 % bei 0,5R, Rest bei 2,5R</summary>
+        <p>Gemischt ergibt das 1:1,3 — und <em>das</em> ist die ehrliche
+          Kennzahl, nicht die 2,5R des Restes. Dass 0,5R als erstes Ziel besser
+          abschnitt als 1,0R, ist gemessen und nicht geraten.</p>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Keine Anlageberatung, kein Ertragsversprechen.</strong>
+      Die Strategie hinter diesen Zahlen hat <strong>keinen nachgewiesenen
+      positiven Erwartungswert</strong>. Was hier zuverlässig funktioniert, ist
+      die Rechnung: korrekte Größen, haltbare Stops, ehrliche Ablehnungen.</p>
+    <p>Rechnet offline im Browser. Holt keine Kurse — du liest sie ab.</p>
+  </footer>
+
+</div>
+
+<script>
+/* =====================================================================
+   Rules ported from the Python package and the MQL5 expert advisor.
+   These numbers are duplicated on purpose so the page works offline,
+   and tests/test_web_parity.py checks every one of them against its
+   source. Change a limit here without changing it there and the test
+   fails -- which is the only reason a second copy is tolerable.
+   ===================================================================== */
+const RULES = {
+  RISK_PER_TRADE_PCT:     1.0,   // R1
+  DAILY_LOSS_LIMIT_PCT:   3.0,   // R2
+  MIN_REWARD_RISK:        2.0,   // R3
+  MAX_TRADES_PER_DAY:     4,
+  MIN_STOP_ATR_MULTIPLE:  0.8,   // M1
+  STOP_BUFFER_ATR:        0.35,  // M2
+  MAX_SPREAD_ATR_FRACTION: 0.15, // M3
+  MAX_SPREAD_PCT_OF_STOP: 10.0,  // S6
+  FRIDAY_FLAT_HOUR_UTC:   19,    // M5
+  FIRST_TARGET_R:         0.5,
+  FIRST_TARGET_PCT:       60.0,
+  RUNNER_TARGET_R:        2.5,
+  WIDE_STOP_ATR_WARN:     4.0,
+};
+
+const SPECS = {
+  XAUUSD: { name: "Gold",   oz: 100,  digits: 2, atrM5: 1.2,  atrBand: [0.5, 3.0],   spread: 0.30 },
+  XAGUSD: { name: "Silber", oz: 5000, digits: 3, atrM5: 0.03, atrBand: [0.01, 0.09], spread: 0.03 },
+};
+
+const MIN_LOT = 0.01, LOT_STEP = 0.01;
+
+/* --- Daylight saving, ported line for line from the EA ---------------
+   London and New York switch on different dates, so the overlap is
+   computed from the local clocks rather than pinned to a UTC range. */
+function lastSunday(y, m) {                       // m: 1-12
+  const last = new Date(Date.UTC(y, m, 0));
+  return new Date(Date.UTC(y, m - 1, last.getUTCDate() - last.getUTCDay()));
+}
+function nthSunday(y, m, n) {
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const toSunday = (7 - first.getUTCDay()) % 7;
+  return new Date(Date.UTC(y, m - 1, 1 + toSunday + (n - 1) * 7));
+}
+function euSummerTime(d) {
+  const y = d.getUTCFullYear();
+  const start = lastSunday(y, 3).getTime()  + 3600e3;
+  const end   = lastSunday(y, 10).getTime() + 3600e3;
+  return d.getTime() >= start && d.getTime() < end;
+}
+function usDaylightTime(d) {
+  const y = d.getUTCFullYear();
+  const start = nthSunday(y, 3, 2).getTime()  + 7 * 3600e3;
+  const end   = nthSunday(y, 11, 1).getTime() + 6 * 3600e3;
+  return d.getTime() >= start && d.getTime() < end;
+}
+const localHour = (d, off) => new Date(d.getTime() + off * 3600e3).getUTCHours();
+
+function marketOpen(d) {
+  const wd = d.getUTCDay(), h = d.getUTCHours();
+  if (wd === 6) return false;              // Saturday
+  if (wd === 0) return h >= 22;            // Sunday evening open
+  if (wd === 5 && h >= 21) return false;   // Friday close
+  return true;
+}
+const inRollover = d => d.getUTCHours() >= 21 && d.getUTCHours() < 23;
+
+function classifySession(d) {
+  if (!marketOpen(d))
+    return { q: "AVOID", why: "Markt geschlossen — Wochenende." };
+  if (inRollover(d))
+    return { q: "AVOID", why: "Täglicher Rollover: Spreads gehen um ein " +
+                              "Vielfaches auf, Swap wird belastet, dünne Liquidität." };
+
+  const ldn = localHour(d, euSummerTime(d) ? 1 : 0);
+  const nyc = localHour(d, usDaylightTime(d) ? -4 : -5);
+  const londonKz = ldn >= 7 && ldn < 10;
+  const nyKz     = nyc >= 8 && nyc < 11;
+  const overlap  = (ldn >= 13 && ldn < 17) && (nyc >= 8 && nyc < 12);
+
+  if (overlap)  return { q: "PRIME", why: "London/New-York-Überlappung — die engsten Spreads des Tages." };
+  if (nyKz)     return { q: "PRIME", why: "New-York-Killzone — die größten Bewegungen, echte Beteiligung." };
+  if (londonKz) return { q: "PRIME", why: "London-Killzone — hier beginnt meist die Bewegung des Tages." };
+  if (d.getUTCDay() === 5 && d.getUTCHours() >= RULES.FRIDAY_FLAT_HOUR_UTC)
+    return { q: "AVOID", why: "Freitagabend — Wochenend-Gap-Risiko. Ein Stop schützt nicht gegen ein Gap." };
+  if (d.getUTCHours() < 7)
+    return { q: "MARGINAL", why: "Asiatische Session — dünn für Metalle, Ausbrüche scheitern häufiger." };
+  return { q: "GOOD", why: "Normale Handelszeit." };
+}
+
+/* --- The trade itself ------------------------------------------------ */
+function plan(inp) {
+  const spec = SPECS[inp.symbol];
+  const out = { blocks: [], warns: [], spec };
+  const long = inp.dir === "long";
+
+  if (!(inp.price > 0) || !(inp.level > 0) || !(inp.atr > 0) || !(inp.equity > 0))
+    { out.blocks.push("Fülle Kurs, Level, ATR und Kontostand aus."); return out; }
+
+  // A long whose invalidation sits above the price is not a trade, it is a
+  // typo -- and it would produce a confident, meaningless number.
+  if (long && inp.level >= inp.price)
+    { out.blocks.push("Bei einem Long muss das Level UNTER dem Kurs liegen."); return out; }
+  if (!long && inp.level <= inp.price)
+    { out.blocks.push("Bei einem Short muss das Level ÜBER dem Kurs liegen."); return out; }
+
+  // M2: behind the level, never on it.
+  let stop = long ? inp.level - inp.atr * RULES.STOP_BUFFER_ATR
+                  : inp.level + inp.atr * RULES.STOP_BUFFER_ATR;
+
+  // M1: never tighter than the ATR floor.
+  const floor = inp.atr * RULES.MIN_STOP_ATR_MULTIPLE;
+  if (Math.abs(inp.price - stop) < floor) {
+    stop = long ? inp.price - floor : inp.price + floor;
+    out.warns.push(`Stop auf ${RULES.MIN_STOP_ATR_MULTIPLE} × ATR geweitet — ` +
+                   `enger wäre er Rauschen (Regel M1).`);
+  }
+  const dist = Math.abs(inp.price - stop);
+  out.stop = stop; out.dist = dist; out.atrMult = dist / inp.atr;
+
+  // S6: on a tight stop the spread dominates.
+  const spreadPct = inp.spread / dist * 100;
+  out.spreadPct = spreadPct;
+  if (spreadPct > RULES.MAX_SPREAD_PCT_OF_STOP)
+    out.blocks.push(`Spread ist ${spreadPct.toFixed(0)} % des Stops — über der ` +
+                    `Grenze von ${RULES.MAX_SPREAD_PCT_OF_STOP} %. Die Kosten ` +
+                    `würden den Vorteil auffressen (S6).`);
+  // M3: spread against volatility. A block, not a warning -- both the Python
+  // sizer and the EA refuse here, and a calculator that merely grumbles would
+  // approve trades the rest of the system turns down.
+  if (inp.spread / inp.atr > RULES.MAX_SPREAD_ATR_FRACTION)
+    out.blocks.push(`Spread ist ${(inp.spread / inp.atr * 100).toFixed(0)} % des ATR — ` +
+                    `über der Grenze von ${(RULES.MAX_SPREAD_ATR_FRACTION * 100).toFixed(0)} %. ` +
+                    `Der Vorteil ginge an den Broker (M3).`);
+
+  // Not a limit, a sanity check: a stop this wide usually means the level is
+  // the wrong one, and the small position that follows hides the mistake.
+  if (dist / inp.atr > RULES.WIDE_STOP_ATR_WARN)
+    out.warns.push(`Stop ist ${(dist / inp.atr).toFixed(1)} × ATR — ungewöhnlich weit. ` +
+                   `Prüfe, ob das wirklich das richtige Level ist.`);
+
+  // Risk budget, converted to the instrument's currency (USD).
+  const riskAcct = inp.equity * RULES.RISK_PER_TRADE_PCT / 100;
+  const riskUsd  = inp.ccy === "EUR" ? riskAcct * inp.eurusd : riskAcct;
+  out.riskAcct = riskAcct;
+
+  const lossPerLot = dist * spec.oz;
+  const lotsRaw = riskUsd / lossPerLot;
+  // Always round DOWN: rounding up exceeds the limit, the one direction
+  // the error must never take.
+  const lots = Math.floor(lotsRaw / LOT_STEP) * LOT_STEP;
+  out.lots = lots;
+
+  if (lots < MIN_LOT) {
+    const neededUsd = MIN_LOT * lossPerLot / (RULES.RISK_PER_TRADE_PCT / 100);
+    const needed = inp.ccy === "EUR" ? neededUsd / inp.eurusd : neededUsd;
+    out.blocks.push(
+      `Die kleinste mögliche Position (${MIN_LOT} Lot = ` +
+      `${(MIN_LOT * spec.oz).toLocaleString("de-DE")} Unzen) riskiert bei diesem ` +
+      `Stop mehr als ${RULES.RISK_PER_TRADE_PCT} % deines Kontos. ` +
+      `Nötig wären rund ${Math.ceil(needed).toLocaleString("de-DE")} ${inp.ccy}. ` +
+      `Das ist eine Frage der Kontogröße, kein Signalproblem — und es lässt ` +
+      `sich nicht mit einem engeren Stop lösen.`);
+    out.neededAcct = needed;
+  }
+
+  const realRiskUsd = lots * lossPerLot;
+  out.realRiskAcct = inp.ccy === "EUR" ? realRiskUsd / inp.eurusd : realRiskUsd;
+  out.t1 = long ? inp.price + dist * RULES.FIRST_TARGET_R
+                : inp.price - dist * RULES.FIRST_TARGET_R;
+  out.t2 = long ? inp.price + dist * RULES.RUNNER_TARGET_R
+                : inp.price - dist * RULES.RUNNER_TARGET_R;
+  const f = RULES.FIRST_TARGET_PCT / 100;
+  out.blended = f * RULES.FIRST_TARGET_R + (1 - f) * RULES.RUNNER_TARGET_R;
+  return out;
+}
+
+/* --- Wiring ---------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+const state = { symbol: "XAUUSD", dir: "long" };
+
+function segment(el, key, attr) {
+  el.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    [...el.querySelectorAll("button")].forEach(x =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    state[key] = b.dataset[attr];
+    if (key === "symbol") applySymbolDefaults();
+    render();
+  });
+}
+segment($("symSeg"), "symbol", "sym");
+segment($("dirSeg"), "dir", "dir");
+
+function applySymbolDefaults() {
+  const s = SPECS[state.symbol];
+  $("atr").value = s.atrM5;
+  $("spread").value = s.spread;
+  $("atrHint").textContent = `üblich ${s.atrBand[0]}–${s.atrBand[1]}`;
+}
+
+["equity","price","level","atr","spread","eurusd","ccy"].forEach(id =>
+  $(id).addEventListener("input", () => {
+    if (id === "ccy") $("rateWrap").hidden = $("ccy").value !== "EUR";
+    render(); save();
+  }));
+
+const KEY = "metallrechner.v1";
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({
+      ...state,
+      equity: $("equity").value, ccy: $("ccy").value, eurusd: $("eurusd").value,
+      price: $("price").value, level: $("level").value,
+      atr: $("atr").value, spread: $("spread").value,
+    }));
+  } catch (e) { /* private browsing: not worth interrupting the page for */ }
+}
+function restore() {
+  let d; try { d = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+  if (!d) { applySymbolDefaults(); return; }
+  state.symbol = d.symbol || state.symbol;
+  state.dir = d.dir || state.dir;
+  [...$("symSeg").querySelectorAll("button")].forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.sym === state.symbol)));
+  [...$("dirSeg").querySelectorAll("button")].forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.dir === state.dir)));
+  ["equity","ccy","eurusd","price","level","atr","spread"].forEach(k => {
+    if (d[k] !== undefined && d[k] !== "") $(k).value = d[k];
+  });
+  $("rateWrap").hidden = $("ccy").value !== "EUR";
+  $("atrHint").textContent =
+    `üblich ${SPECS[state.symbol].atrBand[0]}–${SPECS[state.symbol].atrBand[1]}`;
+}
+
+const num = id => parseFloat($(id).value);
+const GATE_WORD = { PRIME: "PRIME", GOOD: "good", MARGINAL: "marginal", AVOID: "AVOID" };
+
+function render() {
+  const now = new Date();
+  const sess = classifySession(now);
+
+  const gate = $("gate");
+  gate.className = "card gate " + sess.q.toLowerCase();
+  $("gateState").textContent = GATE_WORD[sess.q];
+  $("gateWhy").textContent = sess.why;
+  $("gateClock").textContent =
+    String(now.getUTCHours()).padStart(2, "0") + ":" +
+    String(now.getUTCMinutes()).padStart(2, "0") + " UTC";
+
+  const spec = SPECS[state.symbol];
+  const p = plan({
+    symbol: state.symbol, dir: state.dir,
+    equity: num("equity"), ccy: $("ccy").value, eurusd: num("eurusd"),
+    price: num("price"), level: num("level"),
+    atr: num("atr"), spread: num("spread"),
+  });
+
+  const blocks = [...p.blocks];
+  if (sess.q === "AVOID")
+    blocks.unshift("Gesperrtes Zeitfenster — " + sess.why);
+  const warns = [...p.warns];
+  if (sess.q === "MARGINAL")
+    warns.push("Dünnes Zeitfenster. Der EA würde hier nicht handeln.");
+
+  const v = $("verdict");
+  v.className = "card verdict " + (blocks.length ? "blocked" : "ok");
+  $("verdictHead").textContent = blocks.length ? "ABGELEHNT" : "ERLAUBT";
+  $("reasons").innerHTML = "";
+  [...blocks, ...warns].forEach(t => {
+    const li = document.createElement("li");
+    li.textContent = t;
+    $("reasons").appendChild(li);
+  });
+  if (!blocks.length && !warns.length) {
+    const li = document.createElement("li");
+    li.textContent = "Alle harten Grenzen eingehalten.";
+    $("reasons").appendChild(li);
+  }
+
+  const rows = $("rows");
+  rows.innerHTML = "";
+  if (p.lots === undefined) { $("tradeCard").hidden = true; return; }
+  $("tradeCard").hidden = false;
+
+  const d = spec.digits;
+  const money = x => x.toLocaleString("de-DE",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ccy = $("ccy").value;
+
+  const add = (k, v, u, cls) => {
+    const r = document.createElement("div");
+    r.className = "row" + (cls ? " " + cls : "");
+    r.innerHTML = `<span class="k"></span><span class="v"></span>` +
+                  (u ? `<span class="u"></span>` : "");
+    r.querySelector(".k").textContent = k;
+    r.querySelector(".v").textContent = v;
+    if (u) r.querySelector(".u").textContent = u;
+    rows.appendChild(r);
+  };
+
+  add("Positionsgröße", p.lots >= MIN_LOT ? p.lots.toFixed(2) : "—", "Lot", "lead");
+  add("Einstieg", num("price").toFixed(d), "");
+  add("Stop", p.stop.toFixed(d),
+      `1R = ${p.dist.toFixed(d)} · ${p.atrMult.toFixed(2)}×ATR`);
+  add(`Ziel 1 — ${RULES.FIRST_TARGET_PCT.toFixed(0)} % schließen`,
+      p.t1.toFixed(d), `${RULES.FIRST_TARGET_R}R`);
+  add("Ziel 2 — Rest, Stop auf Einstand", p.t2.toFixed(d),
+      `${RULES.RUNNER_TARGET_R}R`);
+  add("Risiko", p.lots >= MIN_LOT ? money(p.realRiskAcct) : money(p.riskAcct),
+      ccy, "dim");
+  add("CRV gemischt", "1:" + p.blended.toFixed(2), "ehrliche Kennzahl", "dim");
+  if (p.spreadPct !== undefined)
+    add("Spread vom Stop", p.spreadPct.toFixed(1), "%", "dim");
+  if (p.lots >= MIN_LOT)
+    add("Gegenwert", (p.lots * spec.oz).toLocaleString("de-DE"), "Unzen", "dim");
+}
+
+restore();
+render();
+setInterval(render, 20000);   // the session gate moves on its own
+</script>
