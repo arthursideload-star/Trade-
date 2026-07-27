@@ -28,11 +28,14 @@ Der Assistent läuft auch direkt als Expert Advisor — gleiche Setups, gleiche 
 **eine einzige Datei** nach `MQL5/Experts` kopieren. Installation und Einstellungen:
 **[mt5/README.md](./mt5/README.md)**.
 
+**Am eigenen Windows-PC ist das in ~15 Minuten erledigt:**
+**[mt5/PC-SETUP.md](./mt5/PC-SETUP.md)** — inklusive Demokonto, das MetaTrader selbst
+ausgibt. Das ist der empfohlene Einstieg.
+
 **Auf dem Handy geht ein EA nicht** — die MT5-App hat keine EA-Engine, das gilt für jeden
-Expert Advisor. Der Weg, der vom iPad aus funktioniert:
-**[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**. Wenn ein VPS schon da ist, führt
-**[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** Schritt für Schritt durch die Einrichtung —
-Windows und Linux.
+Expert Advisor. Was dort trotzdem geht:
+**[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**. Und wenn der Bot laufen soll, *während der
+Rechner aus ist*, braucht es einen VPS: **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)**.
 
 **Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
 So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
@@ -84,7 +87,8 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md)** | Gemessene Ergebnisse aus 100 Marktläufen — mit Einordnung, was sie belegen und was nicht |
 | **[mt5/README.md](./mt5/README.md)** | Expert Advisor für MetaTrader 5: Installation, Einstellungen, Strategietester |
 | **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)** | Warum ein EA auf dem Handy nicht geht, und wie es vom iPad aus trotzdem funktioniert |
-| **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux), EA installieren, erster Demo-Abend |
+| **[mt5/PC-SETUP.md](./mt5/PC-SETUP.md)** | **Der einfache Weg:** Bot am eigenen Windows-PC, ~15 Minuten, ohne VPS |
+| **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux) — nur nötig, wenn der Bot laufen soll während der Rechner aus ist |
 | **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |

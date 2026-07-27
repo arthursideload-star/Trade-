@@ -586,6 +586,55 @@ class TestTheInstallScriptStaysTrue(unittest.TestCase):
         self.assertEqual(args.file, "GoldScalpAssistant.csv")
 
 
+class TestThePcGuideStaysTrue(unittest.TestCase):
+    """The guide for the ordinary case: a Windows PC and no VPS.
+
+    It is the one most people should follow, so its promises are checked the
+    same way the VPS guide's are.
+    """
+
+    GUIDE = os.path.join(MT5_DIR, "PC-SETUP.md")
+
+    @classmethod
+    def setUpClass(cls):
+        with open(cls.GUIDE, encoding="utf-8") as fh:
+            cls.text = fh.read()
+
+    def test_it_points_at_the_file_that_exists(self):
+        self.assertIn("refs/heads/claude/trading-bot-plan-4uj86r"
+                      "/mt5/Experts/GoldScalpAssistant.mq5", self.text)
+
+    def test_the_panel_states_are_the_ones_the_ea_prints(self):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            ea = fh.read()
+        labels = ea.split("string QualityLabel(", 1)[1].split("}", 1)[0]
+        for state in ("PRIME", "good", "marginal", "AVOID"):
+            with self.subTest(state=state):
+                self.assertIn(f'"{state}"', labels)
+                self.assertIn(f"`{state}`", self.text)
+
+    def test_the_commands_it_teaches_are_real(self):
+        from metals.cli import build_parser
+        parser = build_parser()
+        self.assertIn("python -m metals journal", self.text)
+        parser.parse_args(["journal", "--file", "GoldScalpAssistant.csv"])
+        self.assertIn("python -m metals minimum", self.text)
+        parser.parse_args(["minimum", "XAUUSD", "--equity", "55"])
+
+    def test_it_names_the_journal_file_the_ea_actually_writes(self):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            ea = fh.read()
+        match = re.search(r'#define JOURNAL_FILE "([^"]+)"', ea)
+        self.assertIsNotNone(match)
+        self.assertIn(match.group(1), self.text)
+
+    def test_it_does_not_send_a_pc_user_to_rent_a_vps(self):
+        """The whole point of this file is that renting a server is not a
+        prerequisite. If that ever inverts, the guide has lost its reason to
+        exist."""
+        self.assertIn("Kein VPS", self.text)
+
+
 class TestSetupGuideStaysTrue(unittest.TestCase):
     """The VPS guide tells the user to verify the download by line count.
 
