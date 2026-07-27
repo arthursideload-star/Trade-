@@ -97,6 +97,24 @@ MT5-App. Das ist langsamer, aber es kostet nichts und du lernst dabei mehr.
 
 ---
 
+## Sofort loslegen: Demokonto direkt in der Handy-App
+
+Für Charts, Kurse und eigene Trades brauchst du **weder VPS noch Broker-Anmeldung**. Die
+MT5-App bringt ihre eigenen Demokonten mit:
+
+1. **MetaTrader 5** aus dem App Store installieren (kostenlos).
+2. In der App: **Einstellungen → Neues Konto** (bzw. das `+` oben).
+3. Als Server **`MetaQuotes-Demo`** wählen — der steht ganz oben in der Liste.
+4. **Demokonto eröffnen**, Einzahlung **1 000 USD**, Hebel 1:100.
+
+Danach hast du genau das, was in den Werbevideos zu sehen ist: Kontostand, Kurse, Positionen,
+Charts — nur eben ohne Werbung. Handeln kannst du sofort, mit Spielgeld.
+
+**Was damit nicht geht:** ein Expert Advisor. Die App hat keine EA-Engine. Für die Analyse
+nimmst du stattdessen `/trade` im Chat und klickst den Trade selbst.
+
+---
+
 ## Was du unterwegs schon jetzt tun kannst — ohne VPS
 
 | Womit | Was |
