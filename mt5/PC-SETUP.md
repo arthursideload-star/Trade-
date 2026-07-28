@@ -11,6 +11,48 @@ Kein VPS. Keine Miete. Kein Container, kein KasmVNC, kein `CUSTOM_USER`-Rätsel.
 
 ---
 
+## Vorher: Tag 1 gehört dem Backtest, nicht der Installation
+
+Bevor du irgendetwas installierst, beantworte die Frage, die alles andere entscheidet:
+**Funktioniert die Strategie auf echten Golddaten überhaupt?**
+
+Bisher gemessen wurde nur auf einem Marktsimulator, weil die Bauumgebung keinen Netzzugang
+hat — und dort war **jede** Konfiguration negativ
+([BACKTEST-ERGEBNISSE.md](../docs/BACKTEST-ERGEBNISSE.md)). Auf echten Daten ist das noch
+nicht geprüft. Das ist der offene Punkt O18, und du bist die erste Gelegenheit, ihn zu
+schließen.
+
+**Datei holen** (kostenlos, fertig als CSV):
+Kaggle → *„XAU/USD Gold Price Historical Data"* von `novandraanugrah` → `XAU_5m_data.csv`.
+Enthält 5-Minuten-Kerzen ab 2004. Alternativen und die Zeitzonenfallen:
+[DATENQUELLEN.md](../docs/DATENQUELLEN.md).
+
+**Laufen lassen:**
+
+```bash
+python -m metals backtest --source file --file XAU_5m_data.csv --tz broker_gmt3
+```
+
+Der Lader erkennt das Format selbst und **prüft die Zeitzone gegen Golds bekanntes
+Volatilitätsprofil**. Kommt eine Warnung wie *„die volatilsten Stunden sind [0,1,4,6] UTC,
+normal sind 12–17"*, stimmt `--tz` nicht — dann `broker_gmt2` oder `utc` probieren, bis die
+Warnung verschwindet. Das ist kein Schönheitsfehler: Eine falsche Zeitzone verschiebt jede
+Session-Regel und produziert einen plausibel aussehenden, falschen Backtest.
+
+**Was du dann liest:** nicht die Trefferquote, sondern den **Erwartungswert pro Trade**. Eine
+Quote von 68 % bei −0,18R ist keine Seltenheit, sondern der Normalfall, wenn die Kosten die
+Bruttokante auffressen. Der Report zeigt beides getrennt.
+
+- **Erwartungswert deutlich negativ** → nicht installieren. Dann ist der EA ein sehr
+  disziplinierter Weg, Geld zu verlieren, und die Arbeit gehört in die Setups.
+- **Um null herum** → installieren, aber im Advisor-Modus und ohne Eile.
+- **Deutlich positiv** → dann wird es interessant, und dann reden wir über die nächsten
+  Schritte.
+
+Erst danach das hier:
+
+---
+
 ## Was du brauchst
 
 - Einen Windows-PC oder Laptop
