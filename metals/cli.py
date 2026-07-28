@@ -512,6 +512,35 @@ def cmd_microscalp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_dayrange(args: argparse.Namespace) -> int:
+    """The day-range prediction strategy: predict a move, bank part of it."""
+    from .dayrange import DayRangeConfig, optimise, report_sweep, sweep
+
+    cfg = DayRangeConfig(
+        symbol=args.symbol, start_equity=args.equity, lot=args.lot,
+        spread_usd_oz=args.spread, edge_fraction=args.edge,
+        confirm_bars=args.confirm, take_fraction=args.take,
+        stop_fraction=args.stop, time_stop_bars=args.time_stop,
+    )
+    if args.train:
+        rows = optimise(cfg, markets=args.markets, bars=args.bars,
+                        seed_base=args.seed)
+        print("PARAMETERSUCHE — beste 10 nach Erwartungswert je Trade")
+        print("=" * 70)
+        print(f"  {'Mitnahme':>9} {'Stop':>6} {'Zone':>6} {'Kerzen':>7} "
+              f"{'Trades':>7} {'Treffer':>8} {'Erwartung':>10}")
+        print("  " + "-" * 66)
+        for c, s_ in rows[:10]:
+            print(f"  {c.take_fraction:>9.0%} {c.stop_fraction:>6.0%} "
+                  f"{c.edge_fraction:>6.0%} {c.confirm_bars:>7d} "
+                  f"{s_.mean_trades:>7.0f} {s_.mean_win_rate * 100:>7.1f}% "
+                  f"{s_.mean_expectancy_r:>+9.3f}R")
+        return 0
+    print(report_sweep(sweep(cfg, markets=args.markets, bars=args.bars,
+                             seed_base=args.seed)))
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -659,6 +688,28 @@ def build_parser() -> argparse.ArgumentParser:
     ms.add_argument("--train", action="store_true",
                     help="Parametersuche ueber Ziel, Stop, Richtung, Anzahl")
     ms.set_defaults(func=cmd_microscalp)
+
+    dr = sub.add_parser("dayrange",
+                        help="Tagesspanne-Strategie: Bewegung vorhersagen, "
+                             "Teil davon mitnehmen")
+    dr.add_argument("--symbol", default="XAUUSD")
+    dr.add_argument("--equity", type=float, default=20_000.0)
+    dr.add_argument("--lot", type=float, default=0.10)
+    dr.add_argument("--spread", type=float, default=0.30)
+    dr.add_argument("--edge", type=float, default=0.30,
+                    help="wie nah am Rand der Tagesspanne eingestiegen wird")
+    dr.add_argument("--confirm", type=int, default=3,
+                    help="Bestaetigungskerzen in Richtung des Trades")
+    dr.add_argument("--take", type=float, default=0.50,
+                    help="Anteil der Vorhersage, bei dem geschlossen wird")
+    dr.add_argument("--stop", type=float, default=0.50,
+                    help="Anteil der Vorhersage als Stop-Abstand")
+    dr.add_argument("--time-stop", type=int, default=240)
+    dr.add_argument("--markets", type=int, default=30)
+    dr.add_argument("--bars", type=int, default=15_000)
+    dr.add_argument("--seed", type=int, default=1_000)
+    dr.add_argument("--train", action="store_true")
+    dr.set_defaults(func=cmd_dayrange)
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)
