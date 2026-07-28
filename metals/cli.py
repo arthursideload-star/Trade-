@@ -422,6 +422,45 @@ def cmd_journal(args: argparse.Namespace) -> int:
     return 1 if summary.discipline_breaches else 0
 
 
+def cmd_challenge(args: argparse.Namespace) -> int:
+    """Is a funded-trading challenge worth its fee, given a real edge?
+
+    Exists because the pitch for these is built entirely on the size of the
+    notional account, and the only number that decides it is the one nobody
+    puts on the slide: expectancy per trade, after costs.
+    """
+    from .challenge import (ChallengeRules, Edge, evaluate_program, render,
+                            render_program, simulate)
+
+    edge = Edge(
+        win_rate=args.win_rate / 100.0,
+        win_r=args.win_r,
+        loss_r=args.loss_r,
+        risk_pct=args.risk,
+        trades_per_day=args.trades_per_day,
+        cost_r=args.cost,
+    )
+
+    if args.programm:
+        print(render_program(evaluate_program(
+            args.account, fee=args.fee, edge=edge, runs=args.runs,
+            trailing_drawdown=args.trailing, horizon_days=args.horizon)))
+    else:
+        rules = ChallengeRules(
+            account_size=args.account,
+            profit_target_pct=args.target,
+            max_daily_loss_pct=args.daily_loss,
+            max_total_drawdown_pct=args.max_drawdown,
+            trailing_drawdown=args.trailing,
+            min_trading_days=args.min_days,
+            max_trading_days=args.max_days,
+            fee=args.fee,
+            profit_split=args.split / 100.0,
+        )
+        print(render(simulate(rules, edge, runs=args.runs)))
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -513,6 +552,38 @@ def build_parser() -> argparse.ArgumentParser:
                    help="also print one row per closed trade, for a "
                         "spreadsheet")
     j.set_defaults(func=cmd_journal)
+
+    ch = sub.add_parser("challenge",
+                        help="lohnt sich eine Fremdkapital-Challenge? "
+                             "(Simulation statt Verkaufsgespraech)")
+    ch.add_argument("--account", type=float, default=100_000.0)
+    ch.add_argument("--fee", type=float, default=0.0,
+                    help="was die Challenge kostet -- der Betrag, der wirklich "
+                         "deiner ist")
+    ch.add_argument("--programm", action="store_true",
+                    help="den ganzen Weg rechnen: Phase 1, Phase 2 und das "
+                         "finanzierte Konto")
+    ch.add_argument("--win-rate", type=float, default=100.0 / 2.3,
+                    help="Trefferquote in Prozent (Standard: der Wert, bei dem "
+                         "die Auszahlungsstruktur exakt null ergibt)")
+    ch.add_argument("--win-r", type=float, default=1.3)
+    ch.add_argument("--loss-r", type=float, default=1.0)
+    ch.add_argument("--cost", type=float, default=0.05,
+                    help="Spread und Slippage je Trade, als Anteil des Stops")
+    ch.add_argument("--risk", type=float, default=1.0)
+    ch.add_argument("--trades-per-day", type=int, default=4)
+    ch.add_argument("--target", type=float, default=10.0)
+    ch.add_argument("--daily-loss", type=float, default=5.0)
+    ch.add_argument("--max-drawdown", type=float, default=10.0)
+    ch.add_argument("--trailing", action="store_true",
+                    help="nachziehende Verlustschwelle (haeufig, und der "
+                         "haeufigste Grund fuers Reissen)")
+    ch.add_argument("--min-days", type=int, default=4)
+    ch.add_argument("--max-days", type=int, default=30)
+    ch.add_argument("--split", type=float, default=80.0)
+    ch.add_argument("--horizon", type=int, default=250)
+    ch.add_argument("--runs", type=int, default=20_000)
+    ch.set_defaults(func=cmd_challenge)
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)
