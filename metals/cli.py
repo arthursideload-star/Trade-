@@ -461,6 +461,57 @@ def cmd_challenge(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_microscalp(args: argparse.Namespace) -> int:
+    """Measure the "close it the moment it is green" strategy.
+
+    Implemented as described rather than argued with. The win rate it
+    produces is genuinely near 100%, and the question the numbers answer is
+    what happens to the rest of the distribution.
+    """
+    from .microscalp import (MicroConfig, optimise, report, report_sweep, run,
+                             sweep)
+
+    cfg = MicroConfig(
+        symbol=args.symbol,
+        start_equity=args.equity,
+        lot=args.lot,
+        max_positions=args.max_positions,
+        take_profit_usd_oz=args.take_profit,
+        stop_loss_usd_oz=args.stop,
+        spread_usd_oz=args.spread,
+        direction=args.direction,
+        cooldown_bars=args.cooldown,
+    )
+
+    if args.train:
+        rows = optimise(cfg, markets=args.markets, bars=args.bars)
+        print("PARAMETERSUCHE — beste 12 nach Median-Rendite")
+        print("=" * 78)
+        print(f"  {'TP':>5} {'Stop':>6} {'Richtg':>7} {'Pos':>4} {'Treffer':>8} "
+              f"{'Median':>9} {'Mittel':>10} {'Stopout':>8}")
+        print("  " + "-" * 74)
+        for c, s_ in rows[:12]:
+            stop = "keiner" if c.stop_loss_usd_oz is None else f"{c.stop_loss_usd_oz:g}"
+            print(f"  {c.take_profit_usd_oz:>5g} {stop:>6} {c.direction:>7} "
+                  f"{c.max_positions:>4} {s_.mean_win_rate * 100:>7.1f}% "
+                  f"{s_.median_return_pct:>+8.1f}% {s_.mean_return_pct:>+9.1f}% "
+                  f"{s_.stop_out_rate * 100:>7.0f}%")
+        positive = sum(1 for _, s_ in rows if s_.median_return_pct > 0)
+        print()
+        print(f"  Konfigurationen mit positivem Median: {positive} von {len(rows)}")
+        print()
+        print("  Sortiert nach Median, nicht nach Mittelwert. Bei dieser")
+        print("  Verteilung haengt der Mittelwert daran, ob der Schwanz in der")
+        print("  Stichprobe vorkam -- er beschreibt die Ueberlebenden.")
+        return 0
+
+    if args.markets > 1:
+        print(report_sweep(sweep(cfg, markets=args.markets, bars=args.bars)))
+    else:
+        print(report(run(cfg, seed=args.seed, bars=args.bars)))
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -584,6 +635,30 @@ def build_parser() -> argparse.ArgumentParser:
     ch.add_argument("--horizon", type=int, default=250)
     ch.add_argument("--runs", type=int, default=20_000)
     ch.set_defaults(func=cmd_challenge)
+
+    ms = sub.add_parser("microscalp",
+                        help="die 'sofort schliessen wenn im Plus'-Strategie "
+                             "messen")
+    ms.add_argument("--symbol", default="XAUUSD")
+    ms.add_argument("--equity", type=float, default=1_000.0)
+    ms.add_argument("--lot", type=float, default=0.10)
+    ms.add_argument("--max-positions", type=int, default=3)
+    ms.add_argument("--take-profit", type=float, default=0.10,
+                    help="USD je Unze ueber dem Einstieg, netto nach Spread")
+    ms.add_argument("--stop", type=float, default=None,
+                    help="Stop in USD je Unze; ohne Angabe kein Stop")
+    ms.add_argument("--spread", type=float, default=0.30)
+    ms.add_argument("--direction", default="follow",
+                    choices=("follow", "fade", "random", "long", "short"))
+    ms.add_argument("--cooldown", type=int, default=0)
+    ms.add_argument("--markets", type=int, default=1,
+                    help="mehr als 1 zeigt die Verteilung statt eines Pfades")
+    ms.add_argument("--bars", type=int, default=8_000,
+                    help="1-Minuten-Kerzen; der Zeithorizont entscheidet hier")
+    ms.add_argument("--seed", type=int, default=42)
+    ms.add_argument("--train", action="store_true",
+                    help="Parametersuche ueber Ziel, Stop, Richtung, Anzahl")
+    ms.set_defaults(func=cmd_microscalp)
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)

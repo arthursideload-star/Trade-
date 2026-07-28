@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (429 Tests). Nächster Schritt: Backtest auf echter
+Journal-Modul implementiert und getestet (448 Tests). Nächster Schritt: Backtest auf echter
 Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
@@ -59,6 +59,7 @@ python -m metals rules                          # Risikoregeln und Kontraktspezi
 python -m metals minimum XAUUSD --equity 55     # Reicht mein Konto für dieses Metall?
 python -m metals journal                        # Was hat der EA getan — und was belegt das?
 python -m metals challenge --fee 500 --programm # Lohnt eine Fremdkapital-Challenge?
+python -m metals microscalp --markets 100        # 'Sofort schliessen wenn im Plus' messen
 python -m metals backtest --source live         # Backtest, letzte ~60 Tage
 python -m metals backtest --source file \
     --file XAU_5m_data.csv --tz broker_gmt3     # Backtest auf echter Historie
@@ -90,6 +91,7 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)** | Warum ein EA auf dem Handy nicht geht, und wie es vom iPad aus trotzdem funktioniert |
 | **[mt5/PC-SETUP.md](./mt5/PC-SETUP.md)** | **Der einfache Weg:** Bot am eigenen Windows-PC, ~15 Minuten, ohne VPS |
 | **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux) — nur nötig, wenn der Bot laufen soll während der Rechner aus ist |
+| **[docs/MICRO-SCALPING.md](./docs/MICRO-SCALPING.md)** | Die „Gewinn sofort mitnehmen"-Strategie: gemessen, mit Parametersuche — und den drei Prüfungen, die einen Messfehler aufdeckten |
 | **[docs/FREMDKAPITAL.md](./docs/FREMDKAPITAL.md)** | Fremdkapital-Challenges und KI-Bots: was an den Verkaufsversprechen stimmt, was nicht, und die Simulation dazu |
 | **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
@@ -146,7 +148,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-429 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+448 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die
