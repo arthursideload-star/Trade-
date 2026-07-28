@@ -88,6 +88,59 @@ Rechnung, die den Phase-1-Gewinn als Einkommen verbucht, kommt auf ein positives
 Ergebnis — das war der erste Fehler in unserem eigenen Modell und ist im Code als
 Test festgenagelt.
 
+### Wie man die Angaben eines Anbieters liest
+
+Zwei Fragen entscheiden, und beide sind in einer Nachricht gestellt:
+
+1. **Was kostet es — Produkt und Challenge-Gebühr, in Zahlen?**
+2. **Wie viele Challenges wurden versucht, und wie viele bestanden?**
+
+Frage 1 wird bei seriösen Produkten auf einer Preisseite beantwortet. Wird sie
+stattdessen auf ein „persönliches Gespräch" verschoben, ist das eine
+Verkaufstechnik, keine Beratung: Ein Preis, den man erst im Einzelgespräch erfährt,
+ist ein Preis, der im Einzelgespräch verhandelt und mit Druck durchgesetzt werden
+soll.
+
+Frage 2 zielt auf den **Nenner**. „100 % bestanden" ohne Anzahl ist keine Statistik,
+sondern ein Satz. Was er bei ehrlicher Auswertung höchstens bedeuten könnte:
+
+| Versuche | behauptet | 95 %-Intervall der wahren Quote |
+|---|---|---|
+| 3 | 100 % | 44 % – 100 % |
+| 10 | 100 % | 72 % – 100 % |
+| 50 | 100 % | 93 % – 100 % |
+
+(Wilson-Intervall, dieselbe Rechnung wie in [LERNEN.md](./LERNEN.md).)
+
+Wer 50 Bestehen vorzuweisen hat, sagt „50 von 50". Wer nur die Prozentzahl nennt,
+hat meistens einen Nenner, den man nicht sehen soll.
+
+### Das Argument, das ohne jede Zahl auskommt
+
+Ein Bot, der Challenges zuverlässig besteht, ist eine Gelddruckmaschine. Die
+Anbieter zahlen bei Bestehen aus; wer zuverlässig besteht, lässt ihn laufen und
+kassiert selbst.
+
+**Niemand verkauft eine Gelddruckmaschine.** Wer sie über Telegram-Webinare gegen
+Gebühr vertreibt, verdient am Verkauf — nicht am Handeln. Das ist kein Beweis, dass
+nichts dran ist, aber es kehrt die Beweislast um: Die Frage ist nicht „warum sollte
+es nicht funktionieren", sondern „warum verkaufen sie es dann".
+
+### Typische Druckmittel, an denen man es erkennt
+
+- **Codewort**, das man nennen muss („funded") — wirkt wie eine Qualifikation, ist
+  aber eine Selbstverpflichtung: Wer den Aufwand betrieben hat, steigt schwerer aus.
+- **Knappheit** („können wir niemanden mehr hineinlassen").
+- **Termindruck** („sei spätestens 5 Minuten vorher da").
+- **Preis erst im Gespräch.**
+- **Ergebnisgruppe** mit vielen Gewinn-Screenshots. Screenshots sind in zwei Minuten
+  gefälscht, und selbst echte zeigen nur die, die zeigen wollen — die Verlierer
+  posten nicht.
+
+Keines davon beweist Betrug. Alle zusammen beschreiben einen Verkaufstrichter, der
+auf Entscheidung unter Druck ausgelegt ist — und das ist das Gegenteil dessen, was
+eine Kapitalentscheidung braucht.
+
 ### „Die KI hat keine Emotionen" — stimmt, hilft aber nicht
 
 Das Argument im Seminar: Menschen scheitern an Emotionen, die KI hat keine, also
