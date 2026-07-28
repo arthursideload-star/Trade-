@@ -57,7 +57,6 @@ DEFAULT_LEVERAGE = EU_RETAIL_LEVERAGE_GOLD
 # itself, worst one first. 50% is not a convention but the ESMA margin
 # close-out rule, applied per account.
 STOP_OUT_LEVEL = 0.50
-MARGIN_CALL_LEVEL = 1.00
 
 
 @dataclass(frozen=True)
@@ -115,6 +114,7 @@ class RunResult:
     bars: int = 0
     max_open: int = 0
     largest_loss: float = 0.0
+    opening_price: float = 0.0
 
     @property
     def win_rate(self) -> float:
@@ -178,7 +178,8 @@ def run(cfg: MicroConfig | None = None, series: CandleSeries | None = None,
     equity = cfg.start_equity
     result = RunResult(config=cfg, start_equity=equity, end_equity=equity,
                        peak_equity=equity, trades=0, wins=0, losses=0,
-                       bars=len(candles))
+                       bars=len(candles),
+                       opening_price=candles[0].open if candles else 0.0)
     open_positions: list[Position] = []
     last_close_bar = -10_000
 
@@ -360,7 +361,12 @@ def report(result: RunResult) -> str:
     lines.append(f"  Stop: {'keiner' if c.stop_loss_usd_oz is None else f'{c.stop_loss_usd_oz:g} USD/oz'}")
     lines.append("")
     if r.trades == 0 and r.max_open == 0:
-        margin = c.lot * get_spec(c.symbol).contract_size_oz * 4500.0 / c.leverage
+        # Priced off the run's own first bar, not a hard-coded level: gold
+        # moved from 4500 to about 4100 while this file was being written,
+        # and a margin figure quoted from a stale price is wrong by that
+        # ratio in the one message whose whole job is to state a number.
+        margin = (c.lot * get_spec(c.symbol).contract_size_oz
+                  * r.opening_price / c.leverage)
         lines.append("  KEIN EINZIGER TRADE MOEGLICH")
         lines.append(f"  Eine {c.lot:g}-Lot-Position auf Gold bindet bei Hebel "
                      f"1:{c.leverage:g} rund")
