@@ -92,6 +92,7 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[mt5/PC-SETUP.md](./mt5/PC-SETUP.md)** | **Der einfache Weg:** Bot am eigenen Windows-PC, ~15 Minuten, ohne VPS |
 | **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux) — nur nötig, wenn der Bot laufen soll während der Rechner aus ist |
 | **[docs/MICRO-SCALPING.md](./docs/MICRO-SCALPING.md)** | Die „Gewinn sofort mitnehmen"-Strategie: gemessen, mit Parametersuche — und den drei Prüfungen, die einen Messfehler aufdeckten |
+| **[docs/WERBEVIDEO-ANALYSE.md](./docs/WERBEVIDEO-ANALYSE.md)** | Warum „40 € reichen" auf einem Rechenfehler beruht — mit dem Beweis aus dem Werbevideo selbst |
 | **[docs/FREMDKAPITAL.md](./docs/FREMDKAPITAL.md)** | Fremdkapital-Challenges und KI-Bots: was an den Verkaufsversprechen stimmt, was nicht, und die Simulation dazu |
 | **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
