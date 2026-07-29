@@ -521,6 +521,7 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
         spread_usd_oz=args.spread, edge_fraction=args.edge,
         confirm_bars=args.confirm, take_fraction=args.take,
         stop_fraction=args.stop, time_stop_bars=args.time_stop,
+        risk_pct=args.risk,
     )
     if args.train:
         rows = optimise(cfg, markets=args.markets, bars=args.bars,
@@ -538,6 +539,22 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
         return 0
     print(report_sweep(sweep(cfg, markets=args.markets, bars=args.bars,
                              seed_base=args.seed)))
+    return 0
+
+
+def cmd_claims(args: argparse.Namespace) -> int:
+    """What the gold-bot material claims, and what survives measurement."""
+    from .claims import render_catalogue, render_measurements
+
+    if not args.measure:
+        print(render_catalogue())
+        print()
+        print("  python -m metals claims --measure  misst die pruefbaren "
+              "Behauptungen.")
+        return 0
+    print(render_catalogue())
+    print()
+    print(render_measurements(markets=args.markets, bars=args.bars))
     return 0
 
 
@@ -709,7 +726,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "Teil davon mitnehmen")
     dr.add_argument("--symbol", default="XAUUSD")
     dr.add_argument("--equity", type=float, default=20_000.0)
-    dr.add_argument("--lot", type=float, default=0.10)
+    dr.add_argument("--lot", type=float, default=0.10,
+                    help="feste Losgroesse; wird von --risk ueberstimmt")
+    dr.add_argument("--risk", type=float, default=None,
+                    help="Risiko je Trade in Prozent; leitet die Losgroesse "
+                         "aus dem Stop-Abstand ab (gedeckelt auf R1)")
     dr.add_argument("--spread", type=float, default=0.30)
     dr.add_argument("--edge", type=float, default=0.30,
                     help="wie nah am Rand der Tagesspanne eingestiegen wird")
@@ -725,6 +746,16 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--seed", type=int, default=1_000)
     dr.add_argument("--train", action="store_true")
     dr.set_defaults(func=cmd_dayrange)
+
+    cl = sub.add_parser("claims",
+                        help="Behauptungen aus der Recherche — und was davon "
+                             "einer Messung standhaelt")
+    cl.add_argument("--measure", action="store_true",
+                    help="die pruefbaren Behauptungen tatsaechlich messen "
+                         "(dauert einige Minuten)")
+    cl.add_argument("--markets", type=int, default=20)
+    cl.add_argument("--bars", type=int, default=12_000)
+    cl.set_defaults(func=cmd_claims)
 
     tr = sub.add_parser("train",
                         help="ein Trainingsdurchgang auf frischen Maerkten")

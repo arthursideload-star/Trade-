@@ -688,11 +688,6 @@ def render(summary: Summary) -> str:
 
 # --- Writing (for tests, and for logging trades taken by hand) --------------
 
-def write_header(path: str) -> None:
-    with open(path, "w", newline="", encoding="utf-8") as fh:
-        csv.writer(fh).writerow(COLUMNS)
-
-
 def append(path: str, entry: Entry) -> None:
     """Append one entry, creating the file with its header if needed.
 

@@ -47,7 +47,12 @@ from .candles import Candle, CandleSeries
 class MarketParams:
     """Parameters of the generated market, in the metal's own units."""
 
-    start_price: float = 4500.0
+    # Roughly where gold traded when this was last checked. It matters only
+    # for figures quoted in dollars -- margin, and whether a minimum lot fits
+    # a small account -- because everything else here is scale-free. Those
+    # are exactly the figures a small account turns on, so a stale number is
+    # not harmless.
+    start_price: float = 4100.0
     # Baseline per-bar volatility as a fraction of price.
     base_vol: float = 0.00035
     # GARCH-like persistence: how much of last bar's shock carries forward.

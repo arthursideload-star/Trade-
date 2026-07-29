@@ -93,6 +93,11 @@ class SeasonalRead:
     weekday_note: str
     month_note: str
     confidence_weight: float = 0.05   # deliberately tiny
+    # Set when the calendar puts the day inside a thin-book window. Separate
+    # from the monthly score on purpose: this is a statement about depth, not
+    # about direction, and it changes which setups to trust rather than which
+    # way to lean.
+    liquidity_note: str = ""
 
     @property
     def lean(self) -> str:
@@ -107,8 +112,10 @@ class SeasonalRead:
         return "neutral"
 
     def explain(self) -> str:
+        liquidity = f" {self.liquidity_note}" if self.liquidity_note else ""
         return (
-            f"Seasonality ({self.lean}): {self.month_note} {self.weekday_note} "
+            f"Seasonality ({self.lean}): {self.month_note} {self.weekday_note}"
+            f"{liquidity} "
             f"Weighting this at {self.confidence_weight:.0%} of the confidence "
             f"score -- the monthly sample is roughly 50 observations and the "
             f"published studies disagree with each other, so it breaks ties "
@@ -123,12 +130,22 @@ def read(symbol: str, day: date | None = None) -> SeasonalRead:
     canonical = get_spec(symbol).symbol
     table = SILVER_MONTHS if canonical in ("XAGUSD", "SI", "SIL") else GOLD_MONTHS
     score, note = table[day.month]
+    if summer_doldrums(day):
+        liquidity = ("Thin summer book: expect breakout setups to fail more "
+                     "often and range setups to hold better.")
+    elif year_end_illiquidity(day):
+        liquidity = ("Year-end book: moves are real but the depth behind them "
+                     "is not. Size down rather than trusting the follow-through.")
+    else:
+        liquidity = ""
+
     return SeasonalRead(
         symbol=canonical,
         month=day.month,
         score=score,
         weekday_note=WEEKDAY_NOTES.get(day.weekday(), ""),
         month_note=note,
+        liquidity_note=liquidity,
     )
 
 

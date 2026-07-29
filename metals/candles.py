@@ -225,6 +225,47 @@ def build_series(
     return CandleSeries(symbol, timeframe, candles, source)
 
 
+def resample(series: CandleSeries, factor: int) -> CandleSeries:
+    """Aggregate `factor` consecutive bars into one.
+
+    Used to ask the timeframe question honestly: the same market, the same
+    strategy, only the bar size changed. Building the M5 series from the same
+    M1 bars means the two runs cannot differ because they saw different
+    markets.
+
+    Aggregation is by count, not by clock, and the last group is dropped when
+    it is incomplete -- a half-formed bar has a high and low that the market
+    had not finished making, and including it is a small lookahead.
+    """
+    if factor < 1:
+        raise ValueError("factor must be at least 1")
+    if factor == 1:
+        return series
+
+    seconds = TIMEFRAME_SECONDS[series.timeframe] * factor
+    label = next((k for k, v in TIMEFRAME_SECONDS.items() if v == seconds), None)
+    if label is None:
+        raise ValueError(
+            f"{series.timeframe} x{factor} is not a timeframe this package names"
+        )
+
+    bars = series.candles
+    out: list[Candle] = []
+    for start in range(0, len(bars) - factor + 1, factor):
+        group = bars[start:start + factor]
+        volumes = [b.volume for b in group if b.volume is not None]
+        out.append(Candle(
+            ts=group[0].ts,
+            open=group[0].open,
+            high=max(b.high for b in group),
+            low=min(b.low for b in group),
+            close=group[-1].close,
+            volume=sum(volumes) if volumes else None,
+        ))
+    return CandleSeries(series.symbol, label, out,
+                        source=f"{series.source}+resampled")
+
+
 def _to_utc(value) -> datetime:  # type: ignore[no-untyped-def]
     """Coerce the timestamp shapes providers actually emit into aware UTC."""
     if isinstance(value, datetime):

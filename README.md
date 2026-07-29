@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (448 Tests). Nächster Schritt: Backtest auf echter
+Journal-Modul implementiert und getestet (494 Tests). Nächster Schritt: Backtest auf echter
 Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
@@ -60,6 +60,9 @@ python -m metals minimum XAUUSD --equity 55     # Reicht mein Konto für dieses 
 python -m metals journal                        # Was hat der EA getan — und was belegt das?
 python -m metals challenge --fee 500 --programm # Lohnt eine Fremdkapital-Challenge?
 python -m metals microscalp --markets 100        # 'Sofort schliessen wenn im Plus' messen
+python -m metals claims                         # Was im Netz behauptet wird
+python -m metals claims --measure               # ... und was davon einer Messung standhält
+python -m metals dayrange --equity 432 --risk 1 # Strategie unter der 1-%-Regel
 python -m metals backtest --source live         # Backtest, letzte ~60 Tage
 python -m metals backtest --source file \
     --file XAU_5m_data.csv --tz broker_gmt3     # Backtest auf echter Historie
@@ -93,6 +96,8 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux) — nur nötig, wenn der Bot laufen soll während der Rechner aus ist |
 | **[docs/MICRO-SCALPING.md](./docs/MICRO-SCALPING.md)** | Die „Gewinn sofort mitnehmen"-Strategie: gemessen, mit Parametersuche — und den drei Prüfungen, die einen Messfehler aufdeckten |
 | **[docs/WERBEVIDEO-ANALYSE.md](./docs/WERBEVIDEO-ANALYSE.md)** | Warum „40 € reichen" auf einem Rechenfehler beruht — mit dem Beweis aus dem Werbevideo selbst |
+| **[docs/YOUTUBE-RECHERCHE.md](./docs/YOUTUBE-RECHERCHE.md)** | Zehn Behauptungen aus der Bot-Szene, nach Quellenart getrennt und gemessen statt zitiert — inklusive dem Beweis, dass eine 90-%-Trefferquote käuflich ist |
+| **[docs/REPO-AUDIT.md](./docs/REPO-AUDIT.md)** | Was im Repository unnötig war, was den Bot schlechter machte und was schlicht nicht stimmte |
 | **[docs/FREMDKAPITAL.md](./docs/FREMDKAPITAL.md)** | Fremdkapital-Challenges und KI-Bots: was an den Verkaufsversprechen stimmt, was nicht, und die Simulation dazu |
 | **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
@@ -149,7 +154,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-448 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+494 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die

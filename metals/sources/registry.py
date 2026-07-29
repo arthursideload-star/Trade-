@@ -541,13 +541,6 @@ _add(Source(
 
 # --- Query helpers ----------------------------------------------------------
 
-def by_category(category: Category) -> list[Source]:
-    return sorted(
-        (s for s in SOURCES.values() if s.category is category),
-        key=lambda s: s.priority,
-    )
-
-
 def keyless() -> list[Source]:
     """Sources usable before the user has registered for anything."""
     return sorted(

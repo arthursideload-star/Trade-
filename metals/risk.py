@@ -45,10 +45,6 @@ MIN_PLAUSIBLE_ATR_PCT = 0.003
 MAX_PLAUSIBLE_ATR_PCT = 8.0
 
 
-class RiskViolation(Exception):
-    """Raised when a trade would break a hard limit."""
-
-
 @dataclass
 class AccountState:
     """Everything the sizing logic needs to know about the account."""

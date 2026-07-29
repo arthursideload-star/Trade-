@@ -31,6 +31,14 @@ profit distance, an optional stop, how positions are sized, how direction is
 chosen, and the spread. `optimise` sweeps them and reports what the best
 configuration achieves -- which is the honest form of "training it".
 
+**This module keeps its fixed lot size on purpose.** The repo audit found that
+sizing a position from a fixed lot instead of from the risk limit is the
+defect that empties small accounts, and fixed it in `metals/dayrange.py` --
+the strategy that is meant to run. Here the fixed lot *is the thing being
+measured*: it is what the approach under test actually does, and changing it
+would silently invalidate every figure published from this module. See
+docs/REPO-AUDIT.md, finding A1.
+
     from metals.microscalp import MicroConfig, run, report
     print(report(run(MicroConfig())))
 """
