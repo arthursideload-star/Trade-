@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (494 Tests). Nächster Schritt: Backtest auf echter
+Journal-Modul implementiert und getestet (500 Tests). Nächster Schritt: Backtest auf echter
 Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
@@ -96,6 +96,7 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)** | VPS einrichten (Docker, Windows, Linux) — nur nötig, wenn der Bot laufen soll während der Rechner aus ist |
 | **[docs/MICRO-SCALPING.md](./docs/MICRO-SCALPING.md)** | Die „Gewinn sofort mitnehmen"-Strategie: gemessen, mit Parametersuche — und den drei Prüfungen, die einen Messfehler aufdeckten |
 | **[docs/WERBEVIDEO-ANALYSE.md](./docs/WERBEVIDEO-ANALYSE.md)** | Warum „40 € reichen" auf einem Rechenfehler beruht — mit dem Beweis aus dem Werbevideo selbst |
+| **[docs/KONTOGROESSE.md](./docs/KONTOGROESSE.md)** | Der Bot mit 100, 200 und 400 € — gemessen, mit der einen Zahl, aus der alles folgt: die kleinste handelbare Goldposition riskiert 31 $, egal wie groß das Konto ist |
 | **[docs/YOUTUBE-RECHERCHE.md](./docs/YOUTUBE-RECHERCHE.md)** | Zehn Behauptungen aus der Bot-Szene, nach Quellenart getrennt und gemessen statt zitiert — inklusive dem Beweis, dass eine 90-%-Trefferquote käuflich ist |
 | **[docs/REPO-AUDIT.md](./docs/REPO-AUDIT.md)** | Was im Repository unnötig war, was den Bot schlechter machte und was schlicht nicht stimmte |
 | **[docs/FREMDKAPITAL.md](./docs/FREMDKAPITAL.md)** | Fremdkapital-Challenges und KI-Bots: was an den Verkaufsversprechen stimmt, was nicht, und die Simulation dazu |
@@ -154,7 +155,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-494 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+500 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die

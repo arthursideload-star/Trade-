@@ -268,6 +268,55 @@ class TestSpreadIsReallyCharged(unittest.TestCase):
         self.assertEqual(len(r.target_distances), r.trades - r.exits.get("x", 0))
 
 
+class TestTheAccountSizeDocumentStaysTrue(unittest.TestCase):
+    """docs/KONTOGROESSE.md is the answer to 'is 400 euro enough'.
+
+    It is the document most likely to be read on its own and acted on, so
+    the arithmetic it quotes is checked against the code, and the honesty
+    clauses are checked for still being there. A later edit that quietly
+    drops the uncertainty band should fail a test, not a review.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import pathlib
+        cls.text = pathlib.Path("docs/KONTOGROESSE.md").read_text(encoding="utf-8")
+
+    def test_the_margin_figure_it_quotes_is_the_one_the_code_computes(self):
+        self.assertIn("205", self.text)
+        self.assertAlmostEqual(margin_required(4_100.0, 0.01, 20.0), 205.0,
+                               places=0)
+
+    def test_it_states_the_uncertainty_on_the_ruin_rate(self):
+        """0 of 20 runs is not 'it does not blow up'."""
+        self.assertIn("Wilson", self.text)
+        self.assertIn("16,1", self.text)
+
+    def test_it_does_not_promise_a_return(self):
+        for phrase in ("garantiert", "sicherer Gewinn", "risikofrei",
+                       "du wirst verdienen"):
+            self.assertNotIn(phrase, self.text.lower())
+
+    def test_it_names_the_simulator_caveat(self):
+        self.assertIn("simulate.py", self.text)
+        self.assertIn("nicht nachgewiesen", self.text.lower())
+
+    def test_it_explains_the_percentage_illusion(self):
+        """The single most misreadable number in the document: +44.7% on a
+        small account is the same trade sequence as +1.8% on a large one."""
+        self.assertIn("dieselbe Handelsfolge", self.text)
+
+    def test_the_forced_risk_scales_inversely_with_the_account(self):
+        """The doc's core table is 31 USD divided by the account. Checked
+        as arithmetic so the table cannot drift away from the code."""
+        f = measure_account_sizes(equities_eur=(100, 400), markets=4,
+                                  bars=8_000)
+        small, large = f.at(100), f.at(400)
+        assert small is not None and large is not None
+        self.assertAlmostEqual(small.forced_risk_pct,
+                               large.forced_risk_pct * 4, places=3)
+
+
 class TestNothingChangedForTheDefaultConfiguration(unittest.TestCase):
     """The new dials must not have moved any previously measured result."""
 
