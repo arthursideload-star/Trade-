@@ -541,6 +541,21 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_train(args: argparse.Namespace) -> int:
+    """One training iteration on fresh markets, appended to the log."""
+    from .train import append, one_iteration, render, summarise
+
+    if args.summary:
+        print(summarise())
+        return 0
+    it = one_iteration(markets=args.markets, bars=args.bars)
+    append(it)
+    print(render(it))
+    print()
+    print(summarise())
+    return 0
+
+
 def cmd_rules(args: argparse.Namespace) -> int:
     print("HARD RISK RULES (in code, not configuration -- changing one "
           "requires a commit)")
@@ -710,6 +725,14 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--seed", type=int, default=1_000)
     dr.add_argument("--train", action="store_true")
     dr.set_defaults(func=cmd_dayrange)
+
+    tr = sub.add_parser("train",
+                        help="ein Trainingsdurchgang auf frischen Maerkten")
+    tr.add_argument("--markets", type=int, default=20)
+    tr.add_argument("--bars", type=int, default=12_000)
+    tr.add_argument("--summary", action="store_true",
+                    help="nur die Bilanz aller bisherigen Durchgaenge")
+    tr.set_defaults(func=cmd_train)
 
     ru = sub.add_parser("rules", help="the hard risk rules and contract specs")
     ru.set_defaults(func=cmd_rules)
