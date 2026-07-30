@@ -81,6 +81,35 @@ ist jeder Einsatz gleich groß, und dann misst die Rendite tatsächlich die Tref
 Deshalb steht in jeder Sitzung nicht nur der Mittelwert, sondern die Spanne, und ab Faktor
 3 warnt die Ausgabe ausdrücklich.
 
+## Der dritte Weg: Setups ablehnen statt Position verkleinern
+
+Unter 0,01 Lot geht nichts mehr — die Position lässt sich nicht weiter verkleinern. Der
+einzige Hebel, der bleibt, ist **welche Setups man annimmt**. `max_risk_pct` lehnt ein
+Signal ab, wenn selbst die kleinste Position zu viel riskieren würde.
+
+Gemessen auf 400 €, 30 Märkte à einem Handelstag:
+
+| Deckel | Trades | abgelehnt | Median | schlechtester Markt | Erwartung je Trade |
+|---:|---:|---:|---:|---:|---:|
+| keiner | 8,4 | 0 | +6,89 % | **−14,07 %** | +0,218 R |
+| 10 % | 8,0 | 7,7 | +6,61 % | −10,71 % | +0,216 R |
+| 6 % | 7,1 | 22,9 | +4,03 % | −12,68 % | +0,197 R |
+| 4 % | 5,0 | 45,7 | +1,85 % | −8,34 % | +0,158 R |
+| 2,5 % | 3,0 | 56,9 | +0,31 % | −4,83 % | +0,133 R |
+
+**Ein 10-%-Deckel ist fast umsonst:** kaum weniger Trades, praktisch derselbe
+Erwartungswert, aber der schlechteste Markt verbessert sich von −14,1 % auf −10,7 %. Er
+kappt die Extremfälle und sonst nichts.
+
+**Enger als das kostet echte Kante.** Und zwar nicht nur Einsatzgröße, sondern Qualität:
+der Erwartungswert fällt von +0,218 R auf +0,133 R. Der Grund ist unangenehm logisch — ein
+weiter Stop bedeutet eine große vorhergesagte Bewegung, und die gibt es, wenn die
+Tagesspanne weit ist und der Kurs am Rand steht. Das ist genau das Setup, für das die
+Strategie gebaut wurde. Wer nach Stop-Breite filtert, filtert die guten Signale weg.
+
+Es gibt hier also keine kostenlose Lösung, sondern eine Abwägung. Sie ist als Test
+festgehalten, damit sie nicht stillschweigend verschwindet.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

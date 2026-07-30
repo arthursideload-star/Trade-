@@ -270,6 +270,63 @@ class TestSpreadIsReallyCharged(unittest.TestCase):
         self.assertEqual(len(r.target_distances), r.trades - r.exits.get("x", 0))
 
 
+class TestTheRiskCeiling(unittest.TestCase):
+    """max_risk_pct: decline the setup rather than shrink the position.
+
+    On a small gold account the position cannot be shrunk below 0.01 lot, so
+    the only control left is which setups to accept. These tests pin the
+    mechanics and, in the last one, the trade-off that makes it a real
+    decision rather than a free improvement.
+    """
+
+    EQUITY = 400 * ASSUMED_EUR_USD
+
+    def _cfg(self, cap):
+        return DayRangeConfig(start_equity=self.EQUITY, lot=0.01,
+                              risk_pct=None, max_risk_pct=cap)
+
+    def test_without_a_ceiling_nothing_is_declined(self):
+        r = run(self._cfg(None), seed=71, bars=8_000)
+        self.assertEqual(r.skipped_stop_too_wide, 0)
+
+    def test_a_ceiling_declines_setups_and_says_how_many(self):
+        r = run(self._cfg(4.0), seed=71, bars=8_000)
+        self.assertGreater(r.skipped_stop_too_wide, 0)
+
+    def test_a_tighter_ceiling_declines_more(self):
+        loose = run(self._cfg(10.0), seed=71, bars=8_000)
+        tight = run(self._cfg(2.5), seed=71, bars=8_000)
+        self.assertGreater(tight.skipped_stop_too_wide,
+                           loose.skipped_stop_too_wide)
+        self.assertLess(tight.trades, loose.trades)
+
+    def test_no_trade_taken_exceeds_the_ceiling(self):
+        """The property the whole thing exists for."""
+        cap = 4.0
+        cfg = self._cfg(cap)
+        r = run(cfg, seed=71, bars=8_000)
+        self.assertGreater(r.trades, 0)
+        for target in r.target_distances:
+            stop = target * cfg.stop_fraction / cfg.take_fraction
+            risked_pct = stop * cfg.lot * 100 / self.EQUITY * 100
+            self.assertLessEqual(round(risked_pct, 6), cap + 1e-6)
+
+    def test_the_ceiling_costs_expectancy_not_only_size(self):
+        """The uncomfortable half of the result, kept as a test so it cannot
+        quietly stop being true.
+
+        A wide stop here means a large predicted move, which means the range
+        was wide and price sat at its edge -- the setup the strategy is built
+        on. Filtering by stop width therefore filters out quality, not just
+        stake. Anyone tightening this dial should see that cost.
+        """
+        loose = sweep(self._cfg(10.0), markets=12, bars=1_440,
+                      seed_base=600_000)
+        tight = sweep(self._cfg(2.5), markets=12, bars=1_440,
+                      seed_base=600_000)
+        self.assertGreater(loose.mean_expectancy_r, tight.mean_expectancy_r)
+
+
 class TestC11Swap(unittest.TestCase):
     """Overnight financing, which the model did not charge at all before."""
 

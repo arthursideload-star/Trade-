@@ -78,6 +78,19 @@ class DayRangeConfig:
     lot_step: float = 0.01
     min_lot: float = 0.01
 
+    # Ceiling on what a single signal may risk, as a share of equity, when
+    # the position cannot be made any smaller. Where `risk_pct` scales the
+    # position down to fit the stop, this instead **declines the trade** when
+    # even the minimum lot would risk too much.
+    #
+    # It exists because on a small gold account those are different things.
+    # Scaling down is impossible below 0.01 lot, so the only remaining
+    # control is which setups to accept -- and the setups differ enormously:
+    # one session's stops ranged from 8.59 to 84.51 USD, a factor of ten.
+    # Taking only the narrow ones is the third option between "trade nothing"
+    # and "let the market decide how much to bet".
+    max_risk_pct: float | None = None
+
     # --- the prediction ---
     # How close to an end of the day's range price must sit before the bot
     # will trade against it. 0.30 means the lower or upper third.
@@ -233,6 +246,7 @@ class Result:
     # different when it also refused nine trades out of ten.
     skipped_too_small: int = 0
     skipped_no_margin: int = 0
+    skipped_stop_too_wide: int = 0
     # Positive means financing cost the account money over the run. Tracked
     # separately from trade P&L because it is not a trading result -- it is
     # rent, and it accrues whether the position is right or wrong.
@@ -364,6 +378,12 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                 if lots <= 0:
                     res.skipped_too_small += 1
                     continue
+
+                if cfg.max_risk_pct is not None and equity > 0:
+                    would_risk = abs(entry - sl) * lots * oz / equity * 100.0
+                    if would_risk > cfg.max_risk_pct:
+                        res.skipped_stop_too_wide += 1
+                        continue
 
                 need = lots * oz * bar.close / cfg.leverage
                 if used + need <= equity + floating:
