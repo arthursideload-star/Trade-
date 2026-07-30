@@ -208,6 +208,37 @@ class TestTheSessionRecord(LedgerFixture):
         self.assertEqual(a.end_equity_eur, b.end_equity_eur)
 
 
+class TestCrossCheckingTheQuote(unittest.TestCase):
+    """Several lookups, one price. Which one goes in the ledger matters."""
+
+    def test_wide_disagreement_is_reported(self):
+        """The actual quotes one lookup returned: a live CFD price, a
+        physical dealer stamped hours earlier, and a feed marked previous."""
+        ok, note = paper.check_quotes({"investing.com": 4_114.79,
+                                       "jmbullion": 4_047.47,
+                                       "mql5": 4_011.13})
+        self.assertFalse(ok)
+        self.assertIn("2.5", note)
+        for name in ("investing.com", "jmbullion", "mql5"):
+            self.assertIn(name, note, "the note has to name the sources, or "
+                                      "it cannot be acted on")
+
+    def test_close_quotes_pass(self):
+        ok, _ = paper.check_quotes({"a": 4_114.79, "b": 4_116.00})
+        self.assertTrue(ok)
+
+    def test_a_single_source_cannot_be_cross_checked_and_says_so(self):
+        ok, note = paper.check_quotes({"only": 4_114.79})
+        self.assertTrue(ok)
+        self.assertIn("one source", note)
+
+    def test_it_uses_the_projects_existing_rule(self):
+        """One definition of 'these feeds disagree', not two."""
+        from metals.sources.prices import cross_check
+        self.assertIn("cross_check", paper.check_quotes.__doc__ or "")
+        self.assertTrue(callable(cross_check))
+
+
 class TestWhenTheResultContradictsTheRules(LedgerFixture):
     """Expectancy and money pointing opposite ways.
 

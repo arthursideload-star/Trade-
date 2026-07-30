@@ -164,6 +164,32 @@ dieselbe Aussage.
 
 Die Sitzung meldet das jetzt ausdrücklich, und die Bilanz zählt, wie oft es passiert ist.
 
+## Die Kursquelle ist das schwächste Glied
+
+Eine einzige Abfrage lieferte drei Preise:
+
+| Quelle | Kurs | was es ist |
+|---|---:|---|
+| investing.com | 4.114,79 $ | Live-CFD-Quote mit Bid/Ask |
+| JM Bullion | 4.047,47 $ | Händler für physisches Gold, Zeitstempel Stunden alt |
+| MQL5 | 4.011,13 $ | ausdrücklich als „previous data" markiert |
+
+**2,58 % Unterschied** zwischen der höchsten und der niedrigsten. Wer sich hier
+stillschweigend eine aussucht, schreibt möglicherweise einen veralteten Kurs ins Journal,
+ohne dass die Wahl später noch nachvollziehbar wäre.
+
+`paper.check_quotes` prüft das — und benutzt dafür `sources.prices.cross_check`, also die
+Regel, die im Projekt schon existiert, statt einer zweiten Definition davon:
+
+```python
+>>> check_quotes({"investing.com": 4114.79, "jmbullion": 4047.47, "mql5": 4011.13})
+(False, 'sources disagree by 2.58% (...). ... usually means one feed is stale ...')
+```
+
+Für den Papier-Lauf wird die **CFD-Quote** genommen, weil sie das ist, was ein CFD-Konto
+tatsächlich bezahlt — und die Uneinigkeit landet im `price_source`-Feld, damit sie im
+Journal sichtbar bleibt.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

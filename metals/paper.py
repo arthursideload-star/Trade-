@@ -226,6 +226,27 @@ def append(session: Session) -> None:
         fh.write(json.dumps(asdict(session)) + "\n")
 
 
+def check_quotes(quotes: dict[str, float],
+                 tolerance_pct: float = 0.5) -> tuple[bool, str]:
+    """Compare the prices several lookups returned before using one.
+
+    Reuses `sources.prices.cross_check` rather than re-deriving the rule, so
+    there is one definition of "these feeds disagree" in the project.
+
+    This is not hypothetical here. One lookup in this session returned
+    4114.79 from a CFD quote, 4047.47 from a physical dealer stamped hours
+    earlier, and 4011.13 flagged as previous data -- a spread of over 100
+    dollars. Picking one silently would have put a stale number into the
+    ledger with no trace of the choice.
+    """
+    from .sources.prices import Quote, cross_check
+    now = datetime.now(timezone.utc)
+    return cross_check([Quote(symbol="XAUUSD", price=price, bid=None,
+                              ask=None, ts=now, source=name)
+                        for name, price in quotes.items()],
+                       tolerance_pct=tolerance_pct)
+
+
 def run_session(gold_price: float, day_high: float, day_low: float,
                 price_source: str, start_equity_eur: float | None = None,
                 cfg: DayRangeConfig | None = None,
