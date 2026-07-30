@@ -150,6 +150,20 @@ ein Tag zwischen −19 % und +26 % liegen kann, wenn 0,01 Lot auf 400 € 1,4 % 
 Trade riskiert. Das ist die Erfahrung, auf die man sich einstellen muss — der Ertrag
 entscheidet sich erst am echten Backtest.
 
+### Der Gegenbeweis kam in Sitzung 4
+
+Sitzung 2: **+16,5 % Rendite** bei **+0,064 R** Erwartungswert — Konto gewann, Regeln liefen
+mittelmäßig.
+Sitzung 4: **−2,5 % Rendite** bei **+0,050 R** Erwartungswert — Konto verlor, Regeln liefen
+gut.
+
+Zweimal derselbe Defekt, einmal in jede Richtung. Erwartungswert und Geld können nur dann
+verschiedene Vorzeichen haben, wenn die Einsätze unterschiedlich groß sind. Bei gleich
+großen Einsätzen ist positiver Erwartungswert gleich positives Geld — dann ist es
+dieselbe Aussage.
+
+Die Sitzung meldet das jetzt ausdrücklich, und die Bilanz zählt, wie oft es passiert ist.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

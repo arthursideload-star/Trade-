@@ -133,6 +133,11 @@ class Session:
     # smallest and largest trade in a single session. A mean alone hides
     # that, and the spread is the more dangerous fact.
     forced_risk_pct: float
+
+    # The spread actually charged. Taken from an observed bid/ask when the
+    # lookup gives one, because it is the one cost that is directly visible
+    # in a quote -- and guessing it is unnecessary when it is right there.
+    spread_usd_oz: float = 0.0
     risk_pct_min: float = 0.0
     risk_pct_max: float = 0.0
 
@@ -172,6 +177,20 @@ class Session:
             return 1.0
         return self.risk_pct_max / self.risk_pct_min
 
+    @property
+    def expectancy_and_return_disagree(self) -> bool:
+        """The session made money while trading badly, or the reverse.
+
+        With every stake the same size these two cannot disagree: positive
+        expectancy is positive money. They disagree exactly when the stakes
+        differ, and then the account's result was set by which trades landed
+        rather than by how the rules performed. Session 2 was +16.5% on
+        +0.064R; session 4 was -2.5% on +0.050R. Same defect, both signs.
+        """
+        if not self.trades:
+            return False
+        return (self.expectancy_r > 0) != (self.pnl_eur > 0)
+
 
 def sessions_so_far() -> int:
     if not os.path.exists(LEDGER_PATH):
@@ -210,7 +229,8 @@ def append(session: Session) -> None:
 def run_session(gold_price: float, day_high: float, day_low: float,
                 price_source: str, start_equity_eur: float | None = None,
                 cfg: DayRangeConfig | None = None,
-                seed: int | None = None) -> Session:
+                seed: int | None = None,
+                spread_usd_oz: float | None = None) -> Session:
     """One trading day on an account carried forward from the last one."""
     index = sessions_so_far()
     equity_eur = (current_equity_eur() if start_equity_eur is None
@@ -222,6 +242,8 @@ def run_session(gold_price: float, day_high: float, day_low: float,
     seed = seed if seed is not None else 500_000 + index * 97
 
     base = cfg or DayRangeConfig()
+    if spread_usd_oz is not None:
+        base = replace(base, spread_usd_oz=spread_usd_oz)
     params = simulate.MarketParams(
         start_price=gold_price,
         base_vol=calibrate_vol(gold_price, day_high, day_low),
@@ -264,7 +286,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         timestamp=time.time(),
         date_utc=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
         gold_price=gold_price, day_high=day_high, day_low=day_low,
-        price_source=price_source,
+        price_source=price_source, spread_usd_oz=base.spread_usd_oz,
         start_equity_eur=round(equity_eur, 2),
         end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
         lot=MIN_LOT,
@@ -384,6 +406,7 @@ def render(s: Session) -> str:
     lines.append(f"  Gold {s.gold_price:,.2f} $/oz  ·  Tagesspanne "
                  f"{s.day_low:,.2f}–{s.day_high:,.2f} "
                  f"({s.day_high - s.day_low:,.2f} $)")
+    lines.append(f"  Spread {s.spread_usd_oz:.2f} $/oz")
     lines.append(f"  Quelle: {s.price_source}")
     lines.append("")
     if s.could_not_trade:
@@ -415,6 +438,15 @@ def render(s: Session) -> str:
     if s.breaks_the_risk_rule:
         lines.append("  Ueber dem Limit, und zwar erzwungen: 0,01 Lot ist die")
         lines.append("  kleinste Position, die es auf Gold gibt.")
+    if s.expectancy_and_return_disagree:
+        lines.append("")
+        direction = ("gewonnen, obwohl die Regeln schlecht liefen"
+                     if s.pnl_eur > 0 else
+                     "verloren, obwohl die Regeln gut liefen")
+        lines.append(f"  Das Konto hat {direction}.")
+        lines.append("  Erwartungswert und Ergebnis haben verschiedene")
+        lines.append("  Vorzeichen — das geht nur, wenn die Einsaetze")
+        lines.append("  unterschiedlich gross waren.")
     if s.risk_spread_ratio >= 3.0:
         lines.append("  ACHTUNG: die Einsaetze liegen weit auseinander. Bei")
         lines.append("  fester Losgroesse riskiert jeder Trade so viel, wie die")
@@ -466,6 +498,13 @@ def summarise() -> str:
         if lows and any(highs):
             lines.append(f"  Kleinster / groesster Einsatz  "
                          f"{min(lows):>6.1f} % / {max(highs):.1f} %")
+        disagreed = sum(
+            1 for e in traded
+            if e["trades"] and (e["expectancy_r"] > 0)
+            != (e["end_equity_eur"] > e["start_equity_eur"]))
+        if disagreed:
+            lines.append(f"  Ergebnis gegen Erwartungswert  {disagreed:>6} von "
+                         f"{len(traded)}")
     idle = [e for e in ledger if e["could_not_trade"]]
     if idle:
         lines.append(f"  Sitzungen ohne Trade           {len(idle):>6}")

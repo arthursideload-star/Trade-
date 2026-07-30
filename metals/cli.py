@@ -583,7 +583,8 @@ def cmd_paper(args: argparse.Namespace) -> int:
 
     s = run_session(gold_price=args.price, day_high=args.high,
                     day_low=args.low, price_source=args.source,
-                    start_equity_eur=args.equity)
+                    start_equity_eur=args.equity,
+                    spread_usd_oz=args.spread)
     print(render(s))
     if not args.dry_run:
         append(s)
@@ -803,6 +804,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Tageshoch in USD/oz")
     pa.add_argument("--low", type=float, default=None,
                     help="Tagestief in USD/oz")
+    pa.add_argument("--spread", type=float, default=None,
+                    help="beobachteter Spread in USD/oz, z.B. aus Ask minus "
+                         "Bid; ohne Angabe die Voreinstellung der Strategie")
     pa.add_argument("--source", default="manuell",
                     help="woher der Kurs stammt — wird mitprotokolliert")
     pa.add_argument("--equity", type=float, default=None,

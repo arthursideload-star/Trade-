@@ -208,6 +208,52 @@ class TestTheSessionRecord(LedgerFixture):
         self.assertEqual(a.end_equity_eur, b.end_equity_eur)
 
 
+class TestWhenTheResultContradictsTheRules(LedgerFixture):
+    """Expectancy and money pointing opposite ways.
+
+    They can only disagree when the stakes differ, so this flag is the
+    clearest available symptom of the fixed-lot defect -- and it has now
+    fired in both directions in the real chain.
+    """
+
+    def _session(self, expectancy: float, end: float) -> Session:
+        return Session(index=0, timestamp=0.0, date_utc="x",
+                       gold_price=4_100.0, day_high=4_150.0, day_low=4_050.0,
+                       price_source="t", start_equity_eur=400.0,
+                       end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=6.0,
+                       trades=8, expectancy_r=expectancy)
+
+    def test_good_rules_and_a_losing_account_is_flagged(self):
+        self.assertTrue(self._session(0.05, 390.0)
+                        .expectancy_and_return_disagree)
+
+    def test_poor_rules_and_a_winning_account_is_flagged(self):
+        self.assertTrue(self._session(-0.05, 460.0)
+                        .expectancy_and_return_disagree)
+
+    def test_agreement_is_not_flagged(self):
+        self.assertFalse(self._session(0.05, 460.0)
+                         .expectancy_and_return_disagree)
+        self.assertFalse(self._session(-0.05, 390.0)
+                         .expectancy_and_return_disagree)
+
+    def test_a_session_without_trades_is_not_flagged(self):
+        s = self._session(0.0, 400.0)
+        s.trades = 0
+        self.assertFalse(s.expectancy_and_return_disagree)
+
+    def test_the_output_explains_which_way_round_it_went(self):
+        lost = paper.render(self._session(0.05, 390.0))
+        self.assertIn("verloren, obwohl die Regeln gut liefen", lost)
+        won = paper.render(self._session(-0.05, 460.0))
+        self.assertIn("gewonnen, obwohl die Regeln schlecht liefen", won)
+
+    def test_the_summary_counts_them(self):
+        paper.append(self._session(0.05, 390.0))
+        paper.append(self._session(0.05, 460.0))
+        self.assertIn("Ergebnis gegen Erwartungswert", paper.summarise())
+
+
 class TestTheDistribution(LedgerFixture):
     """The defence against reading a trend into a winning streak."""
 
