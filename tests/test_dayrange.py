@@ -103,6 +103,29 @@ class TestTheTradeItBuilds(unittest.TestCase):
         self.assertEqual(r.trades, r.wins + r.losses)
         self.assertEqual(r.trades, sum(r.exits.values()))
 
+    def test_every_trade_contributes_an_r_multiple(self):
+        """The gap that let a real bug through.
+
+        The three checks above all passed while positions closed at the end
+        of the series were counted as trades, counted as wins or losses, and
+        silently left out of r_multiples -- so expectancy was a mean over a
+        subset presented as covering everything. Counting trades three ways
+        is worthless if the fourth list is allowed to be short.
+        """
+        for seed, bars in ((5, 8_000), (11, 20_000), (21, 3_000)):
+            r = run(DayRangeConfig(), seed=seed, bars=bars)
+            self.assertEqual(len(r.r_multiples), r.trades,
+                             f"seed {seed}: {len(r.r_multiples)} R multiples "
+                             f"for {r.trades} trades")
+
+    def test_a_position_open_at_the_end_still_gets_an_r_multiple(self):
+        """Forced to hold: a long time stop and a distant stop guarantee the
+        series ends with something open."""
+        cfg = DayRangeConfig(time_stop_bars=10 ** 9, stop_fraction=50.0)
+        r = run(cfg, seed=11, bars=6_000)
+        self.assertGreater(r.exits.get("still_open", 0), 0)
+        self.assertEqual(len(r.r_multiples), r.trades)
+
     def test_the_spread_is_charged(self):
         free = sweep(DayRangeConfig(spread_usd_oz=0.0), markets=10, bars=10_000)
         costly = sweep(DayRangeConfig(spread_usd_oz=3.0), markets=10, bars=10_000)

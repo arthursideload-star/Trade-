@@ -580,6 +580,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
     if args.summary:
         print(summarise())
         return 0
+    if args.evidence:
+        from .paper import evidence
+        print(evidence())
+        return 0
     if args.distribution:
         from .paper import distribution, render_distribution
         if args.price is None or args.high is None or args.low is None:
@@ -835,6 +839,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="rechnen, aber nicht ins Journal schreiben")
     pa.add_argument("--summary", action="store_true",
                     help="nur die Bilanz aller bisherigen Sitzungen")
+    pa.add_argument("--evidence", action="store_true",
+                    help="was die gesammelten Trades belegen — mit "
+                         "Unsicherheitsband und der noetigen Stichprobe")
     pa.add_argument("--distribution", action="store_true",
                     help="viele unabhaengige Handelstage statt der Kette — "
                          "sagt, ob eine Siegesserie etwas bedeutet")

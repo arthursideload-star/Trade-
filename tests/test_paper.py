@@ -353,6 +353,60 @@ class TestWhenTheResultContradictsTheRules(LedgerFixture):
         self.assertIn("Ergebnis gegen Erwartungswert", paper.summarise())
 
 
+class TestTheEvidenceReport(LedgerFixture):
+    """The report that answers the account balance rather than echoing it.
+
+    After eleven sessions the chain was up 87% and its 100 trades produced a
+    95% band from -0.043R to +0.305R -- straddling zero. Both statements are
+    true at once, and only one of them is about whether the strategy works.
+    """
+
+    def _session_with(self, rs: list[float]) -> Session:
+        return Session(index=0, timestamp=0.0, date_utc="x",
+                       gold_price=4_100.0, day_high=4_150.0, day_low=4_050.0,
+                       price_source="t", start_equity_eur=400.0,
+                       end_equity_eur=420.0, lot=MIN_LOT, forced_risk_pct=6.0,
+                       trades=len(rs), r_multiples=rs)
+
+    def test_it_says_so_when_the_band_straddles_zero(self):
+        paper.append(self._session_with([1.0, -1.0, 1.0, -1.0, 0.5, -0.5]))
+        text = paper.evidence()
+        self.assertIn("schliesst die Null ein", text)
+        self.assertIn("belegt keinen Vorteil", text)
+
+    def test_it_does_not_claim_an_edge_from_a_rising_account(self):
+        """A winning chain with a band over zero must still not be described
+        as proof about real gold."""
+        paper.append(self._session_with([1.0] * 40))
+        text = paper.evidence()
+        self.assertIn("Simulator", text)
+
+    def test_it_reports_how_many_more_trades_are_needed(self):
+        paper.append(self._session_with([1.0, -1.0, 1.0, -1.0, 1.0, 0.2]))
+        self.assertIn("Trades. Vorhanden", paper.evidence())
+
+    def test_an_empty_ledger_says_so(self):
+        self.assertIn("Noch keine Trades", paper.evidence())
+
+    def test_it_uses_the_projects_own_statistics(self):
+        """One standard of evidence for the paper chain and the EA journal.
+
+        If this module grew its own interval, the paper run would end up
+        judged more leniently than the thing it is a rehearsal for.
+        """
+        from metals import journal
+        rs = [1.0, -1.0, 0.5, -0.5, 1.0, -1.0, 0.3, 0.8]
+        paper.append(self._session_with(rs))
+        lo, hi = journal.mean_interval(rs)
+        text = paper.evidence()
+        self.assertIn(f"{lo:+.3f}", text)
+        self.assertIn(f"{hi:+.3f}", text)
+
+    def test_every_session_records_one_r_multiple_per_trade(self):
+        s = run_session(**TODAY)
+        self.assertEqual(len(s.r_multiples), s.trades)
+
+
 class TestTheEndOfDayExit(LedgerFixture):
     """A session ends at bar 1,440 whether the trade did or not.
 

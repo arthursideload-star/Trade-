@@ -442,9 +442,15 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
     last = candles[-1].close
     for t in open_trades:
         pnl = ((last - t.entry) if t.long else (t.entry - last)) * t.lots * oz
+        # These used to be counted as trades and as wins or losses while
+        # being left out of r_multiples, so expectancy was a mean over a
+        # subset reported as if it covered everything. Every other exit path
+        # records its R here; this one has to as well.
+        risk = abs(t.entry - t.stop_loss) * t.lots * oz
         equity += pnl
         res.trades += 1
         res.exits["still_open"] = res.exits.get("still_open", 0) + 1
+        res.r_multiples.append(pnl / risk if risk > 0 else 0.0)
         if pnl > 0:
             res.wins += 1
         else:

@@ -197,43 +197,59 @@ Für den Papier-Lauf wird die **CFD-Quote** genommen, weil sie das ist, was ein 
 tatsächlich bezahlt — und die Uneinigkeit landet im `price_source`-Feld, damit sie im
 Journal sichtbar bleibt.
 
-## Eine Vereinfachung, die geprüft wurde
+## Eine Vereinfachung, die geprüft wurde — und ein Bug, den sie aufdeckte
 
 Jede Sitzung ist ein **eigenständiger Tag**. Eine Position, die bei Bar 1.440 noch offen
 ist, wird zum letzten Kurs geschlossen — die nächste Sitzung erzeugt einen frischen Markt
 und setzt sie nicht fort. Das Konto läuft weiter, die Position nicht.
 
-Das ist eine Vereinfachung, und sie berührt die Gewinn-und-Verlust-Rechnung: Ein
-künstlicher Ausstieg, der systematisch Gewinner erwischt (oder Verlierer), würde jede Zahl
-im Journal schmeicheln (oder verderben). Also gemessen, über 60 Tage:
+Beim Nachmessen fiel ein Fehler auf: Diese künstlich geschlossenen Trades wurden als Trade
+gezählt und in die Trefferquote aufgenommen, **landeten aber nicht in `r_multiples`**. Der
+Erwartungswert war damit ein Mittel über eine Teilmenge, ausgegeben, als deckte er alles ab.
+Behoben; ein Test prüft jetzt `len(r_multiples) == trades`.
+
+Die korrigierte Messung über 60 Tage:
 
 | Ausstiegsart | Anteil | Erwartungswert |
 |---|---:|---:|
-| regulär (Ziel, Stop, Zeitstop) | 93,3 % | +0,119 R |
-| Tagesende, künstlich geschlossen | 6,7 % | +0,111 R |
+| regulär (Ziel, Stop, Zeitstop) | 93,3 % | +0,094 R |
+| Tagesende, künstlich geschlossen | 6,7 % | **+0,038 R** |
+| zusammen | | +0,090 R |
 
-**Keine nennenswerte Verzerrung.** Die Stichprobe der künstlichen Ausstiege ist mit 34
-Trades allerdings klein — das ist ein Befund mit Vorbehalt, kein Freispruch. Ein Test hält
-den Anteil deshalb unter 25 %: Würde ein Viertel der Trades von der Uhr statt von den Regeln
-beendet, würde die Sitzung die Serienlänge messen und nicht die Strategie.
+Die künstlichen Ausstiege sind also **deutlich schlechter** als die regulären — nicht
+gleichwertig, wie eine frühere Fassung dieses Abschnitts behauptet hat. Diese Zahlen waren
+falsch, weil sie mit dem Bug gemessen wurden: Sie verglichen die letzten regulär
+geschlossenen Trades mit sich selbst.
 
-## Was das Aufaddieren mit festem Lot von selbst tut
+Weil es nur 6,7 % der Trades sind, bleibt die Wirkung aufs Ganze klein (+0,094 → +0,090 R,
+also −4 %). Ein Test hält den Anteil unter 25 %: Würde ein Viertel der Trades von der Uhr
+statt von den Regeln beendet, würde die Sitzung die Serienlänge messen und nicht die
+Strategie.
 
-Über zehn Sitzungen fiel das erzwungene Risiko je Trade von **5,9 % auf 2,1 %** — ohne dass
-irgendetwas an der Strategie besser geworden wäre. Das Lot blieb bei 0,01, das Konto wuchs
-von 400 auf 732 €, also sank der Anteil, den ein Stop kostet.
+## Was 100 Trades belegen — und was nicht
 
-Das ist der einzige Vorteil, den das Aufaddieren umsonst hergibt: **Ein Konto, das wächst
-und die Positionsgröße festhält, wird mit jedem Gewinn automatisch vorsichtiger.**
+```bash
+python -m metals paper --evidence
+```
 
-Und direkt daneben liegt die Falle. Genau diesen Vorteil gibt man auf, wenn man das Lot
-mitwachsen lässt — was die naheliegende Reaktion ist, weil die Prozentrenditen sonst
-schrumpfen: dieselben 30 € sind auf 400 € ein Plus von 7,5 % und auf 732 € nur noch 4,1 %.
-Wer das „ausgleicht", handelt wieder mit demselben Risikoanteil wie am Anfang und hat vom
-Wachstum nichts gewonnen außer einer größeren Zahl auf dem Kontoauszug.
+Nach elf Sitzungen: Konto **+87 %**. Und die Trades dazu:
 
-Die Bilanz zeigt beide Werte deshalb nebeneinander, und der Hinweis erscheint nur, wenn das
-Risiko tatsächlich gefallen ist.
+| | | |
+|---|---:|---|
+| Trefferquote | 57,0 % | 95%-Band 47 bis 66 % |
+| Erwartungswert | +0,131 R | **95%-Band −0,043 bis +0,305 R** |
+| Streuung | 0,888 R | |
+
+**Das Band schließt die Null ein.** Beide Aussagen stimmen gleichzeitig: Das Konto ist um
+87 % gestiegen, und die 100 Trades belegen keinen Vorteil. Sie schließen ihn auch nicht aus
+— die Stichprobe reicht schlicht nicht.
+
+Für einen Nachweis dieser Kantengröße bräuchte es rund **176 Trades**, also noch etwa acht
+weitere Sitzungen. Und das gälte dann für den Simulator, nicht für echtes Gold.
+
+Die Auswertung benutzt `metals.journal` — dieselbe Statistik, mit der das Journal des EA
+gelesen wird. Ein eigener Maßstab für den Papier-Lauf hieße, die Probe milder zu bewerten
+als den Ernstfall.
 
 ## Was das Journal festhält
 
@@ -248,6 +264,7 @@ Risiko tatsächlich gefallen ist.
 | `expectancy_r` | Der Erwartungswert je Trade, unabhängig von der Kontogröße |
 | `could_not_trade` | Wenn die Margin nicht reichte. Eine Sitzung ohne Trade ist ein Ergebnis, kein Fehler |
 | `stopped_out` | Broker-Stop-out |
+| `r_multiples` | Jeder Trade einzeln in R. Aus einem Sitzungsmittel lässt sich kein Konfidenzintervall zurückrechnen |
 | `slippage_fraction` | Welches Kostenmodell galt. Sitzungen 1–9 liefen mit 0,0, ab 10 mit der Backtest-Konvention 0,5 |
 | `news_times_utc` | Für welche Veröffentlichungen die Sitzung stillhielt. Leer heißt: R4 war aus |
 

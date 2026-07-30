@@ -159,6 +159,11 @@ class Session:
     # Recorded because "the bot traded through FOMC" is only visible after
     # the fact if the session says which releases it knew about.
     news_times_utc: list[list[int]] = field(default_factory=list)
+    # Every trade's R multiple, not just the session mean. Kept because the
+    # session mean cannot be turned back into a confidence interval, and the
+    # whole point of a chain is that the trades accumulate into a sample the
+    # project's own statistics can then judge.
+    r_multiples: list[float] = field(default_factory=list)
 
     @property
     def pnl_eur(self) -> float:
@@ -337,6 +342,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         stopped_out=bool(result.stopped_out) if result else False,
         could_not_trade=could_not,
         news_times_utc=[list(pair) for pair in base.news_times_utc],
+        r_multiples=[round(x, 6) for x in result.r_multiples] if result else [],
     )
 
 
@@ -433,6 +439,65 @@ def render_distribution(d: Distribution) -> str:
         lines.append("  zu leicht ist. Was hier gemessen wird, ist die")
         lines.append("  Streuung und das Verhalten der Regeln, nicht der")
         lines.append("  Ertrag.")
+    return "\n".join(lines)
+
+
+def evidence() -> str:
+    """What the accumulated trades support, judged by the project's own rules.
+
+    The chain reports euro. Euro on a compounding account flatter a good run
+    and cannot be compared across account sizes, so the question "does this
+    work" has to be asked of the R multiples -- and asked with a band, using
+    the same `metals.journal` statistics the EA's journal is read with. One
+    definition of evidence for both, or the paper chain quietly gets an
+    easier standard than the live one.
+    """
+    from .journal import (MIN_TRADES_FOR_A_BREAKDOWN, mean_and_sd,
+                          mean_interval, trades_needed, wilson_interval)
+
+    ledger = load_ledger()
+    rs = [r for e in ledger for r in e.get("r_multiples", [])]
+    if not rs:
+        return "Noch keine Trades mit R-Werten im Journal."
+
+    wins = sum(1 for r in rs if r > 0)
+    mean, sd = mean_and_sd(rs)
+    lo, hi = mean_interval(rs)
+    wlo, whi = wilson_interval(wins, len(rs))
+
+    lines = [f"PAPIER-LAUF — WAS {len(rs)} TRADES BELEGEN", "=" * 68]
+    lines.append(f"  Trefferquote      {wins / len(rs) * 100:>6.1f} %   "
+                 f"95%-Band {wlo * 100:.0f} bis {whi * 100:.0f} %")
+    lines.append(f"  Erwartungswert    {mean:>+6.3f} R   "
+                 f"95%-Band {lo:+.3f} bis {hi:+.3f} R")
+    lines.append(f"  Streuung          {sd:>6.3f} R")
+    lines.append("")
+
+    if lo <= 0 <= hi:
+        lines.append("  Das Band schliesst die Null ein. Diese Stichprobe")
+        lines.append("  belegt keinen Vorteil — sie schliesst ihn auch nicht")
+        lines.append("  aus. Sie sagt nur: noch nicht genug Trades.")
+    elif lo > 0:
+        lines.append("  Das Band liegt ueber der Null. Auf DIESEN Daten ist")
+        lines.append("  der Vorteil messbar — auf dem Simulator, der die")
+        lines.append("  Struktur enthaelt, die die Strategie sucht.")
+    else:
+        lines.append("  Das Band liegt unter der Null.")
+
+    need = trades_needed(mean, sd)
+    if need is not None:
+        lines.append("")
+        lines.append(f"  Fuer einen Nachweis dieser Kantengroesse braeuchte es")
+        lines.append(f"  rund {need:,} Trades. Vorhanden: {len(rs)}.")
+        if need > len(rs):
+            per_session = len(rs) / max(1, len(ledger))
+            lines.append(f"  Bei {per_session:.0f} Trades je Sitzung sind das "
+                         f"noch etwa {(need - len(rs)) / per_session:.0f} "
+                         f"Sitzungen.")
+    if len(rs) < MIN_TRADES_FOR_A_BREAKDOWN:
+        lines.append("")
+        lines.append(f"  Unter {MIN_TRADES_FOR_A_BREAKDOWN} Trades wird hier")
+        lines.append("  bewusst nichts aufgeschluesselt.")
     return "\n".join(lines)
 
 
