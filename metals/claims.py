@@ -123,7 +123,19 @@ CLAIMS: tuple[Claim, ...] = (
           "editorial", True,
           "Rates differ widely between brokers; what transfers is the sign "
           "and the order of magnitude."),
+    Claim("C12", "Brokers enforce a minimum distance for stop and take-profit "
+                 "orders (stops level), typically 50-100 points on gold, and "
+                 "a reported zero often means it floats at 2-3x the spread",
+          "MQL5 forum and articles, EarnForex", "editorial", True,
+          "Decides whether a tiny-target strategy can be placed at all, "
+          "which is a different question from whether it earns."),
 )
+
+# Points, where one point is 0.01 USD on a two-decimal XAUUSD quote. The
+# middle of the range brokers publish; many report zero and then compute it
+# live from the spread, which is not the same as no minimum.
+TYPICAL_STOPS_LEVEL_POINTS = 50
+POINT_USD_OZ = 0.01
 
 
 def find(claim_id: str) -> Claim:
@@ -531,6 +543,29 @@ def measure_swap(markets: int = 12, bars: int = 20_000,
         nostop_nights=statistics.fmean(r.nights_held for r in ns_paid.runs))
 
 
+def stops_level_usd(points: int = TYPICAL_STOPS_LEVEL_POINTS) -> float:
+    return points * POINT_USD_OZ
+
+
+def target_is_placeable(target_usd_oz: float,
+                        points: int = TYPICAL_STOPS_LEVEL_POINTS) -> bool:
+    """Whether a take-profit that far away may be submitted at all.
+
+    Note what this does and does not say. A target inside the stops level
+    cannot be sent as a **pending TP order** -- the server rejects it. It can
+    still be reached by closing at market when the position turns green,
+    which is what the advertisement videos actually show. That route works,
+    and it pays the spread again on exit and takes whatever slippage the
+    close gets, so the economics get worse rather than the trade becoming
+    impossible.
+
+    The distinction matters enough to keep: "your broker will not accept
+    this order" and "this does not earn" are different objections, and only
+    one of them is dodged by clicking close.
+    """
+    return target_usd_oz >= stops_level_usd(points)
+
+
 def swap_on_one_position(lot: float, nights: int, long: bool = True,
                          rate_long: float = -73.6,
                          rate_short: float = 30.0) -> float:
@@ -671,6 +706,23 @@ def render_measurements(markets: int = 20, bars: int = 12_000) -> str:
                      f"{need:,.0f} $ Margin")
     lines.append("      Fuer 0,10 Lot als Retail-Kunde in der EU ist die")
     lines.append("      1.000-$-Angabe der Anbieter deutlich zu niedrig.")
+    lines.append("")
+
+    from .microscalp import MicroConfig
+    lines.append("  C12 Mindestabstand fuer Stop und Ziel (Stops Level)")
+    lines.append(f"      Typisch {TYPICAL_STOPS_LEVEL_POINTS} Punkte = "
+                 f"{stops_level_usd():.2f} $/oz")
+    for label, target in (("Tagesspanne-Strategie", 31.23),
+                          ("Micro-Scalp (Werbevideo)",
+                           MicroConfig().take_profit_usd_oz)):
+        ok = target_is_placeable(target)
+        lines.append(f"      {label:>24}: Ziel {target:>6.2f} $  "
+                     f"{'platzierbar' if ok else 'WIRD ABGELEHNT'}")
+    lines.append("      Ein Ziel innerhalb des Mindestabstands laesst sich")
+    lines.append("      nicht als Order senden. Es geht noch, indem man bei")
+    lines.append("      Gewinn manuell schliesst — dann zahlt man den Spread")
+    lines.append("      erneut und nimmt die Slippage mit. Die Strategie wird")
+    lines.append("      dadurch nicht unmoeglich, sondern teurer.")
     lines.append("")
 
     sw = measure_swap(markets=max(8, markets // 2), bars=20_000)

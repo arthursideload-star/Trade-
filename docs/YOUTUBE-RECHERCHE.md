@@ -33,7 +33,7 @@ Drei Quellenarten, bewusst getrennt gehalten:
 | **Fachpresse** | Broker-Blogs, Trading-Schulen, Forenbeiträge | Bei Mechanik (Spread, Sessions, Ausführung) meist richtig, bei Ergebnissen unbelegt |
 | **Aufsicht / Wissenschaft** | Zahlen, für die jemand geradestehen musste | Als Fakt zitiert — aber als Basisrate über eine Population, nicht als Prognose für ein Konto |
 
-## Die elf Behauptungen
+## Die zwölf Behauptungen
 
 ### C1 — „90 % Trefferquote" · Anbieter · **messbar, und das Ergebnis ist der wichtigste Fund**
 
@@ -187,6 +187,27 @@ Und die Asymmetrie ist nicht neutral: Wer zufällig short feststeckt, **bekommt*
 long feststeckt, blutet. Ein Bot ohne Stop hat damit eine Richtungsabhängigkeit, die nichts
 mit seiner Analyse zu tun hat.
 
+### C12 — „Broker erzwingen einen Mindestabstand für Stop und Ziel" · Fachpresse · **messbar, und es trifft genau die Werbevideo-Taktik**
+
+Das **Stops Level** ist der Mindestabstand, den SL und TP vom aktuellen Kurs haben müssen.
+Auf Gold typisch **50–100 Punkte = 0,50–1,00 $**. Meldet ein Broker null, heißt das meist
+nicht „kein Minimum", sondern dass er ihn live aus dem Spread berechnet — üblich das Zwei-
+bis Dreifache.
+
+| Strategie | Ziel | platzierbar bei 50 Punkten? |
+|---|---:|---|
+| Tagesspanne (unsere) | 31,23 $ | ja, um Faktor 62 |
+| Micro-Scalp aus dem Werbevideo | **0,10 $** | **nein — wird abgelehnt** |
+
+Wichtig ist, das richtig zu formulieren: Ein Ziel innerhalb des Mindestabstands lässt sich
+nicht als **Order** senden. Es geht trotzdem, indem man bei Gewinn **am Markt schließt** —
+und genau das zeigen die Videos ja auch. Nur zahlt man dann den Spread ein zweites Mal und
+nimmt die Slippage mit.
+
+Die Taktik wird dadurch also nicht unmöglich, sondern **teurer** — bei einem Ziel von 0,10 $
+und einem Spread von 0,34 $ zahlt man mehr als das Dreifache des Ziels an Kosten. Das ist
+dieselbe Rechnung wie in C2, nur diesmal von der Plattformseite bestätigt.
+
 ## Was daraus in den Bot eingebaut wurde
 
 Nicht die Behauptungen. Die Konsequenzen:
@@ -225,6 +246,9 @@ Nicht die Behauptungen. Die Konsequenzen:
 - [MQL5 Blogs — How to Choose a Safe Forex/Gold EA (Avoid Grid, Martingale & Over-Optimization)](https://www.mql5.com/en/blogs/post/766446)
 - [Forex Robot Lab — ABS GoldGrid EA Review](https://forexrobotlab.com/abs-goldgrid-ea-review/)
 - [MQL5 Blogs — Not All 99% Backtests Are Equal](https://www.mql5.com/en/blogs/post/762517)
+- [MQL5 Forum — Which XAUUSD broker has the minimal Stops Level?](https://www.mql5.com/en/forum/428176)
+- [MQL5 Articles — Broker Reality Check: Why Your EA Works on a Demo and Breaks on a Client's Broker](https://www.mql5.com/en/articles/23327)
+- [EarnForex — What Is Freeze Level?](https://www.earnforex.com/guides/what-is-freeze-level/)
 - [MQL5 Forum — Discrepancy between Real Ticks and Every Tick modelling](https://www.mql5.com/en/forum/472760)
 - [Forex Robot Lab — MT5 Backtest Modeling & History Quality Explained](https://forexrobotlab.com/mt5-backtest-modeling-history-quality/)
 - [Afterprime — XAUUSD Swap Rates (Long/Short Overnight Fee)](https://afterprime.com/swaps/xauusd)

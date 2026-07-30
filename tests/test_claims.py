@@ -23,8 +23,9 @@ from metals.candles import resample
 from metals.claims import (ASSUMED_EUR_USD, CLAIMS, ASIA_HOURS_UTC,
                            OVERLAP_HOURS_UTC, find, margin_required,
                            measure_account_sizes,
-                           measure_win_rate_is_not_an_edge,
-                           swap_on_one_position)
+                           POINT_USD_OZ, measure_win_rate_is_not_an_edge,
+                           stops_level_usd, swap_on_one_position,
+                           target_is_placeable)
 from metals.dayrange import (ROLLOVER_HOUR_UTC, TRIPLE_SWAP_WEEKDAY,
                              DayRangeConfig, lots_for, run, sweep)
 from metals.risk import MAX_RISK_PER_TRADE_PCT
@@ -325,6 +326,27 @@ class TestTheRiskCeiling(unittest.TestCase):
         tight = sweep(self._cfg(2.5), markets=12, bars=1_440,
                       seed_base=600_000)
         self.assertGreater(loose.mean_expectancy_r, tight.mean_expectancy_r)
+
+
+class TestC12StopsLevel(unittest.TestCase):
+    def test_the_day_range_target_clears_it_easily(self):
+        self.assertTrue(target_is_placeable(31.23))
+
+    def test_the_advertisement_target_does_not(self):
+        """0.10 USD is ten points against a fifty-point minimum."""
+        from metals.microscalp import MicroConfig
+        self.assertFalse(target_is_placeable(MicroConfig().take_profit_usd_oz))
+
+    def test_the_boundary_is_inclusive(self):
+        self.assertTrue(target_is_placeable(stops_level_usd()))
+        self.assertFalse(target_is_placeable(stops_level_usd() - 0.001))
+
+    def test_a_broker_with_no_minimum_accepts_anything(self):
+        self.assertTrue(target_is_placeable(0.10, points=0))
+
+    def test_a_point_is_a_cent_on_a_two_decimal_gold_quote(self):
+        self.assertAlmostEqual(POINT_USD_OZ, 0.01)
+        self.assertAlmostEqual(stops_level_usd(50), 0.50)
 
 
 class TestC11Swap(unittest.TestCase):
