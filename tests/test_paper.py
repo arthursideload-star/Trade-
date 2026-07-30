@@ -434,6 +434,33 @@ class TestTheEvidenceReport(LedgerFixture):
     def test_an_empty_ledger_says_so(self):
         self.assertIn("Noch keine Trades", paper.evidence())
 
+    def test_it_warns_that_the_observed_edge_flatters_the_sample_size(self):
+        """The trap in every "almost there" sample-size figure.
+
+        trades_needed(observed_mean) is computed from a number the good run
+        itself produced, so a lucky stretch makes the proof look nearly
+        finished. On the real chain it said 155 trades against 116 held --
+        four more sessions -- while the same arithmetic at a sober +0.10R
+        edge said 309, or twenty-two. The journal module already reports
+        against that reference; the paper chain has to use the same
+        yardstick or it grades itself more kindly.
+        """
+        from metals.journal import REFERENCE_EDGE_R, trades_needed
+        rs = [1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 0.5, 0.5] * 6
+        paper.append(self._session_with(rs))
+        text = paper.evidence()
+
+        from metals.journal import mean_and_sd
+        _, sd = mean_and_sd(rs)
+        modest = trades_needed(REFERENCE_EDGE_R, sd)
+        self.assertIn("nach oben verzerrt", text)
+        self.assertIn(f"{modest:,}", text)
+
+    def test_no_such_warning_when_the_observed_edge_is_already_modest(self):
+        rs = [0.1, -0.05, 0.08, -0.02] * 10
+        paper.append(self._session_with(rs))
+        self.assertNotIn("nach oben verzerrt", paper.evidence())
+
     def test_it_uses_the_projects_own_statistics(self):
         """One standard of evidence for the paper chain and the EA journal.
 

@@ -464,8 +464,9 @@ def evidence() -> str:
     definition of evidence for both, or the paper chain quietly gets an
     easier standard than the live one.
     """
-    from .journal import (MIN_TRADES_FOR_A_BREAKDOWN, mean_and_sd,
-                          mean_interval, trades_needed, wilson_interval)
+    from .journal import (MIN_TRADES_FOR_A_BREAKDOWN, REFERENCE_EDGE_R,
+                          mean_and_sd, mean_interval, trades_needed,
+                          wilson_interval)
 
     ledger = load_ledger()
     rs = [r for e in ledger for r in e.get("r_multiples", [])]
@@ -498,13 +499,31 @@ def evidence() -> str:
 
     need = trades_needed(mean, sd)
     if need is not None:
+        per_session = len(rs) / max(1, len(ledger))
         lines.append("")
-        lines.append(f"  Fuer einen Nachweis dieser Kantengroesse braeuchte es")
+        lines.append(f"  Fuer einen Nachweis DIESER Kantengroesse braeuchte es")
         lines.append(f"  rund {need:,} Trades. Vorhanden: {len(rs)}.")
         if need > len(rs):
-            per_session = len(rs) / max(1, len(ledger))
             lines.append(f"  Bei {per_session:.0f} Trades je Sitzung sind das "
                          f"noch etwa {(need - len(rs)) / per_session:.0f} "
+                         f"Sitzungen.")
+
+        # The observed mean is upward-biased: a run that happened to go well
+        # produces a large mean, and a sample size computed from it says the
+        # proof is nearly done. The journal module reports against a modest
+        # reference edge for exactly this reason, and the paper chain has to
+        # use the same yardstick or it flatters itself in the same way.
+        modest = trades_needed(REFERENCE_EDGE_R, sd)
+        if modest is not None and modest > need:
+            lines.append("")
+            lines.append(f"  Vorsicht: {need:,} folgt aus dem BEOBACHTETEN "
+                         f"Mittelwert,")
+            lines.append(f"  und der ist nach oben verzerrt — ein Lauf, der gut")
+            lines.append(f"  lief, laesst den Nachweis fast fertig aussehen.")
+            lines.append(f"  Fuer einen nuechternen Vorteil von "
+                         f"{REFERENCE_EDGE_R:+.2f}R waeren es")
+            lines.append(f"  rund {modest:,} Trades, also etwa "
+                         f"{(modest - len(rs)) / per_session:.0f} weitere "
                          f"Sitzungen.")
     if len(rs) < MIN_TRADES_FOR_A_BREAKDOWN:
         lines.append("")

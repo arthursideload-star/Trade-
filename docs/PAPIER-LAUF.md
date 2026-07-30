@@ -244,8 +244,13 @@ Nach elf Sitzungen: Konto **+87 %**. Und die Trades dazu:
 87 % gestiegen, und die 100 Trades belegen keinen Vorteil. Sie schließen ihn auch nicht aus
 — die Stichprobe reicht schlicht nicht.
 
-Für einen Nachweis dieser Kantengröße bräuchte es rund **176 Trades**, also noch etwa acht
-weitere Sitzungen. Und das gälte dann für den Simulator, nicht für echtes Gold.
+Für einen Nachweis **dieser** Kantengröße bräuchte es rund 155 Trades — also fast geschafft.
+Nur ist genau das die Falle: Die Zahl folgt aus dem **beobachteten** Mittelwert, und der ist
+nach oben verzerrt. Ein Lauf, der gut lief, lässt den Nachweis fast fertig aussehen.
+
+Rechnet man stattdessen mit einem nüchternen Vorteil von **+0,10 R** — dem Referenzwert, den
+`metals.journal` aus demselben Grund verwendet —, sind es **309 Trades**, also etwa 22
+weitere Sitzungen statt vier. Und das gälte dann für den Simulator, nicht für echtes Gold.
 
 Die Auswertung benutzt `metals.journal` — dieselbe Statistik, mit der das Journal des EA
 gelesen wird. Ein eigener Maßstab für den Papier-Lauf hieße, die Probe milder zu bewerten
