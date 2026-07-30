@@ -456,6 +456,30 @@ class TestTheEvidenceReport(LedgerFixture):
         self.assertIn("nach oben verzerrt", text)
         self.assertIn(f"{modest:,}", text)
 
+    def test_a_sample_spanning_two_cost_models_says_so(self):
+        """A sample is one sample only if its trades were priced alike.
+
+        The chain's were not: spread alone before session 10, spread x 1.5
+        after. Averaging across that silently is exactly the kind of thing
+        that makes a number look cleaner than the data behind it.
+        """
+        cheap = self._session_with([1.0, -1.0, 0.5])
+        cheap.slippage_fraction = 0.0
+        dear = self._session_with([1.0, -1.0, 0.5])
+        dear.slippage_fraction = 0.5
+        paper.append(cheap)
+        paper.append(dear)
+        text = paper.evidence()
+        self.assertIn("2 Kostenmodelle", text)
+        self.assertIn("nicht homogen", text)
+
+    def test_a_uniform_sample_gets_no_such_note(self):
+        for _ in range(2):
+            s = self._session_with([1.0, -1.0, 0.5])
+            s.slippage_fraction = 0.5
+            paper.append(s)
+        self.assertNotIn("Kostenmodelle", paper.evidence())
+
     def test_no_such_warning_when_the_observed_edge_is_already_modest(self):
         rs = [0.1, -0.05, 0.08, -0.02] * 10
         paper.append(self._session_with(rs))

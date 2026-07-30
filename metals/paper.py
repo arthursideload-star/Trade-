@@ -479,6 +479,20 @@ def evidence() -> str:
     wlo, whi = wilson_interval(wins, len(rs))
 
     lines = [f"PAPIER-LAUF — WAS {len(rs)} TRADES BELEGEN", "=" * 68]
+
+    # The sample is only one sample if every trade in it was priced the same
+    # way. It was not: dayrange charged spread alone until session 10 and
+    # spread x 1.5 after. Small (about 6.5% of expectancy) and disclosed
+    # rather than quietly averaged over.
+    models = sorted({e.get("slippage_fraction", 0.0)
+                     for e in ledger if e.get("r_multiples")})
+    if len(models) > 1:
+        lines.append(f"  Hinweis: die Stichprobe umfasst "
+                     f"{len(models)} Kostenmodelle "
+                     f"({', '.join(f'{m:.0%} Slippage' for m in models)}).")
+        lines.append("  Sie ist damit streng genommen nicht homogen — der")
+        lines.append("  Unterschied liegt bei rund 6,5 % des Erwartungswerts.")
+        lines.append("")
     lines.append(f"  Trefferquote      {wins / len(rs) * 100:>6.1f} %   "
                  f"95%-Band {wlo * 100:.0f} bis {whi * 100:.0f} %")
     lines.append(f"  Erwartungswert    {mean:>+6.3f} R   "
