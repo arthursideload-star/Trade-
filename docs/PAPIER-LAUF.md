@@ -110,6 +110,46 @@ Strategie gebaut wurde. Wer nach Stop-Breite filtert, filtert die guten Signale 
 Es gibt hier also keine kostenlose Lösung, sondern eine Abwägung. Sie ist als Test
 festgehalten, damit sie nicht stillschweigend verschwindet.
 
+## Was eine Siegesserie wert ist: nichts
+
+Nach drei Sitzungen stand die Kette bei 400 → 544 €, alle drei im Plus. Bevor daraus
+irgendein Schluss wird, die Gegenprobe — 60 **unabhängige** Handelstage, jeder wieder ab
+400 €:
+
+```bash
+python -m metals paper --distribution --price 4114.23 --high 4120.16 --low 4028.77
+```
+
+| | |
+|---|---:|
+| Median | **+7,74 %** |
+| Mittelwert | +8,35 % |
+| Streuung | 10,69 Punkte |
+| beste 5 % | +26,18 % |
+| schlechteste 5 % | −6,30 % |
+| schlechtester Tag | **−19,32 %** |
+| Tage im Plus | **78 %** |
+
+Bei 78 % Gewinntagen haben **drei Gewinntage in Folge eine Wahrscheinlichkeit von 48 %**.
+Die Serie ist also der Normalfall, kein Signal. Genau dafür gibt es diese Rechnung.
+
+### Und die Zahl selbst ist das eigentliche Warnsignal
+
+Ein Median von +7,74 % pro Tag verdoppelt ein Konto in **neun Tagen**. Das tut niemand.
+Aus 400 € wären in einem Monat über 3.000 €, in einem Jahr eine Zahl mit acht Stellen.
+
+Die richtige Schlussfolgerung daraus ist **nicht**, dass der Bot eine Geldmaschine ist,
+sondern dass **der Simulator zu leicht ist**. Er wurde mit Struktur gebaut — Volatilitäts-
+cluster, Rundzahlen-Magnetismus, Liquiditätsjagden — und die Strategie findet genau diese
+Struktur. Der Misch-Test bestätigt das von der anderen Seite: zerstört man die Reihenfolge
+der Kerzen, bleiben nur 26 % der Kante übrig. Die Strategie liest also wirklich den Chart —
+nur eben einen Chart, der leichter zu lesen ist als der echte.
+
+Was diese Verteilung belastbar sagt, ist deshalb die **Streuung**, nicht der Ertrag: dass
+ein Tag zwischen −19 % und +26 % liegen kann, wenn 0,01 Lot auf 400 € 1,4 % bis 18 % je
+Trade riskiert. Das ist die Erfahrung, auf die man sich einstellen muss — der Ertrag
+entscheidet sich erst am echten Backtest.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

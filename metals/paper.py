@@ -282,6 +282,102 @@ def run_session(gold_price: float, day_high: float, day_low: float,
     )
 
 
+@dataclass
+class Distribution:
+    returns_pct: list[float]
+    equity_eur: float
+
+    @property
+    def median_pct(self) -> float:
+        return statistics.median(self.returns_pct)
+
+    @property
+    def mean_pct(self) -> float:
+        return statistics.fmean(self.returns_pct)
+
+    @property
+    def sd_points(self) -> float:
+        return statistics.pstdev(self.returns_pct)
+
+    @property
+    def share_positive(self) -> float:
+        return sum(1 for r in self.returns_pct if r > 0) / len(self.returns_pct)
+
+    def percentile(self, q: float) -> float:
+        ordered = sorted(self.returns_pct)
+        idx = min(len(ordered) - 1, max(0, int(len(ordered) * q)))
+        return ordered[idx]
+
+    @property
+    def streak_probability_3(self) -> float:
+        """How ordinary a run of three winning days actually is.
+
+        Worth computing before reading anything into one. At a 78% daily win
+        rate three in a row happens about half the time, which is not
+        evidence of anything at all.
+        """
+        return self.share_positive ** 3
+
+    @property
+    def implied_days_to_double(self) -> float | None:
+        """The sanity check on the measurement, not on the strategy.
+
+        If a daily median compounds to doubling the account inside a
+        fortnight, the honest conclusion is that the market being measured
+        is too easy -- not that a money machine has been found.
+        """
+        if self.median_pct <= 0:
+            return None
+        return math.log(2) / math.log(1 + self.median_pct / 100.0)
+
+
+def distribution(gold_price: float, day_high: float, day_low: float,
+                 equity_eur: float = 400.0, days: int = 60,
+                 seed_base: int = 700_000) -> Distribution:
+    """Many independent single days, rather than the few that happened.
+
+    A compounded chain is one path. It cannot say whether a good run was
+    typical, and the temptation to read a trend into three green days is
+    exactly what this exists to defuse.
+    """
+    returns = [run_session(gold_price=gold_price, day_high=day_high,
+                           day_low=day_low, price_source="distribution",
+                           start_equity_eur=equity_eur,
+                           seed=seed_base + i * 13).return_pct
+               for i in range(days)]
+    return Distribution(returns_pct=returns, equity_eur=equity_eur)
+
+
+def render_distribution(d: Distribution) -> str:
+    lines = [f"VERTEILUNG — {len(d.returns_pct)} UNABHAENGIGE HANDELSTAGE",
+             "=" * 68]
+    lines.append(f"  jeweils ab {d.equity_eur:,.2f} €, 0,01 Lot")
+    lines.append("")
+    lines.append(f"  Median            {d.median_pct:>+7.2f} %")
+    lines.append(f"  Mittelwert        {d.mean_pct:>+7.2f} %")
+    lines.append(f"  Streuung          {d.sd_points:>7.2f} Punkte")
+    lines.append(f"  beste 5 %         {d.percentile(0.95):>+7.2f} %")
+    lines.append(f"  schlechteste 5 %  {d.percentile(0.05):>+7.2f} %")
+    lines.append(f"  schlechtester Tag {min(d.returns_pct):>+7.2f} %")
+    lines.append(f"  Tage im Plus      {d.share_positive * 100:>7.0f} %")
+    lines.append("")
+    lines.append(f"  Drei Gewinntage in Folge: "
+                 f"{d.streak_probability_3 * 100:.0f} % Wahrscheinlichkeit.")
+    lines.append("  Eine Siegesserie ist hier also kein Signal, sondern der")
+    lines.append("  Normalfall.")
+    doubling = d.implied_days_to_double
+    if doubling is not None and doubling < 30:
+        lines.append("")
+        lines.append(f"  WARNUNG: dieser Median verdoppelt das Konto in "
+                     f"{doubling:.0f} Tagen.")
+        lines.append("  Das tut niemand. Die Zahl sagt nicht, dass der Bot")
+        lines.append("  eine Geldmaschine ist — sie sagt, dass der Simulator")
+        lines.append("  zu leicht ist. Was hier gemessen wird, ist die")
+        lines.append("  Streuung und das Verhalten der Regeln, nicht der")
+        lines.append("  Ertrag.")
+    return "\n".join(lines)
+
+
 def render(s: Session) -> str:
     lines = [f"PAPIER-LAUF — SITZUNG {s.index + 1}", "=" * 68]
     lines.append(f"  {s.date_utc} UTC")

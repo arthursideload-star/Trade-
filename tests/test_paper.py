@@ -208,6 +208,49 @@ class TestTheSessionRecord(LedgerFixture):
         self.assertEqual(a.end_equity_eur, b.end_equity_eur)
 
 
+class TestTheDistribution(LedgerFixture):
+    """The defence against reading a trend into a winning streak."""
+
+    def test_three_green_days_are_unremarkable_at_this_win_rate(self):
+        d = paper.distribution(**{k: v for k, v in TODAY.items()
+                                  if k != "price_source"}, days=30)
+        self.assertGreater(d.share_positive, 0.5)
+        self.assertAlmostEqual(d.streak_probability_3,
+                               d.share_positive ** 3, places=9)
+        self.assertGreater(d.streak_probability_3, 0.1,
+                           "if a streak of three were rare, the chain would "
+                           "be evidence -- it is not")
+
+    def test_it_reports_the_spread_not_only_the_middle(self):
+        d = paper.distribution(**{k: v for k, v in TODAY.items()
+                                  if k != "price_source"}, days=30)
+        self.assertLess(d.percentile(0.05), d.median_pct)
+        self.assertGreater(d.percentile(0.95), d.median_pct)
+        self.assertGreater(d.sd_points, 0)
+
+    def test_an_implausible_median_is_called_out_as_a_measurement_problem(self):
+        """The honest reading of a very good number on a simulator.
+
+        A median that doubles the account inside a month is not a finding
+        about the strategy, and the output has to say which of the two it
+        is blaming.
+        """
+        d = paper.distribution(**{k: v for k, v in TODAY.items()
+                                  if k != "price_source"}, days=30)
+        if d.implied_days_to_double and d.implied_days_to_double < 30:
+            text = paper.render_distribution(d)
+            self.assertIn("Simulator", text)
+            self.assertIn("WARNUNG", text)
+
+    def test_doubling_time_is_undefined_for_a_losing_median(self):
+        d = paper.Distribution(returns_pct=[-1.0, -2.0, -3.0], equity_eur=400)
+        self.assertIsNone(d.implied_days_to_double)
+
+    def test_doubling_time_is_the_actual_compounding_answer(self):
+        d = paper.Distribution(returns_pct=[100.0], equity_eur=400)
+        self.assertAlmostEqual(d.implied_days_to_double, 1.0)
+
+
 class TestTheSummary(LedgerFixture):
     def test_it_says_so_when_there_is_nothing_yet(self):
         self.assertIn("Noch keine", paper.summarise())

@@ -565,6 +565,15 @@ def cmd_paper(args: argparse.Namespace) -> int:
     if args.summary:
         print(summarise())
         return 0
+    if args.distribution:
+        from .paper import distribution, render_distribution
+        if args.price is None or args.high is None or args.low is None:
+            print("Auch die Verteilung braucht --price, --high und --low.")
+            return 2
+        print(render_distribution(distribution(
+            gold_price=args.price, day_high=args.high, day_low=args.low,
+            equity_eur=args.equity or 400.0, days=args.days)))
+        return 0
     if args.price is None or args.high is None or args.low is None:
         print("Bitte --price, --high und --low angeben. Sie stammen aus einer "
               "Kursabfrage,\nnicht aus einer Voreinstellung: ohne sie waere "
@@ -803,6 +812,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="rechnen, aber nicht ins Journal schreiben")
     pa.add_argument("--summary", action="store_true",
                     help="nur die Bilanz aller bisherigen Sitzungen")
+    pa.add_argument("--distribution", action="store_true",
+                    help="viele unabhaengige Handelstage statt der Kette — "
+                         "sagt, ob eine Siegesserie etwas bedeutet")
+    pa.add_argument("--days", type=int, default=60,
+                    help="wie viele Tage die Verteilung umfasst")
     pa.set_defaults(func=cmd_paper)
 
     tr = sub.add_parser("train",
