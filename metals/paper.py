@@ -126,7 +126,15 @@ class Session:
     start_equity_eur: float
     end_equity_eur: float
     lot: float
+
+    # Risk per trade as a share of the account. Three numbers rather than
+    # one, because with a fixed lot the amount risked is whatever the
+    # predicted move happened to be -- measured at ten to one between the
+    # smallest and largest trade in a single session. A mean alone hides
+    # that, and the spread is the more dangerous fact.
     forced_risk_pct: float
+    risk_pct_min: float = 0.0
+    risk_pct_max: float = 0.0
 
     trades: int = 0
     wins: int = 0
@@ -150,6 +158,19 @@ class Session:
     @property
     def breaks_the_risk_rule(self) -> bool:
         return self.forced_risk_pct > MAX_RISK_PER_TRADE_PCT
+
+    @property
+    def risk_spread_ratio(self) -> float:
+        """How many times larger the biggest risk was than the smallest.
+
+        With risk-based sizing this is 1.0 by construction. With a fixed lot
+        it is whatever the market offered, and a session where it reaches
+        ten means the account's result was decided by which trades happened
+        to win, not by how many.
+        """
+        if self.risk_pct_min <= 0:
+            return 1.0
+        return self.risk_pct_max / self.risk_pct_min
 
 
 def sessions_so_far() -> int:
@@ -217,20 +238,26 @@ def run_session(gold_price: float, day_high: float, day_low: float,
     typical_stop_usd = 0.0
     could_not = ""
 
+    stops_usd: list[float] = []
     if equity_usd < margin_needed:
         could_not = (f"margin {margin_needed:.0f} USD > equity "
                      f"{equity_usd:.0f} USD")
         result = None
     else:
         result = run(session_cfg, series=series, seed=seed)
-        typical_stop_usd = (statistics.fmean(
-            [d * base.stop_fraction / base.take_fraction
-             for d in result.target_distances])
-            if result.target_distances else 0.0)
+        stops_usd = [d * base.stop_fraction / base.take_fraction
+                     for d in result.target_distances]
+        typical_stop_usd = statistics.fmean(stops_usd) if stops_usd else 0.0
 
     end_usd = result.end_equity if result else equity_usd
-    forced = (MIN_LOT * oz * typical_stop_usd / equity_usd * 100.0
-              if typical_stop_usd and equity_usd > 0 else 0.0)
+
+    def as_pct(stop_usd: float) -> float:
+        return (MIN_LOT * oz * stop_usd / equity_usd * 100.0
+                if equity_usd > 0 else 0.0)
+
+    forced = as_pct(typical_stop_usd) if typical_stop_usd else 0.0
+    risk_min = as_pct(min(stops_usd)) if stops_usd else 0.0
+    risk_max = as_pct(max(stops_usd)) if stops_usd else 0.0
 
     return Session(
         index=index,
@@ -242,6 +269,8 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
         lot=MIN_LOT,
         forced_risk_pct=round(forced, 2),
+        risk_pct_min=round(risk_min, 2),
+        risk_pct_max=round(risk_max, 2),
         trades=result.trades if result else 0,
         wins=result.wins if result else 0,
         losses=result.losses if result else 0,
@@ -281,11 +310,21 @@ def render(s: Session) -> str:
         lines.append("  Ausstiege: " + ", ".join(
             f"{k} {v}" for k, v in sorted(s.exits.items())))
     lines.append("")
-    lines.append(f"  Risiko je Trade  {s.forced_risk_pct:>6.1f} %"
+    lines.append(f"  Risiko je Trade  {s.forced_risk_pct:>6.1f} % im Mittel"
                  f"   (Regel R1: {MAX_RISK_PER_TRADE_PCT:.0f} %)")
+    if s.risk_pct_max > 0:
+        lines.append(f"                   {s.risk_pct_min:>6.1f} % bis "
+                     f"{s.risk_pct_max:.1f} %  "
+                     f"(Faktor {s.risk_spread_ratio:.1f})")
     if s.breaks_the_risk_rule:
-        lines.append("  Das ist ueber dem Limit, und zwar erzwungen: 0,01 Lot")
-        lines.append("  ist die kleinste Position, die es auf Gold gibt.")
+        lines.append("  Ueber dem Limit, und zwar erzwungen: 0,01 Lot ist die")
+        lines.append("  kleinste Position, die es auf Gold gibt.")
+    if s.risk_spread_ratio >= 3.0:
+        lines.append("  ACHTUNG: die Einsaetze liegen weit auseinander. Bei")
+        lines.append("  fester Losgroesse riskiert jeder Trade so viel, wie die")
+        lines.append("  vorhergesagte Bewegung gross war — unkontrolliert.")
+        lines.append("  Das Ergebnis der Sitzung haengt dann daran, WELCHE")
+        lines.append("  Trades gewonnen haben, nicht wie viele.")
     if s.stopped_out:
         lines.append("  BROKER-STOP-OUT in dieser Sitzung.")
     return "\n".join(lines)
@@ -325,6 +364,12 @@ def summarise() -> str:
         if risks:
             lines.append(f"  Risiko je Trade im Mittel      "
                          f"{statistics.fmean(risks):>6.1f} %")
+        lows = [e.get("risk_pct_min", 0.0) for e in traded]
+        highs = [e.get("risk_pct_max", 0.0) for e in traded]
+        lows = [x for x in lows if x > 0]
+        if lows and any(highs):
+            lines.append(f"  Kleinster / groesster Einsatz  "
+                         f"{min(lows):>6.1f} % / {max(highs):.1f} %")
     idle = [e for e in ledger if e["could_not_trade"]]
     if idle:
         lines.append(f"  Sitzungen ohne Trade           {len(idle):>6}")

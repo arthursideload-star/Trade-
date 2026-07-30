@@ -57,6 +57,30 @@ dazwischen ist der Bereich, in dem das Konto handeln kann, aber über Limit.
 
 Die vollständige Rechnung dazu: [KONTOGROESSE.md](./KONTOGROESSE.md).
 
+## Der Einsatz schwankt um das Zehnfache — und das ist die eigentliche Gefahr
+
+Bei fester Losgröße (0,01 Lot) ist der riskierte Betrag **nicht** gesteuert. Er ist,
+wie groß die vorhergesagte Bewegung zufällig war. Gemessen in Sitzung 2:
+
+| | Ziel-Abstand | Risiko am Konto |
+|---|---:|---:|
+| kleinster Trade | 8,59 $ | **1,9 %** |
+| größter Trade | 84,51 $ | **18,2 %** |
+
+Faktor **9,8** zwischen dem kleinsten und dem größten Einsatz, in einer einzigen Sitzung.
+
+Was das anrichtet, zeigt dieselbe Sitzung: acht Trades, fünf gewonnen, Erwartungswert
+**+0,064 R** — also praktisch null. Das Konto stieg trotzdem um **+16,5 %**, weil die
+Gewinner zufällig die großen Trades waren und die Verlierer die kleinen. Bei umgekehrten
+Vorzeichen wäre dieselbe Trefferquote ein Minus von ähnlicher Größe gewesen.
+
+**Ein Ergebnis, das davon abhängt, *welche* Trades gewonnen haben statt *wie viele*, ist
+kein Ergebnis.** Genau das verhindert die risikobasierte Positionsgröße (`--risk 1`): dort
+ist jeder Einsatz gleich groß, und dann misst die Rendite tatsächlich die Trefferquote.
+
+Deshalb steht in jeder Sitzung nicht nur der Mittelwert, sondern die Spanne, und ab Faktor
+3 warnt die Ausgabe ausdrücklich.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
@@ -64,7 +88,8 @@ Die vollständige Rechnung dazu: [KONTOGROESSE.md](./KONTOGROESSE.md).
 | `gold_price`, `day_high`, `day_low` | Damit später nachvollziehbar ist, auf welche Marktlage sich ein Ergebnis bezieht |
 | `price_source` | Woher der Kurs kam. Eine Zahl ohne Herkunft ist keine Zahl |
 | `start_equity_eur`, `end_equity_eur` | Die Kette. Der Endstand einer Sitzung ist der Startstand der nächsten |
-| `forced_risk_pct` | Das erzwungene Risiko je Trade — siehe oben |
+| `forced_risk_pct` | Das erzwungene Risiko je Trade im Mittel — siehe oben |
+| `risk_pct_min`, `risk_pct_max` | Die Spanne der Einsätze. Wichtiger als der Mittelwert |
 | `trades`, `wins`, `losses`, `exits` | Damit eine gute Sitzung von einer glücklichen unterschieden werden kann |
 | `expectancy_r` | Der Erwartungswert je Trade, unabhängig von der Kontogröße |
 | `could_not_trade` | Wenn die Margin nicht reichte. Eine Sitzung ohne Trade ist ein Ergebnis, kein Fehler |

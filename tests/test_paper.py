@@ -148,6 +148,30 @@ class TestWhatItRecordsAboutRisk(LedgerFixture):
                          "a session that could not trade must not move the "
                          "account")
 
+    def test_the_spread_of_risk_is_recorded_not_just_its_mean(self):
+        """The defect this exists to prevent.
+
+        With a fixed lot the money risked per trade is whatever the
+        predicted move happened to be. Reporting only the mean turns a
+        session that risked 1.9% on one trade and 18.2% on another into a
+        reassuring single figure of 8.7%.
+        """
+        s = run_session(**TODAY)
+        self.assertGreater(s.risk_pct_max, 0)
+        self.assertLess(s.risk_pct_min, s.forced_risk_pct)
+        self.assertGreater(s.risk_pct_max, s.forced_risk_pct)
+
+    def test_a_wide_spread_of_risk_is_flagged_in_the_output(self):
+        s = run_session(**TODAY)
+        if s.risk_spread_ratio >= 3.0:
+            self.assertIn("WELCHE", paper.render(s),
+                          "a session whose stakes differ several-fold must "
+                          "say that the result turned on which trades won")
+
+    def test_the_ratio_is_one_when_there_are_no_trades(self):
+        s = run_session(**TODAY, start_equity_eur=100.0)
+        self.assertEqual(s.risk_spread_ratio, 1.0)
+
     def test_the_margin_threshold_matches_the_contract_spec(self):
         oz = get_spec("XAUUSD").contract_size_oz
         needed_usd = MIN_LOT * oz * TODAY["gold_price"] / 20.0
