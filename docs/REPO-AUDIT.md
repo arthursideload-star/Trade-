@@ -201,6 +201,18 @@ erreicht.**
 Behoben, und drei Tests gehen jetzt durch Parser *und* Kommandofunktion und prüfen, dass
 `--news` und `--spread` tatsächlich in der Sitzung ankommen.
 
+**Und die Lücke war größer als dieser eine Befehl.** Eine Zählung ergab: von 18
+Unterbefehlen hatten **5** überhaupt einen Test, der durch den Parser geht.
+`tests/test_cli_smoke.py` deckt das jetzt ab — jeder Befehl wird geparst, dispatcht und
+ausgeführt. Drei Befehle (`analyse`, `quote`, `ratio`) sind ausdrücklich als
+netzabhängig gelistet, und ein Test schlägt fehl, wenn ein neuer Befehl weder eine
+Smoke-Prüfung noch diesen Eintrag bekommt: **Ein ungetesteter Befehl soll eine sichtbare
+Entscheidung sein, kein Versehen.**
+
+Zwei der Smoke-Fälle sind sofort fehlgeschlagen — beide an meinem Testcode, nicht am
+Programm (`--source simulated` statt `sim`, und `journal` schreibt seine Meldung nach
+stderr). Genau dafür sind sie da.
+
 **Für die Kette heißt das:** Die Sitzungen 1–16 liefen alle **ohne** Nachrichtensperre. Die
 Einträge sagen das korrekt (`news_times_utc=[]`) — die Behauptung, sie sei aktiv gewesen,
 stand nur in meinem Bericht, nicht in den Daten.
