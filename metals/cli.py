@@ -558,6 +558,35 @@ def cmd_claims(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_paper(args: argparse.Namespace) -> int:
+    """One compounding paper session on a market calibrated to today's gold."""
+    from .paper import append, current_equity_eur, render, run_session, summarise
+
+    if args.summary:
+        print(summarise())
+        return 0
+    if args.price is None or args.high is None or args.low is None:
+        print("Bitte --price, --high und --low angeben. Sie stammen aus einer "
+              "Kursabfrage,\nnicht aus einer Voreinstellung: ohne sie waere "
+              "der Lauf nicht an echte\nDaten gebunden und die Zahl waere "
+              "wertlos.")
+        return 2
+
+    s = run_session(gold_price=args.price, day_high=args.high,
+                    day_low=args.low, price_source=args.source,
+                    start_equity_eur=args.equity)
+    print(render(s))
+    if not args.dry_run:
+        append(s)
+        print()
+        print(summarise())
+    else:
+        print()
+        print(f"  (Probelauf — nicht ins Journal geschrieben, Konto bleibt "
+              f"bei {current_equity_eur():,.2f} €)")
+    return 0
+
+
 def cmd_train(args: argparse.Namespace) -> int:
     """One training iteration on fresh markets, appended to the log."""
     from .train import append, one_iteration, render, summarise
@@ -756,6 +785,25 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--markets", type=int, default=20)
     cl.add_argument("--bars", type=int, default=12_000)
     cl.set_defaults(func=cmd_claims)
+
+    pa = sub.add_parser("paper",
+                        help="eine Papier-Sitzung, Konto laeuft fort")
+    pa.add_argument("--price", type=float, default=None,
+                    help="aktueller Goldkurs in USD/oz")
+    pa.add_argument("--high", type=float, default=None,
+                    help="Tageshoch in USD/oz")
+    pa.add_argument("--low", type=float, default=None,
+                    help="Tagestief in USD/oz")
+    pa.add_argument("--source", default="manuell",
+                    help="woher der Kurs stammt — wird mitprotokolliert")
+    pa.add_argument("--equity", type=float, default=None,
+                    help="Startkapital in Euro; ohne Angabe wird der Stand "
+                         "der letzten Sitzung fortgeschrieben")
+    pa.add_argument("--dry-run", action="store_true",
+                    help="rechnen, aber nicht ins Journal schreiben")
+    pa.add_argument("--summary", action="store_true",
+                    help="nur die Bilanz aller bisherigen Sitzungen")
+    pa.set_defaults(func=cmd_paper)
 
     tr = sub.add_parser("train",
                         help="ein Trainingsdurchgang auf frischen Maerkten")

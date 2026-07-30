@@ -1,0 +1,336 @@
+"""A compounding paper-trading run, one session at a time.
+
+Each session is one trading day. The account starts at whatever the previous
+session ended with, so a run of sessions is a single account followed forward
+rather than a set of independent samples -- which is the point: independent
+samples tell you the distribution, a compounded chain tells you what living
+with the distribution feels like.
+
+**What is real here and what is not.** Before each session the current gold
+price and the day's actual high/low are looked up, and the generated market is
+calibrated to both: it starts at the real price, and its volatility is scaled
+so its daily range matches the real one. What is *not* real is the path in
+between. Nothing in this environment can reach an intraday price feed -- the
+providers return 403 through the proxy -- so the minute-by-minute sequence is
+generated.
+
+That distinction decides what a result from this module is worth:
+
+* The **cost arithmetic** is real. Margin, what a minimum lot risks against
+  this account, how much of the account one stop is -- all computed from
+  today's actual price.
+* The **volatility scale** is real, to the extent one day's range describes
+  it.
+* The **outcome** is not a forecast. It is what these rules would have done
+  on *a* day that moved as much as today did.
+
+A chain of sessions therefore answers "is this account size survivable" much
+better than it answers "will this make money".
+
+Position sizing follows what a small account actually faces. `metals.risk`
+caps risk at 1% per trade, and on a 400-euro account the smallest lot gold
+allows breaks that cap several times over -- so `forced_risk_pct` is recorded
+for every session and is the first number to read in the ledger.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import statistics
+import time
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
+
+from . import simulate
+from .dayrange import DayRangeConfig, run
+from .risk import MAX_RISK_PER_TRADE_PCT
+from .specs import get_spec
+
+LEDGER_DIR = "training"
+LEDGER_PATH = os.path.join(LEDGER_DIR, "paper-ledger.jsonl")
+
+# The account is funded in euro, the contract settles in dollars. Written down
+# rather than fetched: the rate moves, and nothing here turns on its third
+# decimal.
+ASSUMED_EUR_USD = 1.08
+
+# Expected range of a driftless random walk over n steps, in units of the
+# per-step standard deviation: E[range] = 2 sigma sqrt(2n/pi).
+_RANGE_OVER_SIGMA = 2.0 * math.sqrt(2.0 / math.pi)
+
+BARS_PER_DAY = 1_440
+MIN_LOT = 0.01
+
+
+# Seeds used only for calibration. Fixed, so the same observed range always
+# yields the same volatility, and disjoint from the seeds sessions trade on,
+# so no session is measured on a market that was used to tune it.
+_CALIBRATION_SEEDS = tuple(range(900_001, 900_009))
+
+
+def _median_range(price: float, base_vol: float, bars: int) -> float:
+    ranges = []
+    for seed in _CALIBRATION_SEEDS:
+        s = simulate.generate(
+            bars=bars, timeframe="1m", seed=seed,
+            params=simulate.MarketParams(start_price=price, base_vol=base_vol))
+        ranges.append(max(c.high for c in s.candles)
+                      - min(c.low for c in s.candles))
+    return statistics.median(ranges)
+
+
+def calibrate_vol(price: float, day_high: float, day_low: float,
+                  bars: int = BARS_PER_DAY, rounds: int = 3) -> float:
+    """Per-bar volatility that reproduces the observed daily range.
+
+    Calibrating to the real range is what makes "today's data" mean anything
+    here: a quiet day and a violent one produce genuinely different markets
+    rather than the same generator with a different starting price.
+
+    The random-walk formula only gives the first guess, and it comes out
+    about 18% low -- the generator also has a session profile, mean reversion
+    toward a slow anchor, and jumps, none of which that formula knows about.
+    So the guess is then corrected against what the generator actually does,
+    which is both more honest and less fragile than deriving a constant that
+    would silently rot the next time the generator changes.
+    """
+    observed = max(0.0, day_high - day_low)
+    if observed <= 0 or price <= 0:
+        return simulate.MarketParams().base_vol
+
+    sigma_abs = observed / (_RANGE_OVER_SIGMA * math.sqrt(bars))
+    base_vol = sigma_abs / price
+
+    for _ in range(rounds):
+        produced = _median_range(price, base_vol, bars)
+        if produced <= 0:
+            break
+        base_vol *= observed / produced
+    return base_vol
+
+
+@dataclass
+class Session:
+    index: int
+    timestamp: float
+    date_utc: str
+
+    # What was looked up before the session, and where it came from.
+    gold_price: float
+    day_high: float
+    day_low: float
+    price_source: str
+
+    start_equity_eur: float
+    end_equity_eur: float
+    lot: float
+    forced_risk_pct: float
+
+    trades: int = 0
+    wins: int = 0
+    losses: int = 0
+    signals: int = 0
+    exits: dict[str, int] = field(default_factory=dict)
+    expectancy_r: float = 0.0
+    stopped_out: bool = False
+    could_not_trade: str = ""
+
+    @property
+    def pnl_eur(self) -> float:
+        return self.end_equity_eur - self.start_equity_eur
+
+    @property
+    def return_pct(self) -> float:
+        if self.start_equity_eur <= 0:
+            return 0.0
+        return self.pnl_eur / self.start_equity_eur * 100.0
+
+    @property
+    def breaks_the_risk_rule(self) -> bool:
+        return self.forced_risk_pct > MAX_RISK_PER_TRADE_PCT
+
+
+def sessions_so_far() -> int:
+    if not os.path.exists(LEDGER_PATH):
+        return 0
+    with open(LEDGER_PATH, encoding="utf-8") as fh:
+        return sum(1 for line in fh if line.strip())
+
+
+def load_ledger() -> list[dict]:
+    if not os.path.exists(LEDGER_PATH):
+        return []
+    out = []
+    with open(LEDGER_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    out.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    return out
+
+
+def current_equity_eur(start: float = 400.0) -> float:
+    """Where the account stands. The compounding, in one function."""
+    ledger = load_ledger()
+    return ledger[-1]["end_equity_eur"] if ledger else start
+
+
+def append(session: Session) -> None:
+    os.makedirs(LEDGER_DIR, exist_ok=True)
+    with open(LEDGER_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(asdict(session)) + "\n")
+
+
+def run_session(gold_price: float, day_high: float, day_low: float,
+                price_source: str, start_equity_eur: float | None = None,
+                cfg: DayRangeConfig | None = None,
+                seed: int | None = None) -> Session:
+    """One trading day on an account carried forward from the last one."""
+    index = sessions_so_far()
+    equity_eur = (current_equity_eur() if start_equity_eur is None
+                  else start_equity_eur)
+    equity_usd = equity_eur * ASSUMED_EUR_USD
+    oz = get_spec("XAUUSD").contract_size_oz
+
+    # A fresh market every session, and never one seen before.
+    seed = seed if seed is not None else 500_000 + index * 97
+
+    base = cfg or DayRangeConfig()
+    params = simulate.MarketParams(
+        start_price=gold_price,
+        base_vol=calibrate_vol(gold_price, day_high, day_low),
+    )
+    series = simulate.generate(bars=BARS_PER_DAY, timeframe="1m", seed=seed,
+                               params=params)
+
+    # What a 400-euro account actually does: the broker minimum, because the
+    # rule-abiding size is below it. Recorded, not hidden.
+    session_cfg = replace(base, start_equity=equity_usd, lot=MIN_LOT,
+                          risk_pct=None)
+
+    margin_needed = MIN_LOT * oz * gold_price / session_cfg.leverage
+    typical_stop_usd = 0.0
+    could_not = ""
+
+    if equity_usd < margin_needed:
+        could_not = (f"margin {margin_needed:.0f} USD > equity "
+                     f"{equity_usd:.0f} USD")
+        result = None
+    else:
+        result = run(session_cfg, series=series, seed=seed)
+        typical_stop_usd = (statistics.fmean(
+            [d * base.stop_fraction / base.take_fraction
+             for d in result.target_distances])
+            if result.target_distances else 0.0)
+
+    end_usd = result.end_equity if result else equity_usd
+    forced = (MIN_LOT * oz * typical_stop_usd / equity_usd * 100.0
+              if typical_stop_usd and equity_usd > 0 else 0.0)
+
+    return Session(
+        index=index,
+        timestamp=time.time(),
+        date_utc=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        gold_price=gold_price, day_high=day_high, day_low=day_low,
+        price_source=price_source,
+        start_equity_eur=round(equity_eur, 2),
+        end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
+        lot=MIN_LOT,
+        forced_risk_pct=round(forced, 2),
+        trades=result.trades if result else 0,
+        wins=result.wins if result else 0,
+        losses=result.losses if result else 0,
+        signals=result.signals if result else 0,
+        exits=dict(result.exits) if result else {},
+        expectancy_r=round(result.expectancy_r, 4) if result else 0.0,
+        stopped_out=bool(result.stopped_out) if result else False,
+        could_not_trade=could_not,
+    )
+
+
+def render(s: Session) -> str:
+    lines = [f"PAPIER-LAUF — SITZUNG {s.index + 1}", "=" * 68]
+    lines.append(f"  {s.date_utc} UTC")
+    lines.append(f"  Gold {s.gold_price:,.2f} $/oz  ·  Tagesspanne "
+                 f"{s.day_low:,.2f}–{s.day_high:,.2f} "
+                 f"({s.day_high - s.day_low:,.2f} $)")
+    lines.append(f"  Quelle: {s.price_source}")
+    lines.append("")
+    if s.could_not_trade:
+        lines.append(f"  KEIN TRADE MOEGLICH: {s.could_not_trade}")
+        lines.append(f"  Konto unveraendert bei {s.end_equity_eur:,.2f} €")
+        return "\n".join(lines)
+
+    lines.append(f"  Start   {s.start_equity_eur:>10,.2f} €")
+    lines.append(f"  Ende    {s.end_equity_eur:>10,.2f} €")
+    lines.append(f"  Ergebnis{s.pnl_eur:>+10,.2f} € "
+                 f"({s.return_pct:+.2f} %)")
+    lines.append("")
+    lines.append(f"  Signale {s.signals:>10}")
+    lines.append(f"  Trades  {s.trades:>10}   "
+                 f"{s.wins} gewonnen / {s.losses} verloren")
+    if s.trades:
+        lines.append(f"  Treffer {s.wins / s.trades * 100:>9.1f} %")
+        lines.append(f"  Erwartung {s.expectancy_r:>+8.3f} R")
+    if s.exits:
+        lines.append("  Ausstiege: " + ", ".join(
+            f"{k} {v}" for k, v in sorted(s.exits.items())))
+    lines.append("")
+    lines.append(f"  Risiko je Trade  {s.forced_risk_pct:>6.1f} %"
+                 f"   (Regel R1: {MAX_RISK_PER_TRADE_PCT:.0f} %)")
+    if s.breaks_the_risk_rule:
+        lines.append("  Das ist ueber dem Limit, und zwar erzwungen: 0,01 Lot")
+        lines.append("  ist die kleinste Position, die es auf Gold gibt.")
+    if s.stopped_out:
+        lines.append("  BROKER-STOP-OUT in dieser Sitzung.")
+    return "\n".join(lines)
+
+
+def summarise() -> str:
+    """The chain so far. The only number that compounds is the last one."""
+    ledger = load_ledger()
+    if not ledger:
+        return "Noch keine Papier-Sitzungen."
+
+    start = ledger[0]["start_equity_eur"]
+    end = ledger[-1]["end_equity_eur"]
+    pnls = [e["end_equity_eur"] - e["start_equity_eur"] for e in ledger]
+    equities = [e["end_equity_eur"] for e in ledger]
+    traded = [e for e in ledger if e["trades"]]
+
+    peak, max_dd = start, 0.0
+    for eq in equities:
+        peak = max(peak, eq)
+        if peak > 0:
+            max_dd = max(max_dd, (peak - eq) / peak)
+
+    lines = [f"PAPIER-LAUF — {len(ledger)} SITZUNGEN", "=" * 68]
+    lines.append(f"  Start   {start:>10,.2f} €")
+    lines.append(f"  Jetzt   {end:>10,.2f} €")
+    lines.append(f"  Gesamt  {end - start:>+10,.2f} € "
+                 f"({(end / start - 1) * 100:+.1f} %)")
+    lines.append("")
+    lines.append(f"  Groesster Rueckgang vom Hoch   {max_dd * 100:>6.1f} %")
+    lines.append(f"  Sitzungen im Plus              "
+                 f"{sum(1 for p in pnls if p > 0):>6} von {len(pnls)}")
+    if traded:
+        lines.append(f"  Trades gesamt                  "
+                     f"{sum(e['trades'] for e in traded):>6}")
+        risks = [e["forced_risk_pct"] for e in traded if e["forced_risk_pct"]]
+        if risks:
+            lines.append(f"  Risiko je Trade im Mittel      "
+                         f"{statistics.fmean(risks):>6.1f} %")
+    idle = [e for e in ledger if e["could_not_trade"]]
+    if idle:
+        lines.append(f"  Sitzungen ohne Trade           {len(idle):>6}")
+    lines.append("")
+    if len(ledger) < 20:
+        lines.append("  Unter zwanzig Sitzungen ist das eine Anekdote. Eine")
+        lines.append("  Kette sagt, wie sich die Streuung anfuehlt, nicht ob")
+        lines.append("  die Strategie einen Vorteil hat.")
+    return "\n".join(lines)
