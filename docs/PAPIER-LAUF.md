@@ -5,10 +5,17 @@ Das Konto startet bei dem Stand, mit dem die vorige Sitzung geendet hat — Gewi
 Verlust werden mitgenommen.
 
 ```bash
-python -m metals paper --price 4102.83 --high 4120.16 --low 4028.77 \
-    --source "WebSearch 30.07.2026"
+python -m metals paper --price 4114.79 --high 4120.16 --low 4028.77 \
+    --spread 0.34 --news "18:00" --source "investing.com 30.07.2026"
 python -m metals paper --summary
+python -m metals paper --distribution --price 4114.79 \
+    --high 4120.16 --low 4028.77
 ```
+
+`--spread` kommt aus dem beobachteten Ask minus Bid, `--news` aus dem Wirtschaftskalender
+(Rule R4 sperrt 30 Minuten um jede genannte Zeit). Ohne `--news` greift die Sperre **nicht**
+— das steht dann auch so in der Ausgabe, damit ein durchgehandelter FOMC-Tag nicht
+unbemerkt bleibt. Genau das war Auditbefund A7.
 
 Das Journal liegt in `training/paper-ledger.jsonl`, eine Zeile je Sitzung.
 
@@ -203,6 +210,7 @@ Journal sichtbar bleibt.
 | `expectancy_r` | Der Erwartungswert je Trade, unabhängig von der Kontogröße |
 | `could_not_trade` | Wenn die Margin nicht reichte. Eine Sitzung ohne Trade ist ein Ergebnis, kein Fehler |
 | `stopped_out` | Broker-Stop-out |
+| `news_times_utc` | Für welche Veröffentlichungen die Sitzung stillhielt. Leer heißt: R4 war aus |
 
 Jede Sitzung handelt auf einem Markt mit einem Seed, den keine frühere benutzt hat. Die
 Seeds für die Volatilitätskalibrierung sind davon getrennt — kein Markt wird auf denselben

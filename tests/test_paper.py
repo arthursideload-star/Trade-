@@ -208,6 +208,74 @@ class TestTheSessionRecord(LedgerFixture):
         self.assertEqual(a.end_equity_eur, b.end_equity_eur)
 
 
+class TestTheNewsBlackoutReachesTheSession(LedgerFixture):
+    """R4 is only useful if the code that trades is told about it.
+
+    The rule existed in risk.py for weeks while dayrange ignored it, and the
+    paper session then ignored it for one more session after dayrange was
+    fixed. These tests close that gap at the last link.
+    """
+
+    def test_a_session_without_release_times_says_so(self):
+        s = run_session(**TODAY)
+        self.assertEqual(s.news_times_utc, [])
+        self.assertIn("Keine Nachrichtensperre", paper.render(s))
+
+    def test_configured_releases_are_recorded_and_shown(self):
+        s = run_session(**TODAY, news_times_utc=((12, 30), (18, 0)))
+        self.assertEqual(s.news_times_utc, [[12, 30], [18, 0]])
+        rendered = paper.render(s)
+        self.assertIn("12:30", rendered)
+        self.assertIn("18:00", rendered)
+        self.assertIn("R4", rendered)
+
+    def test_a_blackout_covering_the_day_stops_every_signal(self):
+        """Deterministic end-to-end check of the wiring.
+
+        Two release times a day would be the realistic case, but over one
+        session the strategy signals seven to ten times and none of them
+        need land inside a 60-minute window -- so asserting a drop there
+        tests the dice, not the plumbing. Blacking out every hour cannot be
+        satisfied by luck.
+        """
+        every_hour = tuple((h, 0) for h in range(24))
+        blocked = run_session(**TODAY, start_equity_eur=400.0,
+                              news_times_utc=every_hour)
+        self.assertEqual(blocked.signals, 0)
+        self.assertEqual(blocked.trades, 0)
+
+    def test_a_blackout_never_creates_signals(self):
+        free = run_session(**TODAY, start_equity_eur=400.0)
+        blocked = run_session(**TODAY, start_equity_eur=400.0,
+                              news_times_utc=((12, 30), (18, 0)))
+        self.assertLessEqual(blocked.signals, free.signals)
+
+    def test_it_survives_the_ledger_round_trip(self):
+        paper.append(run_session(**TODAY, news_times_utc=((18, 0),)))
+        row = paper.load_ledger()[-1]
+        self.assertEqual(row["news_times_utc"], [[18, 0]])
+
+
+class TestParsingReleaseTimes(unittest.TestCase):
+    def test_it_reads_the_command_line_form(self):
+        from metals.cli import _parse_news_times
+        self.assertEqual(_parse_news_times("12:30,18:00"), ((12, 30), (18, 0)))
+
+    def test_a_bare_hour_means_on_the_hour(self):
+        from metals.cli import _parse_news_times
+        self.assertEqual(_parse_news_times("18"), ((18, 0),))
+
+    def test_nothing_given_means_no_blackout(self):
+        from metals.cli import _parse_news_times
+        self.assertEqual(_parse_news_times(None), ())
+        self.assertEqual(_parse_news_times(""), ())
+
+    def test_stray_whitespace_and_commas_are_tolerated(self):
+        from metals.cli import _parse_news_times
+        self.assertEqual(_parse_news_times(" 12:30 , 18:00 ,"),
+                         ((12, 30), (18, 0)))
+
+
 class TestCrossCheckingTheQuote(unittest.TestCase):
     """Several lookups, one price. Which one goes in the ledger matters."""
 

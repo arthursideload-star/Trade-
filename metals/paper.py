@@ -149,6 +149,10 @@ class Session:
     expectancy_r: float = 0.0
     stopped_out: bool = False
     could_not_trade: str = ""
+    # Release times the session stood aside for, as UTC (hour, minute).
+    # Recorded because "the bot traded through FOMC" is only visible after
+    # the fact if the session says which releases it knew about.
+    news_times_utc: list[list[int]] = field(default_factory=list)
 
     @property
     def pnl_eur(self) -> float:
@@ -251,7 +255,8 @@ def run_session(gold_price: float, day_high: float, day_low: float,
                 price_source: str, start_equity_eur: float | None = None,
                 cfg: DayRangeConfig | None = None,
                 seed: int | None = None,
-                spread_usd_oz: float | None = None) -> Session:
+                spread_usd_oz: float | None = None,
+                news_times_utc: tuple[tuple[int, int], ...] = ()) -> Session:
     """One trading day on an account carried forward from the last one."""
     index = sessions_so_far()
     equity_eur = (current_equity_eur() if start_equity_eur is None
@@ -265,6 +270,8 @@ def run_session(gold_price: float, day_high: float, day_low: float,
     base = cfg or DayRangeConfig()
     if spread_usd_oz is not None:
         base = replace(base, spread_usd_oz=spread_usd_oz)
+    if news_times_utc:
+        base = replace(base, news_times_utc=news_times_utc)
     params = simulate.MarketParams(
         start_price=gold_price,
         base_vol=calibrate_vol(gold_price, day_high, day_low),
@@ -322,6 +329,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         expectancy_r=round(result.expectancy_r, 4) if result else 0.0,
         stopped_out=bool(result.stopped_out) if result else False,
         could_not_trade=could_not,
+        news_times_utc=[list(pair) for pair in base.news_times_utc],
     )
 
 
@@ -428,6 +436,11 @@ def render(s: Session) -> str:
                  f"{s.day_low:,.2f}–{s.day_high:,.2f} "
                  f"({s.day_high - s.day_low:,.2f} $)")
     lines.append(f"  Spread {s.spread_usd_oz:.2f} $/oz")
+    if s.news_times_utc:
+        times = ", ".join(f"{h:02d}:{m:02d}" for h, m in s.news_times_utc)
+        lines.append(f"  Nachrichtensperre (R4) um {times} UTC")
+    else:
+        lines.append("  Keine Nachrichtensperre gesetzt — R4 greift nicht")
     lines.append(f"  Quelle: {s.price_source}")
     lines.append("")
     if s.could_not_trade:

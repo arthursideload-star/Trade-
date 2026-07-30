@@ -36,7 +36,8 @@ def cmd_analyse(args: argparse.Namespace) -> int:
     client = HttpClient(cache_ttl=args.cache_ttl)
     try:
         rec = analyse(args.symbol, account, client=client,
-                      spread_usd_oz=args.spread)
+                      spread_usd_oz=args.spread,
+                    news_times_utc=_parse_news_times(args.news))
     except Exception as exc:  # noqa: BLE001 - the CLI reports, it does not crash
         print(f"analysis failed: {exc}", file=sys.stderr)
         print("\nMost common causes:", file=sys.stderr)
@@ -558,6 +559,20 @@ def cmd_claims(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_news_times(value: str | None) -> tuple[tuple[int, int], ...]:
+    """Parse "12:30,18:00" into the pairs rule R4 needs."""
+    if not value:
+        return ()
+    out = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        hour, _, minute = part.partition(":")
+        out.append((int(hour), int(minute or 0)))
+    return tuple(out)
+
+
 def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
@@ -807,6 +822,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--spread", type=float, default=None,
                     help="beobachteter Spread in USD/oz, z.B. aus Ask minus "
                          "Bid; ohne Angabe die Voreinstellung der Strategie")
+    pa.add_argument("--news", default=None,
+                    help="Zeiten hochwirksamer Veroeffentlichungen in UTC, "
+                         "z.B. \"12:30,18:00\" — R4 sperrt 30 Minuten drum "
+                         "herum")
     pa.add_argument("--source", default="manuell",
                     help="woher der Kurs stammt — wird mitprotokolliert")
     pa.add_argument("--equity", type=float, default=None,
