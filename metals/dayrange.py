@@ -34,11 +34,11 @@ from __future__ import annotations
 import random
 import statistics
 from dataclasses import dataclass, field, replace
-from datetime import date
+from datetime import date, datetime
 
 from .candles import Candle, CandleSeries
 from .microscalp import EU_RETAIL_LEVERAGE_GOLD, STOP_OUT_LEVEL
-from .risk import MAX_RISK_PER_TRADE_PCT
+from .risk import MAX_RISK_PER_TRADE_PCT, NEWS_BLACKOUT_MINUTES
 from .specs import get_spec
 
 # A day's range on gold is a real reference level -- the high and low that
@@ -90,6 +90,20 @@ class DayRangeConfig:
     # Taking only the narrow ones is the third option between "trade nothing"
     # and "let the market decide how much to bet".
     max_risk_pct: float | None = None
+
+    # High-impact releases to stand aside for, as UTC (hour, minute) pairs.
+    # Rule R4 bans an entry within NEWS_BLACKOUT_MINUTES either side of one.
+    #
+    # This exists because the strategy was bypassing R4 the same way it was
+    # bypassing R1 before the audit: the rule lived in metals/risk.py, was
+    # enforced by size_position, and the code that actually trades never
+    # called it. See docs/REPO-AUDIT.md, finding A7.
+    #
+    # Times rather than dates, because the simulator's days are synthetic.
+    # Against real history, feed the actual release times from
+    # metals.sources.calendar -- which is where the live rule lives, and this
+    # field deliberately does not duplicate its schedule.
+    news_times_utc: tuple[tuple[int, int], ...] = ()
 
     # --- the prediction ---
     # How close to an end of the day's range price must sit before the bot
@@ -146,6 +160,24 @@ class Prediction:
         return abs(self.target - self.entry)
 
 
+def in_news_blackout(ts: datetime,
+                     news_times_utc: tuple[tuple[int, int], ...]) -> bool:
+    """Rule R4: no entry within the blackout window of a release.
+
+    The window comes from metals.risk so there is one number, not two. This
+    is not a filter chosen because a backtest liked it -- the simulator
+    cannot evaluate it at all, since its jumps are random rather than tied to
+    a clock. It is here because the documented behaviour of gold around CPI,
+    NFP and FOMC (spreads from 1-2 points to 15-20, plus slippage) makes an
+    entry in that window a different trade from the one the rules priced.
+    """
+    if not news_times_utc:
+        return False
+    minutes_now = ts.hour * 60 + ts.minute
+    return any(abs(minutes_now - (h * 60 + m)) <= NEWS_BLACKOUT_MINUTES
+               for h, m in news_times_utc)
+
+
 def lots_for(cfg: DayRangeConfig, equity: float, stop_distance_usd: float,
              oz_per_lot: float) -> float:
     """How large the position may be.
@@ -190,6 +222,9 @@ def predict(bars: list[Candle], i: int, cfg: DayRangeConfig) -> Prediction:
 
     if cfg.trade_hours_utc and bars[i].ts.hour not in cfg.trade_hours_utc:
         return Prediction("none", reason="outside the chosen session")
+
+    if in_news_blackout(bars[i].ts, cfg.news_times_utc):
+        return Prediction("none", reason="R4: high-impact release nearby")
 
     day = bars[max(0, i - cfg.bars_per_day):i + 1]   # the last 24h of bars
     high = max(b.high for b in day)

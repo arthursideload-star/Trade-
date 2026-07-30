@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 from metals import simulate
 from metals.candles import resample
@@ -27,8 +28,9 @@ from metals.claims import (ASSUMED_EUR_USD, CLAIMS, ASIA_HOURS_UTC,
                            stops_level_usd, swap_on_one_position,
                            target_is_placeable)
 from metals.dayrange import (ROLLOVER_HOUR_UTC, TRIPLE_SWAP_WEEKDAY,
-                             DayRangeConfig, lots_for, run, sweep)
-from metals.risk import MAX_RISK_PER_TRADE_PCT
+                             DayRangeConfig, in_news_blackout, lots_for,
+                             run, sweep)
+from metals.risk import MAX_RISK_PER_TRADE_PCT, NEWS_BLACKOUT_MINUTES
 from metals.specs import get_spec
 
 
@@ -326,6 +328,57 @@ class TestTheRiskCeiling(unittest.TestCase):
         tight = sweep(self._cfg(2.5), markets=12, bars=1_440,
                       seed_base=600_000)
         self.assertGreater(loose.mean_expectancy_r, tight.mean_expectancy_r)
+
+
+class TestTheNewsBlackout(unittest.TestCase):
+    """R4 inside the strategy that actually trades.
+
+    Note what is *not* tested here: that the blackout improves results. The
+    simulator's jumps are random rather than tied to a clock, so it cannot
+    evaluate a time-of-day rule at all, and a test asserting an improvement
+    would be measuring noise. What is tested is that the rule is obeyed and
+    that it uses the project's one blackout window.
+    """
+
+    CPI = (12, 30)
+    FOMC = (18, 0)
+
+    def test_it_blocks_inside_the_window_on_both_sides(self):
+        for minute in (0, 15, 29, 45, 59):
+            ts = datetime(2026, 7, 30, 12, minute, tzinfo=timezone.utc)
+            expected = abs((12 * 60 + minute) - 750) <= NEWS_BLACKOUT_MINUTES
+            self.assertEqual(in_news_blackout(ts, (self.CPI,)), expected,
+                             f"12:{minute:02d}")
+
+    def test_it_allows_outside_the_window(self):
+        ts = datetime(2026, 7, 30, 11, 45, tzinfo=timezone.utc)
+        self.assertFalse(in_news_blackout(ts, (self.CPI,)))
+
+    def test_no_configured_release_means_no_block(self):
+        ts = datetime(2026, 7, 30, 12, 30, tzinfo=timezone.utc)
+        self.assertFalse(in_news_blackout(ts, ()))
+
+    def test_several_releases_are_all_honoured(self):
+        both = (self.CPI, self.FOMC)
+        self.assertTrue(in_news_blackout(
+            datetime(2026, 7, 30, 18, 10, tzinfo=timezone.utc), both))
+        self.assertTrue(in_news_blackout(
+            datetime(2026, 7, 30, 12, 40, tzinfo=timezone.utc), both))
+
+    def test_the_window_is_the_one_in_risk_py(self):
+        """One definition of the blackout, not a second copy that drifts."""
+        release = datetime(2026, 7, 30, 12, 30, tzinfo=timezone.utc)
+        inside = release - timedelta(minutes=NEWS_BLACKOUT_MINUTES)
+        outside = release - timedelta(minutes=NEWS_BLACKOUT_MINUTES + 1)
+        self.assertTrue(in_news_blackout(inside, (self.CPI,)))
+        self.assertFalse(in_news_blackout(outside, (self.CPI,)))
+
+    def test_a_configured_release_removes_trades_from_a_run(self):
+        cfg = DayRangeConfig()
+        free = run(cfg, seed=11, bars=20_000)
+        blocked = run(replace(cfg, news_times_utc=(self.CPI, self.FOMC)),
+                      seed=11, bars=20_000)
+        self.assertLess(blocked.signals, free.signals)
 
 
 class TestC12StopsLevel(unittest.TestCase):

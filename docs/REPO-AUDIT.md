@@ -119,6 +119,35 @@ mitläuft. Bis dahin steht es hier als offener Punkt, statt als stiller Widerspr
 
 ---
 
+## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
+
+Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei
+3,50–3,75 %, und der Bot handelte durch, als wäre nichts.
+
+Regel R4 („kein Einstieg innerhalb von 30 Minuten um eine hochwirksame Veröffentlichung")
+steht in `metals/risk.py` und wird von `size_position` durchgesetzt. `metals/dayrange.py`
+enthielt **null** Vorkommen von „news". Exakt dieselbe Fehlerklasse wie A1: Die Regel galt
+für den Chat-Assistenten, nicht für den Code, der handelt.
+
+**Behoben.** `DayRangeConfig.news_times_utc` nimmt die Veröffentlichungszeiten, und
+`in_news_blackout` verweigert den Einstieg im Fenster — mit `NEWS_BLACKOUT_MINUTES` aus
+`risk.py`, damit es eine Definition gibt und nicht zwei. Der Zeitplan wird bewusst **nicht**
+dupliziert: für echte Historie kommen die Zeiten aus `metals.sources.calendar`, wo die
+Live-Regel bereits liegt.
+
+**Was die Messung dazu sagt: nichts, und das ist die ehrliche Antwort.** Auf dem Simulator
+ändert die Sperre den Erwartungswert von +0,107 R auf +0,099 R (nur FOMC) bzw. +0,128 R
+(FOMC und CPI) — das ist Rauschen. Es kann gar nicht anders sein: die Sprünge des Simulators
+sind zufällig verteilt und hängen an keiner Uhrzeit. **Der Simulator kann diese Regel nicht
+bewerten.**
+
+Sie steht trotzdem drin, und der Grund ist kein Backtest, sondern das dokumentierte Verhalten
+von Gold um CPI, NFP und FOMC: Spreads von 1–2 auf 15–20 Punkte, dazu Slippage (C8). Ein
+Einstieg in diesem Fenster ist ein anderer Trade als der, den die Regeln kalkuliert haben.
+Der Test prüft deshalb, dass die Sperre **eingehalten** wird — nicht, dass sie nützt.
+
+---
+
 ## Was geprüft wurde und in Ordnung war
 
 - **Keine Zugangsdaten im Repository.** Vor jedem Commit läuft eine Suche nach den
