@@ -138,6 +138,12 @@ class Session:
     # lookup gives one, because it is the one cost that is directly visible
     # in a quote -- and guessing it is unnecessary when it is right there.
     spread_usd_oz: float = 0.0
+    # Slippage as a fraction of the spread. Recorded per session because it
+    # changed mid-chain: sessions 1-9 were run before dayrange was brought
+    # into line with the backtest engine and charged spread only. A ledger
+    # that does not say which cost model produced a row cannot be compared
+    # across the change.
+    slippage_fraction: float = 0.0
     risk_pct_min: float = 0.0
     risk_pct_max: float = 0.0
 
@@ -315,6 +321,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         date_utc=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
         gold_price=gold_price, day_high=day_high, day_low=day_low,
         price_source=price_source, spread_usd_oz=base.spread_usd_oz,
+        slippage_fraction=base.slippage_fraction,
         start_equity_eur=round(equity_eur, 2),
         end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
         lot=MIN_LOT,
@@ -435,7 +442,10 @@ def render(s: Session) -> str:
     lines.append(f"  Gold {s.gold_price:,.2f} $/oz  ·  Tagesspanne "
                  f"{s.day_low:,.2f}–{s.day_high:,.2f} "
                  f"({s.day_high - s.day_low:,.2f} $)")
-    lines.append(f"  Spread {s.spread_usd_oz:.2f} $/oz")
+    lines.append(f"  Spread {s.spread_usd_oz:.2f} $/oz "
+                 f"+ {s.slippage_fraction:.0%} Slippage "
+                 f"= {s.spread_usd_oz * (1 + s.slippage_fraction):.2f} $ "
+                 f"Einstiegskosten")
     if s.news_times_utc:
         times = ", ".join(f"{h:02d}:{m:02d}" for h, m in s.news_times_utc)
         lines.append(f"  Nachrichtensperre (R4) um {times} UTC")

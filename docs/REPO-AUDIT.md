@@ -148,6 +148,40 @@ Der Test prüft deshalb, dass die Sperre **eingehalten** wird — nicht, dass si
 
 ---
 
+## A8 · Zwei Engines, zwei Kostenmodelle — **behoben**
+
+`metals/backtest.py` berechnet Einstiegskosten als **Spread × (1 + Slippage)** mit
+Slippage-Anteil 0,5, also das Anderthalbfache des Spreads. `metals/dayrange.py` berechnete
+**nur den Spread**.
+
+Damit war jede Zahl aus der Tagesspanne-Strategie zu einem Drittel zu billig gerechnet —
+gemessen mit Kosten, die die eigene Backtest-Engine des Projekts nicht akzeptiert hätte.
+
+Das verstößt direkt gegen die Projektregel *„Backtest, Paper und Live nutzen identischen
+Code"*. Und es ist die unangenehme Sorte Fehler: Es fällt nicht auf, weil beide Zahlen
+plausibel aussehen. Sie hören nur auf, vergleichbar zu sein.
+
+**Behoben.** `DayRangeConfig.slippage_fraction` mit derselben Voreinstellung und derselben
+Formel; ein Test prüft beides gegen `BacktestConfig`, nicht gegen eine abgeschriebene Zahl.
+
+**Wirkung, gemessen über 20 Märkte à 15.000 Bars:**
+
+| Einstiegskosten | Erwartungswert | Median |
+|---|---:|---:|
+| nur Spread (alt) | +0,1576 R | +10,45 % |
+| Spread × 1,5 (Backtest-Konvention) | +0,1474 R | +10,25 % |
+| Spread × 2 | +0,1416 R | +9,67 % |
+
+Also **−6,5 % vom Erwartungswert** — klein, aus demselben Grund wie bei C2: Bei einem Ziel
+von rund 31 $ sind auch anderthalb Spreads Kleingeld. Die Korrektur war trotzdem nötig,
+denn ihre Größe ist ein Ergebnis der Messung und war vorher nicht bekannt.
+
+**Die Sitzungen 1–9 des Papier-Laufs sind mit `slippage_fraction=0.0` markiert**, weil sie
+so gerechnet wurden. Nachträglich umzurechnen hätte die Kette verfälscht; sie zu markieren
+macht den Bruch sichtbar.
+
+---
+
 ## Was geprüft wurde und in Ordnung war
 
 - **Keine Zugangsdaten im Repository.** Vor jedem Commit läuft eine Suche nach den

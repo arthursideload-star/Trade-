@@ -66,6 +66,17 @@ class DayRangeConfig:
     leverage: float = EU_RETAIL_LEVERAGE_GOLD
     spread_usd_oz: float = 0.30
 
+    # Slippage, as a fraction of the spread, charged on entry alongside it.
+    # The same convention and the same default as metals/backtest.py, which
+    # is the point: two engines in this project that charged different costs
+    # for the same trade would make their results incomparable, and the
+    # project rule is that backtest, paper and live share the code.
+    #
+    # This module charged spread only until the divergence was noticed, so
+    # every figure produced before that was measured at two thirds of the
+    # cost the backtest would have applied. See docs/REPO-AUDIT.md, A8.
+    slippage_fraction: float = 0.5
+
     # Risk per trade in percent of equity. When set, the lot size is derived
     # from the stop distance instead of `lot` being used as a constant, and
     # it is clamped to the hard limit in metals/risk.py -- this dial can only
@@ -401,8 +412,8 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
             if p.direction != "none":
                 res.signals += 1
                 long = p.direction == "long"
-                entry = p.entry + cfg.spread_usd_oz if long \
-                    else p.entry - cfg.spread_usd_oz
+                cost = cfg.spread_usd_oz * (1 + cfg.slippage_fraction)
+                entry = p.entry + cost if long else p.entry - cost
                 move = p.move
                 tp = entry + move * cfg.take_fraction if long \
                     else entry - move * cfg.take_fraction

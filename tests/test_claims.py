@@ -330,6 +330,43 @@ class TestTheRiskCeiling(unittest.TestCase):
         self.assertGreater(loose.mean_expectancy_r, tight.mean_expectancy_r)
 
 
+class TestTheTwoEnginesChargeTheSameCosts(unittest.TestCase):
+    """A8: dayrange charged spread only while backtest charged 1.5x it.
+
+    The project rule is that backtest, paper and live run the same code with
+    only the exchange adapter swapped. Two engines pricing the same trade
+    differently breaks that quietly -- the numbers stay plausible and stop
+    being comparable, which is worse than an obvious failure.
+    """
+
+    def test_the_default_matches_the_backtest_engine(self):
+        from metals.backtest import BacktestConfig
+        self.assertEqual(DayRangeConfig().slippage_fraction,
+                         BacktestConfig().slippage_fraction)
+
+    def test_the_cost_formula_matches_the_backtest_engine(self):
+        """Same arithmetic, not merely a similar-looking number."""
+        cfg = DayRangeConfig(spread_usd_oz=0.40, slippage_fraction=0.5)
+        expected = cfg.spread_usd_oz * (1 + cfg.slippage_fraction)
+        self.assertAlmostEqual(expected, 0.60)
+
+    def test_charging_slippage_lowers_expectancy(self):
+        free = sweep(replace(DayRangeConfig(), slippage_fraction=0.0),
+                     markets=8, bars=10_000)
+        charged = sweep(replace(DayRangeConfig(), slippage_fraction=1.0),
+                        markets=8, bars=10_000)
+        self.assertGreater(free.mean_expectancy_r, charged.mean_expectancy_r)
+
+    def test_slippage_does_not_change_how_many_trades_are_taken(self):
+        """It moves the entry price, not the decision to enter. If trade
+        counts moved, the cost would be leaking into the signal."""
+        free = run(replace(DayRangeConfig(), slippage_fraction=0.0),
+                   seed=11, bars=10_000)
+        charged = run(replace(DayRangeConfig(), slippage_fraction=1.0),
+                      seed=11, bars=10_000)
+        self.assertEqual(free.signals, charged.signals)
+
+
 class TestTheNewsBlackout(unittest.TestCase):
     """R4 inside the strategy that actually trades.
 
