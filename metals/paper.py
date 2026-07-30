@@ -536,6 +536,16 @@ def summarise() -> str:
         if risks:
             lines.append(f"  Risiko je Trade im Mittel      "
                          f"{statistics.fmean(risks):>6.1f} %")
+        if len(traded) >= 3:
+            first, last = traded[0], traded[-1]
+            if first["forced_risk_pct"] > 0 and last["forced_risk_pct"] > 0:
+                lines.append(f"  Risiko am Anfang / zuletzt     "
+                             f"{first['forced_risk_pct']:>6.1f} % / "
+                             f"{last['forced_risk_pct']:.1f} %")
+                if last["forced_risk_pct"] < first["forced_risk_pct"]:
+                    lines.append("    Das Lot blieb fest, das Konto wuchs — also")
+                    lines.append("    faellt der Einsatzanteil von selbst. Wer das")
+                    lines.append("    Lot mitwachsen laesst, gibt genau das auf.")
         lows = [e.get("risk_pct_min", 0.0) for e in traded]
         highs = [e.get("risk_pct_max", 0.0) for e in traded]
         lows = [x for x in lows if x > 0]

@@ -454,6 +454,35 @@ class TestTheSummary(LedgerFixture):
         text = paper.summarise()
         self.assertIn("10.0 %", text)      # 500 -> 450
 
+    def test_a_growing_account_on_a_fixed_lot_gets_safer_and_says_so(self):
+        """The one thing compounding does for free, and the trap next to it.
+
+        The lot stays 0.01 while the account grows, so the share of the
+        account at risk falls on its own -- 5.9% at session 1 against 2.1%
+        at session 10 in the real chain. Scaling the lot with the account
+        gives exactly that away, which is what most small accounts do.
+        """
+        for equity, risk in ((400.0, 6.0), (500.0, 4.0), (700.0, 2.0)):
+            paper.append(Session(
+                index=0, timestamp=0.0, date_utc="x", gold_price=4_100.0,
+                day_high=4_150.0, day_low=4_050.0, price_source="t",
+                start_equity_eur=equity, end_equity_eur=equity + 10,
+                lot=MIN_LOT, forced_risk_pct=risk, trades=5,
+                expectancy_r=0.1))
+        text = paper.summarise()
+        self.assertIn("Risiko am Anfang / zuletzt", text)
+        self.assertIn("Lot mitwachsen", text)
+
+    def test_a_rising_risk_share_is_not_given_the_reassuring_note(self):
+        for equity, risk in ((700.0, 2.0), (500.0, 4.0), (400.0, 6.0)):
+            paper.append(Session(
+                index=0, timestamp=0.0, date_utc="x", gold_price=4_100.0,
+                day_high=4_150.0, day_low=4_050.0, price_source="t",
+                start_equity_eur=equity, end_equity_eur=equity - 10,
+                lot=MIN_LOT, forced_risk_pct=risk, trades=5,
+                expectancy_r=-0.1))
+        self.assertNotIn("Lot mitwachsen", paper.summarise())
+
     def test_it_refuses_to_sound_conclusive_on_a_short_chain(self):
         paper.append(run_session(**TODAY))
         self.assertIn("Anekdote", paper.summarise())

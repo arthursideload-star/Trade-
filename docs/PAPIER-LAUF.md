@@ -217,6 +217,24 @@ Trades allerdings klein — das ist ein Befund mit Vorbehalt, kein Freispruch. E
 den Anteil deshalb unter 25 %: Würde ein Viertel der Trades von der Uhr statt von den Regeln
 beendet, würde die Sitzung die Serienlänge messen und nicht die Strategie.
 
+## Was das Aufaddieren mit festem Lot von selbst tut
+
+Über zehn Sitzungen fiel das erzwungene Risiko je Trade von **5,9 % auf 2,1 %** — ohne dass
+irgendetwas an der Strategie besser geworden wäre. Das Lot blieb bei 0,01, das Konto wuchs
+von 400 auf 732 €, also sank der Anteil, den ein Stop kostet.
+
+Das ist der einzige Vorteil, den das Aufaddieren umsonst hergibt: **Ein Konto, das wächst
+und die Positionsgröße festhält, wird mit jedem Gewinn automatisch vorsichtiger.**
+
+Und direkt daneben liegt die Falle. Genau diesen Vorteil gibt man auf, wenn man das Lot
+mitwachsen lässt — was die naheliegende Reaktion ist, weil die Prozentrenditen sonst
+schrumpfen: dieselben 30 € sind auf 400 € ein Plus von 7,5 % und auf 732 € nur noch 4,1 %.
+Wer das „ausgleicht", handelt wieder mit demselben Risikoanteil wie am Anfang und hat vom
+Wachstum nichts gewonnen außer einer größeren Zahl auf dem Kontoauszug.
+
+Die Bilanz zeigt beide Werte deshalb nebeneinander, und der Hinweis erscheint nur, wenn das
+Risiko tatsächlich gefallen ist.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
@@ -230,6 +248,7 @@ beendet, würde die Sitzung die Serienlänge messen und nicht die Strategie.
 | `expectancy_r` | Der Erwartungswert je Trade, unabhängig von der Kontogröße |
 | `could_not_trade` | Wenn die Margin nicht reichte. Eine Sitzung ohne Trade ist ein Ergebnis, kein Fehler |
 | `stopped_out` | Broker-Stop-out |
+| `slippage_fraction` | Welches Kostenmodell galt. Sitzungen 1–9 liefen mit 0,0, ab 10 mit der Backtest-Konvention 0,5 |
 | `news_times_utc` | Für welche Veröffentlichungen die Sitzung stillhielt. Leer heißt: R4 war aus |
 
 Jede Sitzung handelt auf einem Markt mit einem Seed, den keine frühere benutzt hat. Die
