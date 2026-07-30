@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (573 Tests). Nächster Schritt: Backtest auf echter
+Journal-Modul implementiert und getestet (574 Tests). Nächster Schritt: Backtest auf echter
 Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
@@ -159,7 +159,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-573 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+574 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die

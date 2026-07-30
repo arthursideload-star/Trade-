@@ -197,6 +197,26 @@ Für den Papier-Lauf wird die **CFD-Quote** genommen, weil sie das ist, was ein 
 tatsächlich bezahlt — und die Uneinigkeit landet im `price_source`-Feld, damit sie im
 Journal sichtbar bleibt.
 
+## Eine Vereinfachung, die geprüft wurde
+
+Jede Sitzung ist ein **eigenständiger Tag**. Eine Position, die bei Bar 1.440 noch offen
+ist, wird zum letzten Kurs geschlossen — die nächste Sitzung erzeugt einen frischen Markt
+und setzt sie nicht fort. Das Konto läuft weiter, die Position nicht.
+
+Das ist eine Vereinfachung, und sie berührt die Gewinn-und-Verlust-Rechnung: Ein
+künstlicher Ausstieg, der systematisch Gewinner erwischt (oder Verlierer), würde jede Zahl
+im Journal schmeicheln (oder verderben). Also gemessen, über 60 Tage:
+
+| Ausstiegsart | Anteil | Erwartungswert |
+|---|---:|---:|
+| regulär (Ziel, Stop, Zeitstop) | 93,3 % | +0,119 R |
+| Tagesende, künstlich geschlossen | 6,7 % | +0,111 R |
+
+**Keine nennenswerte Verzerrung.** Die Stichprobe der künstlichen Ausstiege ist mit 34
+Trades allerdings klein — das ist ein Befund mit Vorbehalt, kein Freispruch. Ein Test hält
+den Anteil deshalb unter 25 %: Würde ein Viertel der Trades von der Uhr statt von den Regeln
+beendet, würde die Sitzung die Serienlänge messen und nicht die Strategie.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
