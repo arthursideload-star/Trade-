@@ -34,6 +34,7 @@ from __future__ import annotations
 import random
 import statistics
 from dataclasses import dataclass, field, replace
+from datetime import date
 
 from .candles import Candle, CandleSeries
 from .microscalp import EU_RETAIL_LEVERAGE_GOLD, STOP_OUT_LEVEL
@@ -45,6 +46,15 @@ from .specs import get_spec
 # rather than a moving average. Before this many bars have printed, "today's
 # range" is a couple of candles and means nothing.
 MIN_BARS_FOR_A_RANGE = 60
+
+# Broker rollover in UTC. Most XAUUSD brokers keep server time at GMT+2/+3,
+# so their 00:00 falls here -- the same assumption the backtest already makes
+# with --tz broker_gmt3.
+ROLLOVER_HOUR_UTC = 21
+
+# Weekday whose rollover is charged three times, covering the weekend that
+# settles but does not trade. Monday=0, so this is Wednesday.
+TRIPLE_SWAP_WEEKDAY = 2
 
 
 @dataclass(frozen=True)
@@ -85,6 +95,17 @@ class DayRangeConfig:
     # be run on M5 or M15 without silently meaning "five days of range".
     bars_per_day: int = 1_440
     min_bars_for_range: int = MIN_BARS_FOR_A_RANGE
+
+    # Overnight financing, in USD per standard lot per night, signed from the
+    # trader's point of view. Long gold is charged, short gold is credited,
+    # and the asymmetry is large -- it is the cost of carrying metal.
+    #
+    # These are one broker's published numbers and vary widely between
+    # brokers; they are here so the cost exists in the model at all, which
+    # matters far more than the third decimal. Set both to 0.0 to measure
+    # without it.
+    swap_long_usd_per_lot: float = -73.6
+    swap_short_usd_per_lot: float = 30.0
 
     # UTC hours in which an entry may be opened. Empty means all of them,
     # which is the default: a session filter is a claim to be measured, not a
@@ -212,6 +233,11 @@ class Result:
     # different when it also refused nine trades out of ten.
     skipped_too_small: int = 0
     skipped_no_margin: int = 0
+    # Positive means financing cost the account money over the run. Tracked
+    # separately from trade P&L because it is not a trading result -- it is
+    # rent, and it accrues whether the position is right or wrong.
+    swap_paid_usd: float = 0.0
+    nights_held: int = 0
     # How far away the target sat, in dollars per ounce. Recorded because a
     # cost is only meaningful next to the move it is charged against: the
     # same 0.40 spread is a rounding error against a 20-dollar target and
@@ -253,8 +279,24 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
     equity = cfg.start_equity
     res = Result(config=cfg, start_equity=equity, end_equity=equity)
     open_trades: list[Trade] = []
+    last_rollover: date | None = None
 
     for i, bar in enumerate(candles):
+        # Overnight financing, charged before anything else this bar. A
+        # position that is still open when the broker rolls the day pays for
+        # the privilege, and for long gold that is not a rounding error.
+        if bar.ts.hour >= ROLLOVER_HOUR_UTC and bar.ts.date() != last_rollover:
+            if last_rollover is not None and open_trades:
+                nights = 3 if bar.ts.weekday() == TRIPLE_SWAP_WEEKDAY else 1
+                for t in open_trades:
+                    rate = (cfg.swap_long_usd_per_lot if t.long
+                            else cfg.swap_short_usd_per_lot)
+                    charge = rate * t.lots * nights
+                    equity += charge
+                    res.swap_paid_usd -= charge
+                    res.nights_held += nights
+            last_rollover = bar.ts.date()
+
         still: list[Trade] = []
         for t in open_trades:
             # Adverse first: when a bar spans both levels the stop is taken,

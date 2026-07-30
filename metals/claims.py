@@ -116,6 +116,13 @@ CLAIMS: tuple[Claim, ...] = (
                  "scalping at 0.01-0.10 lot",
           "EA product pages", "vendor", True,
           "Checkable as arithmetic: margin at the legal leverage cap."),
+    Claim("C11", "Overnight financing on gold is heavy and asymmetric: "
+                 "around -73.6 USD per lot per night long against +30 short, "
+                 "charged three times on Wednesday",
+          "Broker swap tables (Afterprime, Vantage), MQL5 forum",
+          "editorial", True,
+          "Rates differ widely between brokers; what transfers is the sign "
+          "and the order of magnitude."),
 )
 
 
@@ -473,6 +480,65 @@ def measure_account_sizes(equities_eur: tuple[float, ...] = (100, 200, 400,
 
 
 # --------------------------------------------------------------------------
+# C11 -- overnight financing
+# --------------------------------------------------------------------------
+
+@dataclass
+class SwapFinding:
+    with_swap_pct: float
+    without_swap_pct: float
+    nights_held: float
+    swap_paid_usd: float
+    nostop_with_pct: float
+    nostop_without_pct: float
+    nostop_nights: float
+
+    @property
+    def cost_in_points(self) -> float:
+        return self.with_swap_pct - self.without_swap_pct
+
+
+def measure_swap(markets: int = 12, bars: int = 20_000,
+                 seed_base: int = 12_000) -> SwapFinding:
+    """What financing costs a strategy that closes, against one that holds.
+
+    The interesting result is not the size of the number but which strategy
+    it lands on. A stop and a time stop keep positions from crossing many
+    rollovers, so the cost stays a rounding error. Remove them -- which is
+    exactly what the "just wait, it always comes back" approach does -- and
+    the position pays rent for as long as it is wrong.
+    """
+    base = DayRangeConfig()
+    free = replace(base, swap_long_usd_per_lot=0.0, swap_short_usd_per_lot=0.0)
+
+    paid = sweep(base, markets=markets, bars=bars, seed_base=seed_base)
+    unpaid = sweep(free, markets=markets, bars=bars, seed_base=seed_base)
+
+    nostop = replace(base, stop_fraction=50.0, time_stop_bars=10 ** 9)
+    nostop_free = replace(nostop, swap_long_usd_per_lot=0.0,
+                          swap_short_usd_per_lot=0.0)
+    ns_paid = sweep(nostop, markets=markets, bars=bars, seed_base=seed_base)
+    ns_free = sweep(nostop_free, markets=markets, bars=bars,
+                    seed_base=seed_base)
+
+    return SwapFinding(
+        with_swap_pct=paid.median_return_pct,
+        without_swap_pct=unpaid.median_return_pct,
+        nights_held=statistics.fmean(r.nights_held for r in paid.runs),
+        swap_paid_usd=statistics.fmean(r.swap_paid_usd for r in paid.runs),
+        nostop_with_pct=ns_paid.median_return_pct,
+        nostop_without_pct=ns_free.median_return_pct,
+        nostop_nights=statistics.fmean(r.nights_held for r in ns_paid.runs))
+
+
+def swap_on_one_position(lot: float, nights: int, long: bool = True,
+                         rate_long: float = -73.6,
+                         rate_short: float = 30.0) -> float:
+    """The arithmetic a holder needs, with no simulation in the way."""
+    return (rate_long if long else rate_short) * lot * nights
+
+
+# --------------------------------------------------------------------------
 # report
 # --------------------------------------------------------------------------
 
@@ -605,6 +671,28 @@ def render_measurements(markets: int = 20, bars: int = 12_000) -> str:
                      f"{need:,.0f} $ Margin")
     lines.append("      Fuer 0,10 Lot als Retail-Kunde in der EU ist die")
     lines.append("      1.000-$-Angabe der Anbieter deutlich zu niedrig.")
+    lines.append("")
+
+    sw = measure_swap(markets=max(8, markets // 2), bars=20_000)
+    lines.append("  C11 Uebernacht-Finanzierung (Swap)")
+    lines.append(f"      Mit Stop und Zeitstop: {sw.nights_held:.0f} Naechte "
+                 f"gehalten,")
+    lines.append(f"      Rendite {sw.with_swap_pct:+.2f}% mit Swap gegen "
+                 f"{sw.without_swap_pct:+.2f}% ohne")
+    lines.append(f"      -> Unterschied {sw.cost_in_points:+.2f} Prozentpunkte")
+    lines.append(f"      Ohne Stop: {sw.nostop_nights:.0f} Naechte, "
+                 f"{sw.nostop_with_pct:+.2f}% gegen "
+                 f"{sw.nostop_without_pct:+.2f}%")
+    lines.append("")
+    lines.append("      Eine einzelne 0,10-Lot-Position, gehalten:")
+    for nights in (1, 7, 30, 90):
+        lines.append(f"        {nights:>3} Naechte  long "
+                     f"{swap_on_one_position(0.10, nights, True):>8.2f} $  ·  "
+                     f"short {swap_on_one_position(0.10, nights, False):>+7.2f} $")
+    lines.append("      Long zahlt, Short bekommt. Wer eine Verlustposition")
+    lines.append("      'aussitzt', zahlt Miete dafuer — solange sie falsch ist.")
+    lines.append("      Ein Stop begrenzt nicht nur den Verlust, sondern auch")
+    lines.append("      die Zeit, in der er finanziert werden muss.")
     lines.append("")
 
     acc = measure_account_sizes(markets=max(8, markets // 2), bars=bars)

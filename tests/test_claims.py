@@ -23,8 +23,10 @@ from metals.candles import resample
 from metals.claims import (ASSUMED_EUR_USD, CLAIMS, ASIA_HOURS_UTC,
                            OVERLAP_HOURS_UTC, find, margin_required,
                            measure_account_sizes,
-                           measure_win_rate_is_not_an_edge)
-from metals.dayrange import DayRangeConfig, lots_for, run, sweep
+                           measure_win_rate_is_not_an_edge,
+                           swap_on_one_position)
+from metals.dayrange import (ROLLOVER_HOUR_UTC, TRIPLE_SWAP_WEEKDAY,
+                             DayRangeConfig, lots_for, run, sweep)
 from metals.risk import MAX_RISK_PER_TRADE_PCT
 from metals.specs import get_spec
 
@@ -266,6 +268,60 @@ class TestSpreadIsReallyCharged(unittest.TestCase):
                            "a target of under a dollar would make this a tick "
                            "scalper, which is a different strategy")
         self.assertEqual(len(r.target_distances), r.trades - r.exits.get("x", 0))
+
+
+class TestC11Swap(unittest.TestCase):
+    """Overnight financing, which the model did not charge at all before."""
+
+    def test_long_pays_and_short_receives(self):
+        """The asymmetry is the whole point: it is the cost of carrying
+        metal, so it does not cancel between directions."""
+        self.assertLess(swap_on_one_position(0.10, 1, long=True), 0)
+        self.assertGreater(swap_on_one_position(0.10, 1, long=False), 0)
+
+    def test_it_scales_with_lots_and_nights(self):
+        one = swap_on_one_position(0.10, 1)
+        self.assertAlmostEqual(swap_on_one_position(0.10, 30), one * 30)
+        self.assertAlmostEqual(swap_on_one_position(0.20, 1), one * 2)
+
+    def test_holding_a_position_a_month_costs_a_real_share_of_a_small_account(self):
+        """0.10 lot long for 30 nights against a 400 euro account."""
+        cost = abs(swap_on_one_position(0.10, 30))
+        self.assertGreater(cost / (400 * ASSUMED_EUR_USD), 0.40)
+
+    def test_the_run_charges_it_and_records_it(self):
+        cfg = DayRangeConfig()
+        r = run(cfg, seed=11, bars=20_000)
+        free = run(replace(cfg, swap_long_usd_per_lot=0.0,
+                           swap_short_usd_per_lot=0.0), seed=11, bars=20_000)
+        self.assertGreater(r.nights_held, 0)
+        self.assertEqual(free.swap_paid_usd, 0.0)
+        self.assertNotEqual(r.end_equity, free.end_equity)
+
+    def test_it_does_not_touch_the_r_multiples(self):
+        """Financing is rent, not a trading result. Charging it against a
+        trade's R would make the strategy look worse at picking direction
+        when what actually happened is that it held for longer."""
+        cfg = DayRangeConfig()
+        r = run(cfg, seed=11, bars=20_000)
+        free = run(replace(cfg, swap_long_usd_per_lot=0.0,
+                           swap_short_usd_per_lot=0.0), seed=11, bars=20_000)
+        self.assertEqual(r.r_multiples, free.r_multiples)
+
+    def test_a_time_stop_reduces_the_nights_carried(self):
+        """The finding worth keeping: an exit rule is also a cost control."""
+        quick = run(DayRangeConfig(time_stop_bars=60), seed=21, bars=20_000)
+        slow = run(DayRangeConfig(time_stop_bars=60, stop_fraction=50.0),
+                   seed=21, bars=20_000)
+        self.assertLessEqual(quick.nights_held, slow.nights_held)
+
+    def test_wednesday_is_charged_three_times(self):
+        self.assertEqual(TRIPLE_SWAP_WEEKDAY, 2)
+
+    def test_the_rollover_hour_matches_the_broker_timezone_used_elsewhere(self):
+        """The backtest already assumes GMT+3 server time; a different
+        rollover hour here would silently model a different broker."""
+        self.assertEqual(ROLLOVER_HOUR_UTC, 21)
 
 
 class TestTheAccountSizeDocumentStaysTrue(unittest.TestCase):

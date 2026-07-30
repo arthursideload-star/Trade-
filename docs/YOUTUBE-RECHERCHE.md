@@ -33,7 +33,7 @@ Drei Quellenarten, bewusst getrennt gehalten:
 | **Fachpresse** | Broker-Blogs, Trading-Schulen, Forenbeiträge | Bei Mechanik (Spread, Sessions, Ausführung) meist richtig, bei Ergebnissen unbelegt |
 | **Aufsicht / Wissenschaft** | Zahlen, für die jemand geradestehen musste | Als Fakt zitiert — aber als Basisrate über eine Population, nicht als Prognose für ein Konto |
 
-## Die zehn Behauptungen
+## Die elf Behauptungen
 
 ### C1 — „90 % Trefferquote" · Anbieter · **messbar, und das Ergebnis ist der wichtigste Fund**
 
@@ -161,6 +161,32 @@ Für 0,01 Lot reichen 1.000 $ bequem. Für 0,10 Lot — die Größe, mit der die
 dieser EAs beworben werden — reicht es nicht einmal für die Margin, bevor der Kurs sich
 überhaupt bewegt hat.
 
+### C11 — „Swap auf Gold ist schwer und asymmetrisch" · Fachpresse · **messbar, stimmt — und war bei uns gar nicht im Modell**
+
+Long XAUUSD kostet rund **−73,60 $ je Standard-Lot und Nacht**, Short bringt **+30 $**.
+Mittwochs dreifach. Das Modell hat diese Kosten vorher **überhaupt nicht berechnet**.
+
+| 0,10 Lot gehalten | long | short |
+|---:|---:|---:|
+| 1 Nacht | −7,36 $ | +3,00 $ |
+| 7 Nächte | −51,52 $ | +21,00 $ |
+| 30 Nächte | **−220,80 $** | +90,00 $ |
+| 90 Nächte | −662,40 $ | +270,00 $ |
+
+Eingebaut (`swap_long_usd_per_lot`, Rollover 21:00 UTC, Mittwoch dreifach). Gemessene
+Wirkung auf unsere Strategie: **0,14 Prozentpunkte** über 20.000 Bars — ein Rundungsfehler,
+weil der 4-Stunden-Zeitstop die Positionen gar nicht erst über den Rollover trägt.
+
+Der Befund ist trotzdem wichtig, nur an anderer Stelle: **Ein Stop begrenzt nicht nur den
+Verlust, sondern auch die Zeit, in der er finanziert werden muss.** Wer eine Verlustposition
+aussitzt — das Prinzip aus den Werbevideos — zahlt Miete, solange sie falsch ist. 0,10 Lot
+long, einen Monat gehalten, sind 220,80 $ allein an Finanzierung, also über die Hälfte eines
+400-€-Kontos.
+
+Und die Asymmetrie ist nicht neutral: Wer zufällig short feststeckt, **bekommt** Carry. Wer
+long feststeckt, blutet. Ein Bot ohne Stop hat damit eine Richtungsabhängigkeit, die nichts
+mit seiner Analyse zu tun hat.
+
 ## Was daraus in den Bot eingebaut wurde
 
 Nicht die Behauptungen. Die Konsequenzen:
@@ -201,6 +227,8 @@ Nicht die Behauptungen. Die Konsequenzen:
 - [MQL5 Blogs — Not All 99% Backtests Are Equal](https://www.mql5.com/en/blogs/post/762517)
 - [MQL5 Forum — Discrepancy between Real Ticks and Every Tick modelling](https://www.mql5.com/en/forum/472760)
 - [Forex Robot Lab — MT5 Backtest Modeling & History Quality Explained](https://forexrobotlab.com/mt5-backtest-modeling-history-quality/)
+- [Afterprime — XAUUSD Swap Rates (Long/Short Overnight Fee)](https://afterprime.com/swaps/xauusd)
+- [Vantage — CFD Swap Rates & Overnight Fees Explained](https://www.vantagemarkets.com/en/trading/fees/swap-rates/)
 - [Vantage — News Trading XAUUSD: CPI, NFP, and Rate Decisions](https://www.vantagemarkets.com/en/academy/news-trading-gold/)
 - [FXNX — Gold News Trading: The 15-Minute Rule for CPI & NFP](https://fxnx.com/en/blog/mastering-xauusd-news-15-minute-rule-cpi-nfp)
 - [Telegram Signals Reviews — Gold Scalper Ninja (29 % Trefferquote gegen die beworbene Zahl)](https://www.telegramsignalsreviews.com/post/gold-scalper-ninja-in-depth-review-a-high-risk-scam-channel)
