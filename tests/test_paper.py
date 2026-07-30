@@ -480,6 +480,29 @@ class TestTheEvidenceReport(LedgerFixture):
         text = paper.evidence()
         self.assertIn("Simulator", text)
 
+    def test_a_band_above_zero_is_immediately_qualified_by_the_peeking_risk(self):
+        """The moment to be most careful, not least.
+
+        The chain's band crossed zero at 155 trades after the report had
+        already been read at 100, 116 and 134. Checking repeatedly and
+        believing it once it finally reads well is precisely how a 95%
+        interval stops being 95%, and the report has to say so at the exact
+        moment the news is good.
+        """
+        from metals.journal import multiple_comparison_risk
+        for _ in range(6):
+            paper.append(self._session_with([1.0] * 8))
+        text = paper.evidence()
+        self.assertIn("ueber der Null", text)
+        self.assertIn("mehrfach", text)
+        self.assertIn(f"{multiple_comparison_risk(6) * 100:.0f} %", text)
+        self.assertIn("VORHER", text)
+
+    def test_a_band_straddling_zero_gets_no_peeking_note(self):
+        """No need to warn about a false positive that has not occurred."""
+        paper.append(self._session_with([1.0, -1.0, 0.5, -0.5]))
+        self.assertNotIn("mehrfach", paper.evidence())
+
     def test_it_reports_how_many_more_trades_are_needed(self):
         paper.append(self._session_with([1.0, -1.0, 1.0, -1.0, 1.0, 0.2]))
         self.assertIn("Trades. Vorhanden", paper.evidence())

@@ -465,7 +465,8 @@ def evidence() -> str:
     easier standard than the live one.
     """
     from .journal import (MIN_TRADES_FOR_A_BREAKDOWN, REFERENCE_EDGE_R,
-                          mean_and_sd, mean_interval, trades_needed,
+                          mean_and_sd, mean_interval,
+                          multiple_comparison_risk, trades_needed,
                           wilson_interval)
 
     ledger = load_ledger()
@@ -508,6 +509,25 @@ def evidence() -> str:
         lines.append("  Das Band liegt ueber der Null. Auf DIESEN Daten ist")
         lines.append("  der Vorteil messbar — auf dem Simulator, der die")
         lines.append("  Struktur enthaelt, die die Strategie sucht.")
+        lines.append("")
+        # The band clearing zero right after several looks at a growing
+        # sample is the moment to be most careful, not least. Repeatedly
+        # checking and stopping when it finally reads well is how a 95%
+        # interval stops being 95%.
+        looks = len(ledger)
+        risk = multiple_comparison_risk(looks)
+        lines.append(f"  ABER: diese Auswertung wurde waehrend des Laufs "
+                     f"mehrfach")
+        lines.append(f"  angesehen. Bei {looks} Gelegenheiten liegt die Chance, "
+                     f"dass ein")
+        lines.append(f"  Band irgendwann zufaellig ueber der Null steht, bei "
+                     f"bis zu")
+        lines.append(f"  {risk * 100:.0f} % — nicht bei 5 %. Wer hinschaut, bis "
+                     f"es passt, hat")
+        lines.append("  nichts gemessen, sondern gewartet.")
+        lines.append("")
+        lines.append("  Das Gegenmittel ist, die Stichprobengroesse VORHER")
+        lines.append("  festzulegen und erst dann zu urteilen.")
     else:
         lines.append("  Das Band liegt unter der Null.")
 

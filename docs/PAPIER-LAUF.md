@@ -287,6 +287,30 @@ Normalfall aussehen.
 auf denselben Punkt wie oben: Nicht die Kalibrierung ist das Hauptproblem, sondern dass der
 Simulator die Struktur enthält, die die Strategie sucht.
 
+## Als das Band die Null verließ — und warum das noch kein Befund ist
+
+Bei 155 Trades stand da zum ersten Mal:
+
+```
+Erwartungswert    +0.176 R   95%-Band +0.035 bis +0.316 R
+```
+
+Das Band liegt über der Null. Verlockend — und genau hier ist Vorsicht am wichtigsten,
+nicht am wenigsten.
+
+**Ich hatte die Auswertung schon bei 100, 116, 134 und 155 Trades angesehen.** Wer eine
+wachsende Stichprobe wiederholt prüft und glaubt, sobald sie gut aussieht, hat kein
+95-%-Band mehr. Bei 18 Gelegenheiten liegt die Chance, dass irgendwann eines zufällig über
+der Null steht, bei bis zu **60 %** — nicht bei 5 %.
+
+Das ist dieselbe Rechnung, mit der `metals/journal.py` vor Aufschlüsselungen nach Setup und
+Session warnt (`multiple_comparison_risk`), nur angewandt auf die Zeitachse statt auf
+Kategorien.
+
+**Das Gegenmittel ist Vorfestlegung.** Die Zahl steht bereits fest: **307 Trades** für einen
+nüchternen Vorteil von +0,10 R, also noch rund 18 Sitzungen. Erst dann ist ein Urteil eines.
+Die Auswertung sagt das jetzt an genau der Stelle, an der die Nachricht gut ist.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
