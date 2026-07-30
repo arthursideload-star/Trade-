@@ -36,8 +36,7 @@ def cmd_analyse(args: argparse.Namespace) -> int:
     client = HttpClient(cache_ttl=args.cache_ttl)
     try:
         rec = analyse(args.symbol, account, client=client,
-                      spread_usd_oz=args.spread,
-                    news_times_utc=_parse_news_times(args.news))
+                      spread_usd_oz=args.spread)
     except Exception as exc:  # noqa: BLE001 - the CLI reports, it does not crash
         print(f"analysis failed: {exc}", file=sys.stderr)
         print("\nMost common causes:", file=sys.stderr)
@@ -603,7 +602,8 @@ def cmd_paper(args: argparse.Namespace) -> int:
     s = run_session(gold_price=args.price, day_high=args.high,
                     day_low=args.low, price_source=args.source,
                     start_equity_eur=args.equity,
-                    spread_usd_oz=args.spread)
+                    spread_usd_oz=args.spread,
+                    news_times_utc=_parse_news_times(args.news))
     print(render(s))
     if not args.dry_run:
         append(s)

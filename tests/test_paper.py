@@ -256,6 +256,59 @@ class TestTheNewsBlackoutReachesTheSession(LedgerFixture):
         self.assertEqual(row["news_times_utc"], [[18, 0]])
 
 
+class TestTheCommandLineActuallyPassesItsArguments(LedgerFixture):
+    """The gap that let a broken --news ship for ten sessions.
+
+    Every test for the blackout called run_session directly, so they all
+    passed while `python -m metals paper --news ...` did nothing: the
+    argument had been wired into the wrong function. A unit test of the
+    engine cannot catch a command that never reaches the engine, so these
+    go through the parser and the command function.
+    """
+
+    def _run(self, argv: list[str]):
+        from metals.cli import build_parser
+        args = build_parser().parse_args(argv)
+        return args
+
+    def _base_argv(self) -> list[str]:
+        return ["paper", "--price", "4105.62", "--high", "4137.85",
+                "--low", "4073.39", "--dry-run"]
+
+    def test_news_reaches_the_session(self):
+        from metals.cli import cmd_paper
+        args = self._run(self._base_argv() + ["--news", "12:30,18:00"])
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            cmd_paper(args)
+        self.assertEqual(captured.get("news_times_utc"), ((12, 30), (18, 0)))
+
+    def test_spread_reaches_the_session(self):
+        from metals.cli import cmd_paper
+        args = self._run(self._base_argv() + ["--spread", "0.34"])
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            cmd_paper(args)
+        self.assertEqual(captured.get("spread_usd_oz"), 0.34)
+
+    def test_a_dry_run_does_not_touch_the_ledger(self):
+        from metals.cli import cmd_paper
+        cmd_paper(self._run(self._base_argv()))
+        self.assertEqual(paper.sessions_so_far(), 0)
+
+
 class TestParsingReleaseTimes(unittest.TestCase):
     def test_it_reads_the_command_line_form(self):
         from metals.cli import _parse_news_times

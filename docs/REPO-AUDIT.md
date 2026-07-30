@@ -182,6 +182,31 @@ macht den Bruch sichtbar.
 
 ---
 
+## A9 · `--news` war zehn Sitzungen lang wirkungslos — **behoben**
+
+Nach A7 wurde die Nachrichtensperre in `run_session` eingebaut und ab Sitzung 7 bei jedem
+Lauf mit `--news "12:30,18:00"` übergeben. Das Journal zeigt für **jede** dieser Sitzungen
+`news_times_utc=[]`.
+
+Grund: Beim Verdrahten landete das Argument in `cmd_analyse` statt in `cmd_paper` — eine
+Textersetzung traf die erste passende Stelle. Damit war gleichzeitig `analyse` kaputt
+(`unexpected keyword argument`), was nur deshalb nicht auffiel, weil dieser Befehl in
+dieser Umgebung ohnehin am 403 der Kursanbieter scheitert.
+
+**Die Testlücke ist der eigentliche Befund.** Vier Tests prüften die Sperre — alle riefen
+`run_session(...)` direkt auf. Sie liefen grün, während `python -m metals paper --news ...`
+nichts tat. **Ein Test der Engine kann einen Befehl nicht prüfen, der die Engine nie
+erreicht.**
+
+Behoben, und drei Tests gehen jetzt durch Parser *und* Kommandofunktion und prüfen, dass
+`--news` und `--spread` tatsächlich in der Sitzung ankommen.
+
+**Für die Kette heißt das:** Die Sitzungen 1–16 liefen alle **ohne** Nachrichtensperre. Die
+Einträge sagen das korrekt (`news_times_utc=[]`) — die Behauptung, sie sei aktiv gewesen,
+stand nur in meinem Bericht, nicht in den Daten.
+
+---
+
 ## Was geprüft wurde und in Ordnung war
 
 - **Keine Zugangsdaten im Repository.** Vor jedem Commit läuft eine Suche nach den
