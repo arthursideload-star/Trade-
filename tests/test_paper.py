@@ -164,7 +164,7 @@ class TestWhatItRecordsAboutRisk(LedgerFixture):
     def test_a_wide_spread_of_risk_is_flagged_in_the_output(self):
         s = run_session(**TODAY)
         if s.risk_spread_ratio >= 3.0:
-            self.assertIn("WELCHE", paper.render(s),
+            self.assertIn("ungleiche Einsaetze", paper.render(s),
                           "a session whose stakes differ several-fold must "
                           "say that the result turned on which trades won")
 
@@ -351,6 +351,52 @@ class TestWhenTheResultContradictsTheRules(LedgerFixture):
         paper.append(self._session(0.05, 390.0))
         paper.append(self._session(0.05, 460.0))
         self.assertIn("Ergebnis gegen Erwartungswert", paper.summarise())
+
+
+class TestTheVolatilityWarning(LedgerFixture):
+    """The chain's most easily missed bias: which day it kept repeating.
+
+    Every session so far calibrated to 30 July -- an FOMC day whose 2.23%
+    range is 1.42 times a typical one. Measured, that lifts the median
+    session from about +7.4% to +9.4%. Repeating one wide day and reading
+    the total as a forecast is a mistake that looks exactly like data, so
+    the session has to say when its day was unusual.
+    """
+
+    def test_an_unusually_wide_day_is_flagged(self):
+        s = run_session(**TODAY)          # 30 July, 2.23%
+        text = paper.render(s)
+        self.assertIn("untypischer Tag", text)
+        self.assertIn("volatiler", text)
+
+    def test_an_unusually_quiet_day_is_flagged_too(self):
+        price = 4_102.83
+        span = price * paper.TYPICAL_DAY_RANGE_PCT / 100 * 0.4
+        s = run_session(gold_price=price, day_high=price + span / 2,
+                        day_low=price - span / 2, price_source="t",
+                        start_equity_eur=400.0)
+        text = paper.render(s)
+        self.assertIn("untypischer Tag", text)
+        self.assertIn("ruhiger", text)
+
+    def test_a_typical_day_is_not_flagged(self):
+        price = 4_102.83
+        span = price * paper.TYPICAL_DAY_RANGE_PCT / 100
+        s = run_session(gold_price=price, day_high=price + span / 2,
+                        day_low=price - span / 2, price_source="t",
+                        start_equity_eur=400.0)
+        self.assertNotIn("untypischer Tag", paper.render(s))
+
+    def test_the_range_is_shown_as_a_percentage_not_only_in_dollars(self):
+        """90 dollars means nothing without the price it is 90 dollars of."""
+        self.assertIn("2.23 %", paper.render(run_session(**TODAY)))
+
+    def test_the_typical_range_is_derived_from_an_observation(self):
+        """Not a round number someone liked: 143.97 USD over five sessions
+        at ~4,103, divided by sqrt(5)."""
+        import math
+        derived = (143.97 / math.sqrt(5)) / 4_102.83 * 100
+        self.assertAlmostEqual(paper.TYPICAL_DAY_RANGE_PCT, derived, places=1)
 
 
 class TestTheEvidenceReport(LedgerFixture):

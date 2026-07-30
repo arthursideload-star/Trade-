@@ -63,6 +63,18 @@ _RANGE_OVER_SIGMA = 2.0 * math.sqrt(2.0 / math.pi)
 BARS_PER_DAY = 1_440
 MIN_LOT = 0.01
 
+# A typical daily range for gold, as a share of price. Derived from an
+# observed weekly range rather than quoted: 143.97 USD over five sessions at
+# ~4,103, and for a random walk the range over n days scales with sqrt(n),
+# so one day is 143.97/sqrt(5) = 64.39 USD = 1.57%.
+#
+# It matters because the calibration takes whatever range it is given. The
+# first eleven sessions of this chain all used 30 July -- an FOMC day at
+# 2.23%, or 1.42 times typical -- which lifted the median return from about
+# +7.4% to +9.4%. Repeating one unusually wide day and calling the result a
+# forecast is the kind of mistake that looks like data.
+TYPICAL_DAY_RANGE_PCT = 1.57
+
 
 # Seeds used only for calibration. Fixed, so the same observed range always
 # yields the same volatility, and disjoint from the seeds sessions trade on,
@@ -504,9 +516,18 @@ def evidence() -> str:
 def render(s: Session) -> str:
     lines = [f"PAPIER-LAUF — SITZUNG {s.index + 1}", "=" * 68]
     lines.append(f"  {s.date_utc} UTC")
+    span_pct = ((s.day_high - s.day_low) / s.gold_price * 100.0
+                if s.gold_price else 0.0)
     lines.append(f"  Gold {s.gold_price:,.2f} $/oz  ·  Tagesspanne "
                  f"{s.day_low:,.2f}–{s.day_high:,.2f} "
-                 f"({s.day_high - s.day_low:,.2f} $)")
+                 f"({s.day_high - s.day_low:,.2f} $ = {span_pct:.2f} %)")
+    ratio = span_pct / TYPICAL_DAY_RANGE_PCT if TYPICAL_DAY_RANGE_PCT else 1.0
+    if ratio >= 1.35 or ratio <= 0.65:
+        louder = "volatiler" if ratio > 1 else "ruhiger"
+        lines.append(f"  ACHTUNG, untypischer Tag: das {ratio:.2f}-fache "
+                     f"eines normalen ({TYPICAL_DAY_RANGE_PCT:.2f} %),")
+        lines.append(f"  also deutlich {louder}. Das Ergebnis dieser Sitzung")
+        lines.append(f"  beschreibt einen solchen Tag, nicht den Normalfall.")
     lines.append(f"  Spread {s.spread_usd_oz:.2f} $/oz "
                  f"+ {s.slippage_fraction:.0%} Slippage "
                  f"= {s.spread_usd_oz * (1 + s.slippage_fraction):.2f} $ "
@@ -557,7 +578,8 @@ def render(s: Session) -> str:
         lines.append("  Vorzeichen — das geht nur, wenn die Einsaetze")
         lines.append("  unterschiedlich gross waren.")
     if s.risk_spread_ratio >= 3.0:
-        lines.append("  ACHTUNG: die Einsaetze liegen weit auseinander. Bei")
+        lines.append("  ACHTUNG, ungleiche Einsaetze: sie liegen weit")
+        lines.append("  auseinander. Bei")
         lines.append("  fester Losgroesse riskiert jeder Trade so viel, wie die")
         lines.append("  vorhergesagte Bewegung gross war — unkontrolliert.")
         lines.append("  Das Ergebnis der Sitzung haengt dann daran, WELCHE")

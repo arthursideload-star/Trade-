@@ -251,6 +251,37 @@ Die Auswertung benutzt `metals.journal` — dieselbe Statistik, mit der das Jour
 gelesen wird. Ein eigener Maßstab für den Papier-Lauf hieße, die Probe milder zu bewerten
 als den Ernstfall.
 
+## Welchen Tag die Kette wiederholt hat — die wichtigste Einschränkung
+
+Alle bisherigen Sitzungen wurden auf den **30. Juli** kalibriert, und das war ein
+**FOMC-Tag** mit einer Tagesspanne von 2,23 %.
+
+Wie typisch ist das? Aus der beobachteten Wochenspanne abgeleitet, nicht geraten:
+143,97 $ über fünf Handelstage bei rund 4.103 $. Für einen Random Walk skaliert die
+Spanne über n Tage mit √n, also ist ein Tag 143,97/√5 = **64,39 $ = 1,57 %**.
+
+Der 30. Juli lag damit beim **1,42-fachen** eines normalen Tages. Gemessen, 25 Läufe je
+Einstellung:
+
+| Tagesspanne | Median je Sitzung | Tage im Plus |
+|---|---:|---:|
+| 91,39 $ (30.07., FOMC) | **+9,35 %** | 72 % |
+| 64,39 $ (typisch, abgeleitet) | +7,39 % | 80 % |
+| 32,19 $ (halb so volatil) | +1,41 % | 68 % |
+
+Die Kette ist also um rund **ein Viertel zu optimistisch** kalibriert — nicht dramatisch,
+aber systematisch, weil derselbe wide Tag zwölf Mal wiederholt wurde. Bei halber
+Volatilität bricht das Ergebnis dagegen deutlich ein: Die Strategie lebt von großen
+Tagesspannen, weil sie ihre Ziele daraus ableitet.
+
+Jede Sitzung warnt jetzt, wenn ihre Spanne mehr als 35 % vom typischen Wert abweicht — in
+beide Richtungen. Eine Sitzung, die einen Ausnahmetag beschreibt, soll nicht wie der
+Normalfall aussehen.
+
+**Und selbst bei typischer Volatilität bleibt +7,39 % pro Tag absurd.** Das führt zurück
+auf denselben Punkt wie oben: Nicht die Kalibrierung ist das Hauptproblem, sondern dass der
+Simulator die Struktur enthält, die die Strategie sucht.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
