@@ -533,7 +533,7 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
         # backtest a strategy they had not asked for, and not the one they
         # had. See docs/PAPIER-LAUF.md.
         from .dayrange import run as run_once
-        from .sources.history import load, resample
+        from .sources.history import HistoryError, load, resample
 
         if not args.tz:
             print("--file braucht --tz. Es gibt bewusst keine Vorgabe: die "
@@ -543,9 +543,20 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
                   "  Kaggle / MetaTrader-Export      -> broker_gmt3 "
                   "(Sommer) oder broker_gmt2", file=sys.stderr)
             return 1
-        series, load_report = load(
-            args.file, args.tz, symbol=args.symbol,
-            timeframe=args.file_timeframe or "5m")
+        # Same handling as cmd_backtest. A typo in a filename is the most
+        # likely way this command is ever run wrong, and a raw traceback
+        # tells the user nothing about which of the two paths went missing.
+        try:
+            series, load_report = load(
+                args.file, args.tz, symbol=args.symbol,
+                timeframe=args.file_timeframe or "5m")
+        except HistoryError as exc:
+            print(f"could not load {args.file}: {exc}", file=sys.stderr)
+            print("Pruefe Pfad und Format. Erwartet wird eine CSV mit "
+                  "Zeitstempel, Open,\nHigh, Low, Close (Volumen optional) — "
+                  "Spaltennamen erkennt der Loader\nselbst. "
+                  "Quellen: docs/DATENQUELLEN.md", file=sys.stderr)
+            return 1
         print(load_report.render())
         if not load_report.usable:
             print("Zu wenige verwertbare Zeilen fuer einen Lauf.",

@@ -228,6 +228,26 @@ class TestTheRealHistoryPath(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("--tz", err.getvalue())
 
+    def test_a_missing_file_is_reported_not_traced(self):
+        """The real-history run is the one test that settles this project,
+        and it will be typed by hand on someone else's machine. A typo in
+        the path used to produce a Python traceback here while the very
+        same mistake in `backtest` printed a sentence.
+        """
+        for command in ("dayrange", "backtest"):
+            with self.subTest(command=command):
+                argv = ([command, "--file", "/nope/missing.csv", "--tz", "utc"]
+                        if command == "dayrange" else
+                        [command, "--source", "file", "--file",
+                         "/nope/missing.csv", "--tz", "utc"])
+                args = build_parser().parse_args(argv)
+                err = io.StringIO()
+                with redirect_stdout(io.StringIO()), redirect_stderr(err):
+                    code = args.func(args)
+                self.assertEqual(code, 1)
+                self.assertIn("could not load", err.getvalue())
+                self.assertNotIn("Traceback", err.getvalue())
+
     def test_bar_counted_parameters_are_scaled_to_the_files_timeframe(self):
         """1,440 bars is a day on M1 and five days on M5. Left unscaled,
         'the day's range' silently becomes 'the week's range'."""
