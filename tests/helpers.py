@@ -254,3 +254,40 @@ FINNHUB_CALENDAR = {
          "impact": "medium", "country": "US"},
     ]
 }
+
+WORLDMONITOR_COMMODITIES = {
+    "quotes": [
+        {"symbol": "GC=F", "name": "Gold", "price": 4051.8, "change": -0.42,
+         "display": "4,051.80"},
+        {"symbol": "SI=F", "name": "Silver", "price": 52.14, "change": 0.31},
+        {"symbol": "CL=F", "name": "Crude Oil", "price": 71.05, "change": 1.2},
+    ]
+}
+
+WORLDMONITOR_CALENDAR = {
+    "events": [
+        {"date": "2026-08-07", "event": "Nonfarm Payrolls", "country": "US",
+         "actual": "", "estimate": "150K"},
+        {"date": "2026-08-12", "event": "CPI", "country": "US",
+         "actual": "", "estimate": "2.6%"},
+        {"date": "2026-09-16", "event": "FOMC Rate Decision", "country": "US"},
+        {"date": "2026-08-03", "event": "EU HICP (CPI)", "country": "EU"},
+    ],
+    "fromDate": "2026-08-01",
+    "toDate": "2026-09-30",
+    "total": 4,
+}
+
+WORLDMONITOR_CALENDAR_COLD = {
+    "events": [], "fromDate": "", "toDate": "", "total": 0,
+    "unavailable": True,
+}
+
+WORLDMONITOR_ECB_FX = {
+    "rates": [
+        {"currency": "USD", "rate": 1.1632},
+        {"currency": "GBP", "rate": 0.8571},
+        {"currency": "CHF", "rate": 0.9284},
+    ],
+    "date": "2026-07-31",
+}

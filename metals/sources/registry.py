@@ -475,16 +475,52 @@ _add(Source(
     category=Category.CALENDAR,
     url="(local)",
     auth=Auth.NONE,
-    provides=("NFP, CPI, PPI, PCE, FOMC and ECB dates derived from their "
-              "published release rules",),
-    limit="none -- computed locally",
+    # This entry used to claim "NFP, CPI, PPI, PCE, FOMC and ECB". Four of
+    # those six were not emitted; FOMC and ECB are now, PPI and PCE still are
+    # not. A catalogue that overstates is the same defect as A20 one layer up,
+    # so it lists exactly what comes out.
+    provides=("NFP (first-Friday rule)", "CPI window (10th-15th)",
+              "weekly jobless claims",
+              "FOMC decision and press conference (listed dates)",
+              "ECB decision and press conference (listed dates)"),
+    limit="none -- computed locally, but the listed central bank dates end at "
+          "a horizon; see StaticCalendar.horizon_gap",
     priority=15,
     latency="realtime",
     caveat=(
-        "Computed from the publication rules (NFP on the first Friday, FOMC on "
-        "its published schedule) rather than fetched. It cannot know about a "
-        "surprise emergency meeting, which is exactly when it matters most -- "
-        "so it is a floor under the news veto, not a replacement for a feed."
+        "Two different mechanisms. NFP and the CPI window follow publication "
+        "rules; FOMC and ECB dates cannot be derived and are listed, so they "
+        "run out at a horizon the module reports rather than hides. Neither "
+        "knows about an emergency meeting, which is when a blackout matters "
+        "most -- a floor under the news veto, not a replacement for a feed. "
+        "PPI and PCE are not emitted."
+    ),
+))
+
+_add(Source(
+    key="worldmonitor",
+    name="World Monitor",
+    category=Category.NEWS,
+    url="https://api.worldmonitor.app",
+    auth=Auth.PAID,
+    env_var="WORLDMONITOR_API_KEY",
+    provides=("commodity quotes (price only, no bid/ask, no OHLC)",
+              "economic calendar dated to the day, without a clock time",
+              "CFTC COT positioning", "ECB FX reference rates",
+              "FRED series", "geopolitical and conflict signals"),
+    limit="REST access requires an active subscription; rate-limited per key",
+    priority=55,
+    latency="minutes",
+    docs="https://worldmonitor.app/openapi.yaml",
+    caveat=(
+        "Broad context, not session input. The gold quote is the front-month "
+        "future with no bid/ask and no day range, so it can supply neither "
+        "the spread (A19) nor the day range the strategy is built on, and the "
+        "calendar has no time of day so it cannot drive R4's 30-minute "
+        "window. Useful for 'is today a CPI day' and as a second opinion on "
+        "COT and FX. AGPL-3.0 source; this package calls the network API and "
+        "vendors none of it. Not verified live -- the development container "
+        "cannot reach the host."
     ),
 ))
 
