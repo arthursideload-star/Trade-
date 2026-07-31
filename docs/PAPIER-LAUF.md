@@ -372,6 +372,27 @@ den Session-Filter nutzlos machte, macht hier die Stichprobe sauber.
 Die Auswertung prüft das jetzt bei jedem Aufruf und warnt, falls der Effekt je über 1,2
 steigt.
 
+## Das Journal lässt sich nachrechnen
+
+```bash
+python -m metals paper --verify
+```
+
+Jede Zeile speichert alles, was die Sitzung verbraucht hat: Goldkurs, Tagesspanne, Kosten,
+Sperrzeiten, Startkapital. Damit lässt sich die ganze Kette neu abspielen und gegen das
+prüfen, was sie behauptet — drei Dinge auf einmal:
+
+1. Jede Sitzung beginnt dort, wo die vorige endete.
+2. Der Endstand folgt aus den Eingaben.
+3. Die Tradezahl stimmt.
+
+Stand: **25 Sitzungen, keine Abweichung.**
+
+Das ist hier wichtiger als anderswo, denn **das Journal wurde zweimal nachträglich ergänzt** —
+einmal um die Spanne des Risikos je Trade, einmal nach dem `r_multiples`-Bug. Genau so eine
+Ergänzung ist die Operation, die Geschichte still in etwas umschreiben kann, das aus seinen
+Eingaben nicht mehr folgt. Ein Journal, das niemand nachrechnen kann, ist eine Behauptung.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

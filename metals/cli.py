@@ -630,6 +630,11 @@ def cmd_paper(args: argparse.Namespace) -> int:
         from .paper import evidence
         print(evidence())
         return 0
+    if args.verify:
+        from .paper import render_verify, verify
+        v = verify()
+        print(render_verify(v))
+        return 0 if v.ok else 1
     if args.distribution:
         from .paper import distribution, render_distribution
         if args.price is None or args.high is None or args.low is None:
@@ -896,6 +901,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="rechnen, aber nicht ins Journal schreiben")
     pa.add_argument("--summary", action="store_true",
                     help="nur die Bilanz aller bisherigen Sitzungen")
+    pa.add_argument("--verify", action="store_true",
+                    help="jede Sitzung aus ihren eigenen Eingaben neu "
+                         "rechnen und gegen das Journal pruefen")
     pa.add_argument("--evidence", action="store_true",
                     help="was die gesammelten Trades belegen — mit "
                          "Unsicherheitsband und der noetigen Stichprobe")

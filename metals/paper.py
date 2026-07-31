@@ -454,6 +454,115 @@ def render_distribution(d: Distribution) -> str:
     return "\n".join(lines)
 
 
+@dataclass
+class VerifyResult:
+    sessions: int
+    chain_breaks: list[str] = field(default_factory=list)
+    equity_mismatches: list[str] = field(default_factory=list)
+    trade_mismatches: list[str] = field(default_factory=list)
+    final_equity_eur: float = 0.0
+
+    @property
+    def ok(self) -> bool:
+        return not (self.chain_breaks or self.equity_mismatches
+                    or self.trade_mismatches)
+
+
+def verify(start_equity_eur: float = 400.0,
+           tolerance_eur: float = 0.02) -> VerifyResult:
+    """Recompute every session from its own recorded inputs.
+
+    A ledger nobody can re-derive is a claim, not a record. Each row stores
+    the gold price, the day's range, the costs, the release times and the
+    opening equity -- everything the session consumed -- so the whole chain
+    can be replayed and checked against what it says happened.
+
+    This matters more here than it would elsewhere: the ledger has been
+    backfilled twice, once to add the spread of risk per trade and once
+    after the r_multiples bug, and a backfill is exactly the operation that
+    can quietly rewrite history into something that no longer follows from
+    its inputs.
+
+    Checks three things: that each session opened where the last one closed,
+    that replaying it reproduces the recorded equity, and that it produces
+    the recorded number of trades.
+    """
+    ledger = load_ledger()
+    result = VerifyResult(sessions=len(ledger))
+    if not ledger:
+        return result
+
+    base = DayRangeConfig()
+    oz_equity = start_equity_eur
+    for row in ledger:
+        n = row["index"] + 1
+        if abs(row["start_equity_eur"] - oz_equity) > tolerance_eur:
+            result.chain_breaks.append(
+                f"Sitzung {n}: startet bei {row['start_equity_eur']:.2f} €, "
+                f"die vorige endete bei {oz_equity:.2f} €")
+
+        params = simulate.MarketParams(
+            start_price=row["gold_price"],
+            base_vol=calibrate_vol(row["gold_price"], row["day_high"],
+                                   row["day_low"]))
+        seed = 500_000 + row["index"] * 97
+        series = simulate.generate(bars=BARS_PER_DAY, timeframe="1m",
+                                   seed=seed, params=params)
+        cfg = replace(
+            base, start_equity=row["start_equity_eur"] * ASSUMED_EUR_USD,
+            lot=MIN_LOT, risk_pct=None,
+            spread_usd_oz=row.get("spread_usd_oz") or base.spread_usd_oz,
+            slippage_fraction=row.get("slippage_fraction", 0.0),
+            news_times_utc=tuple(tuple(x)
+                                 for x in row.get("news_times_utc", [])))
+        res = run(cfg, series=series, seed=seed)
+
+        recomputed = round(res.end_equity / ASSUMED_EUR_USD, 2)
+        if abs(recomputed - row["end_equity_eur"]) > tolerance_eur:
+            result.equity_mismatches.append(
+                f"Sitzung {n}: protokolliert {row['end_equity_eur']:.2f} €, "
+                f"nachgerechnet {recomputed:.2f} €")
+        if res.trades != row["trades"]:
+            result.trade_mismatches.append(
+                f"Sitzung {n}: protokolliert {row['trades']} Trades, "
+                f"nachgerechnet {res.trades}")
+        oz_equity = row["end_equity_eur"]
+
+    result.final_equity_eur = oz_equity
+    return result
+
+
+def render_verify(v: VerifyResult) -> str:
+    lines = [f"PAPIER-LAUF — JOURNAL NACHGERECHNET", "=" * 68]
+    if not v.sessions:
+        lines.append("  Kein Journal vorhanden.")
+        return "\n".join(lines)
+
+    lines.append(f"  {v.sessions} Sitzungen aus ihren eigenen Eingaben "
+                 f"neu gerechnet")
+    lines.append("")
+    for label, items in (("Kette unterbrochen", v.chain_breaks),
+                         ("Kontostand weicht ab", v.equity_mismatches),
+                         ("Tradezahl weicht ab", v.trade_mismatches)):
+        if items:
+            lines.append(f"  {label}: {len(items)}")
+            for item in items[:5]:
+                lines.append(f"    {item}")
+            if len(items) > 5:
+                lines.append(f"    ... und {len(items) - 5} weitere")
+    if v.ok:
+        lines.append("  Keine Abweichung. Jede Zeile folgt aus ihren Eingaben,")
+        lines.append("  und jede Sitzung beginnt, wo die vorige endete.")
+        lines.append("")
+        lines.append(f"  Endstand: {v.final_equity_eur:,.2f} €")
+    else:
+        lines.append("")
+        lines.append("  Das Journal beschreibt etwas, das so nicht")
+        lines.append("  herausgekommen waere. Vor jeder weiteren Auswertung")
+        lines.append("  klaeren.")
+    return "\n".join(lines)
+
+
 def design_effect(groups: list[list[float]]) -> tuple[float, float]:
     """How much the confidence interval is inflated by clustering.
 

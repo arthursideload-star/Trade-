@@ -452,6 +452,65 @@ class TestTheVolatilityWarning(LedgerFixture):
         self.assertAlmostEqual(paper.TYPICAL_DAY_RANGE_PCT, derived, places=1)
 
 
+class TestTheJournalCanBeRecomputed(LedgerFixture):
+    """A ledger nobody can re-derive is a claim, not a record.
+
+    This one has been backfilled twice -- once for the spread of risk per
+    trade, once after the r_multiples bug -- and a backfill is precisely the
+    operation that can rewrite history into something that no longer follows
+    from its inputs.
+    """
+
+    def test_a_freshly_written_chain_verifies(self):
+        for _ in range(3):
+            paper.append(run_session(**TODAY))
+        v = paper.verify()
+        self.assertTrue(v.ok, f"{v.chain_breaks} {v.equity_mismatches} "
+                              f"{v.trade_mismatches}")
+        self.assertEqual(v.sessions, 3)
+
+    def test_a_broken_chain_is_caught(self):
+        """Session two opening somewhere other than session one's close."""
+        paper.append(run_session(**TODAY))
+        s = run_session(**TODAY)
+        s.start_equity_eur = 999.0
+        paper.append(s)
+        v = paper.verify()
+        self.assertFalse(v.ok)
+        self.assertTrue(v.chain_breaks)
+
+    def test_a_doctored_result_is_caught(self):
+        """The failure mode that matters: a number edited after the fact."""
+        s = run_session(**TODAY)
+        s.end_equity_eur += 50.0
+        paper.append(s)
+        v = paper.verify()
+        self.assertFalse(v.ok)
+        self.assertTrue(v.equity_mismatches)
+
+    def test_a_doctored_trade_count_is_caught(self):
+        s = run_session(**TODAY)
+        s.trades += 3
+        paper.append(s)
+        v = paper.verify()
+        self.assertFalse(v.ok)
+        self.assertTrue(v.trade_mismatches)
+
+    def test_an_empty_journal_verifies_trivially(self):
+        v = paper.verify()
+        self.assertTrue(v.ok)
+        self.assertEqual(v.sessions, 0)
+        self.assertIn("Kein Journal", paper.render_verify(v))
+
+    def test_the_report_refuses_to_sound_calm_about_a_mismatch(self):
+        s = run_session(**TODAY)
+        s.end_equity_eur += 50.0
+        paper.append(s)
+        text = paper.render_verify(paper.verify())
+        self.assertIn("Kontostand weicht ab", text)
+        self.assertNotIn("Keine Abweichung", text)
+
+
 class TestTheEvidenceReport(LedgerFixture):
     """The report that answers the account balance rather than echoing it.
 
