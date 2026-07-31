@@ -1,5 +1,11 @@
 # Das „40 € reichen"-Rechenfehler — und was im Werbevideo wirklich steht
 
+> **Hinweis zu den Zahlen auf dieser Seite:** Sie wurden gemessen, bevor
+> `metals/microscalp.py` Slippage berechnete (Auditbefund A8). Mit den korrigierten
+> Kosten fallen die Ergebnisse **schlechter** aus — an der Werbevideo-Konfiguration
+> gemessen steigt die Stop-out-Quote von 68 % auf 76 %. Die Aussage wird dadurch
+> stärker, nicht schwächer.
+
 Analyse zweier TikTok-Videos (29.07.2026) und eines Grok-Screenshots, die
 zusammen den Eindruck erzeugten, 40 € genügten für den Handel mit 0,1 Lot Gold.
 

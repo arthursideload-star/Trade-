@@ -1,5 +1,11 @@
 # Micro-Scalping: „Gewinn sofort mitnehmen, neu aufmachen"
 
+> **Hinweis zu den Zahlen auf dieser Seite:** Sie wurden gemessen, bevor
+> `metals/microscalp.py` Slippage berechnete (Auditbefund A8). Mit den korrigierten
+> Kosten fallen die Ergebnisse **schlechter** aus — an der Werbevideo-Konfiguration
+> gemessen steigt die Stop-out-Quote von 68 % auf 76 %. Die Aussage wird dadurch
+> stärker, nicht schwächer.
+
 Die Strategie, die der Nutzer beschrieben hat, wörtlich:
 
 > Der Bot analysiert den Chart, macht ein oder mehrere 0,1-Trades je nachdem wie viel auf

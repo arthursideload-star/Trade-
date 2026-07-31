@@ -12,6 +12,48 @@ docs/MICRO-SCALPING.md.
 
 from __future__ import annotations
 
+import unittest as _unittest
+from dataclasses import replace as _replace
+
+
+class TestCostsMatchTheOtherEngines(_unittest.TestCase):
+    """A8, third engine. All three must price the same trade the same way.
+
+    Deliberately not like the fixed lot, which this module keeps: that lot
+    is the thing under test, part of the strategy. Slippage is a property of
+    the world, and omitting it flattered an approach whose whole finding is
+    that it is ruinous -- so the omission worked against the conclusion.
+    """
+
+    def test_the_default_matches_the_backtest_engine(self):
+        from metals.backtest import BacktestConfig
+        from metals.microscalp import MicroConfig
+        self.assertEqual(MicroConfig().slippage_fraction,
+                         BacktestConfig().slippage_fraction)
+
+    def test_the_default_matches_the_day_range_engine(self):
+        from metals.dayrange import DayRangeConfig
+        from metals.microscalp import MicroConfig
+        self.assertEqual(MicroConfig().slippage_fraction,
+                         DayRangeConfig().slippage_fraction)
+
+    def test_charging_slippage_makes_the_outcome_worse(self):
+        """The direction that matters. Correcting the cost model must not
+        have quietly improved the strategy being criticised."""
+        from metals.microscalp import MicroConfig, sweep
+        base = MicroConfig(start_equity=432.0, lot=0.02, max_positions=8,
+                           equity_per_position=50.0, leverage=500.0)
+        free = sweep(_replace(base, slippage_fraction=0.0), markets=8,
+                     bars=6_000)
+        charged = sweep(_replace(base, slippage_fraction=0.5), markets=8,
+                        bars=6_000)
+        self.assertGreaterEqual(charged.stop_out_rate, free.stop_out_rate)
+
+    def test_the_report_states_the_cost_model(self):
+        from metals.microscalp import MicroConfig, report, run
+        text = report(run(MicroConfig(), bars=800))
+        self.assertIn("Slippage", text)
+
 import random
 import statistics
 import unittest

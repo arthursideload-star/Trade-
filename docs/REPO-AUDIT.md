@@ -148,7 +148,7 @@ Der Test prüft deshalb, dass die Sperre **eingehalten** wird — nicht, dass si
 
 ---
 
-## A8 · Zwei Engines, zwei Kostenmodelle — **behoben**
+## A8 · Drei Engines, drei Kostenmodelle — **behoben**
 
 `metals/backtest.py` berechnet Einstiegskosten als **Spread × (1 + Slippage)** mit
 Slippage-Anteil 0,5, also das Anderthalbfache des Spreads. `metals/dayrange.py` berechnete
@@ -179,6 +179,27 @@ denn ihre Größe ist ein Ergebnis der Messung und war vorher nicht bekannt.
 **Die Sitzungen 1–9 des Papier-Laufs sind mit `slippage_fraction=0.0` markiert**, weil sie
 so gerechnet wurden. Nachträglich umzurechnen hätte die Kette verfälscht; sie zu markieren
 macht den Bruch sichtbar.
+
+**Nachtrag: `metals/microscalp.py` hatte dieselbe Lücke** und ist ebenfalls behoben. Der
+Unterschied zum festen Lot, das dort bewusst bleibt: Das feste Lot **ist** der Gegenstand der
+Messung, Teil der geprüften Strategie. Slippage ist eine Eigenschaft der Welt — sie
+wegzulassen ließ den Ansatz besser aussehen, als er ist, und das schwächt ausgerechnet einen
+Befund, dessen Aussage lautet, dass der Ansatz ruinös ist.
+
+Gemessen an der Werbevideo-Konfiguration (0,02 Lot, 8 Positionen, 1:500), 25 Märkte:
+
+| | nur Spread | Spread × 1,5 |
+|---|---:|---:|
+| Trefferquote | 99,2 % | 97,9 % |
+| Median | −98,4 % | −98,4 % |
+| **Stop-out** | **68 %** | **76 %** |
+
+Die Korrektur verschärft den Befund also. **Die Zahlen in
+[MICRO-SCALPING.md](./MICRO-SCALPING.md) und [WERBEVIDEO-ANALYSE.md](./WERBEVIDEO-ANALYSE.md)
+stammen aus Läufen vor dieser Änderung** und sind entsprechend eher zu freundlich. Sie werden
+nicht überschrieben — die Tabelle oben stammt aus einer nachgebauten Konfiguration, und eine
+nachgebaute Zahl an die Stelle einer gemessenen zu setzen wäre eine Verschlechterung, keine
+Korrektur.
 
 ---
 

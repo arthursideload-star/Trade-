@@ -84,6 +84,17 @@ class MicroConfig:
     # None reproduces what was described: nothing closes a losing position.
     stop_loss_usd_oz: float | None = None
     spread_usd_oz: float = 0.30
+    # Same convention and default as metals/backtest.py and
+    # metals/dayrange.py. This module kept charging spread alone until the
+    # divergence was found in all three engines (docs/REPO-AUDIT.md, A8).
+    #
+    # Note why this is not like the fixed lot below, which is deliberately
+    # left alone: the fixed lot IS the thing being measured, part of the
+    # strategy under test. Slippage is a property of the world, and leaving
+    # it out simply made the approach look better than it is -- which,
+    # for a module whose finding is that the approach is ruinous, understates
+    # the case.
+    slippage_fraction: float = 0.5
     leverage: float = DEFAULT_LEVERAGE
     # long | short | follow (continue the last bar) | fade (against it) |
     # random
@@ -259,7 +270,8 @@ def run(cfg: MicroConfig | None = None, series: CandleSeries | None = None,
                 # Enter at the far side of the spread: a position opens
                 # underwater by exactly that, which is why "in profit" has to
                 # clear it before it means anything.
-                entry = price + cfg.spread_usd_oz if long else price - cfg.spread_usd_oz
+                cost = cfg.spread_usd_oz * (1 + cfg.slippage_fraction)
+                entry = price + cost if long else price - cost
                 tp = (entry + cfg.take_profit_usd_oz if long
                       else entry - cfg.take_profit_usd_oz)
                 sl = None
@@ -363,7 +375,8 @@ def report(result: RunResult) -> str:
     c = r.config
     lines = ["MICRO-SCALP — EIN MARKT", "=" * 68]
     lines.append(f"  {c.symbol} · {c.lot:g} Lot · bis zu {c.max_positions} "
-                 f"Position(en) · Spread {c.spread_usd_oz:g} USD/oz")
+                 f"Position(en) · Spread {c.spread_usd_oz:g} USD/oz "
+                 f"+ {c.slippage_fraction:.0%} Slippage")
     lines.append(f"  Gewinn mitnehmen bei {c.take_profit_usd_oz:g} USD/oz "
                  f"ueber dem Einstieg")
     lines.append(f"  Stop: {'keiner' if c.stop_loss_usd_oz is None else f'{c.stop_loss_usd_oz:g} USD/oz'}")
