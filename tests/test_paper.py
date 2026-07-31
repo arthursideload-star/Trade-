@@ -855,6 +855,61 @@ class TestTheOutputReadsAsSentences(LedgerFixture):
         self.assertIn("Vorzeichen", text)
 
 
+class TestObservedRangesAndProjection(LedgerFixture):
+    """The projection uses only ranges actually looked up, never a modelled
+    distribution -- there is no trustworthy public figure for gold's daily
+    range distribution, and inventing one would put a made-up number
+    underneath every projected euro."""
+
+    def _session(self, price, high, low, end=400.0):
+        return Session(index=0, timestamp=0.0, date_utc="2026-07-30 12:00",
+                       gold_price=price, day_high=high, day_low=low,
+                       price_source="t", start_equity_eur=400.0,
+                       end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=5.0,
+                       trades=4, wins=2, losses=2, expectancy_r=0.1)
+
+    def test_the_same_day_looked_up_twice_is_one_day(self):
+        """The chain re-fetches the price during a session, so the same day
+        arrives at slightly different quotes. Three rows for one day would
+        read as three days of evidence."""
+        self.paper_append_many([
+            self._session(4_100.0, 4_141.0, 4_100.0),
+            self._session(4_110.0, 4_151.1, 4_110.1),
+        ])
+        ranges = paper.observed_ranges()
+        self.assertEqual(len(ranges), 1)
+        self.assertEqual(ranges[0][2], 2, "both sessions should be counted")
+
+    def test_genuinely_different_ranges_stay_separate(self):
+        self.paper_append_many([
+            self._session(4_100.0, 4_141.0, 4_100.0),      # 1.00%
+            self._session(4_100.0, 4_200.0, 4_100.0),      # 2.44%
+        ])
+        self.assertEqual(len(paper.observed_ranges()), 2)
+
+    def test_ranges_come_back_sorted_quietest_first(self):
+        self.paper_append_many([
+            self._session(4_100.0, 4_200.0, 4_100.0),
+            self._session(4_100.0, 4_141.0, 4_100.0),
+        ])
+        pcts = [pct for _, pct, _ in paper.observed_ranges()]
+        self.assertEqual(pcts, sorted(pcts))
+
+    def test_an_empty_ledger_says_so_rather_than_projecting_nothing(self):
+        self.assertIn("Noch keine", paper.project())
+
+    def test_the_projection_refuses_to_call_itself_a_forecast(self):
+        self.paper_append_many([self._session(4_100.0, 4_141.0, 4_100.0)])
+        text = paper.project(days=5, trials=5)
+        self.assertIn("KEINE Prognose", text)
+        self.assertIn("Simulator", text)
+
+    def paper_append_many(self, sessions):
+        for i, s in enumerate(sessions):
+            s.index = i
+            paper.append(s)
+
+
 class TestVolatilityDependence(LedgerFixture):
     """The chain's single biggest lever, measured instead of caveated.
 

@@ -492,6 +492,74 @@ def volatility_dependence(
     return VolatilityDependence(rows=rows)
 
 
+def observed_ranges() -> list[tuple[str, float, int]]:
+    """The distinct daily ranges this chain has actually looked up.
+
+    Not a model of gold's volatility and not an assumption -- just the days
+    whose high and low were fetched before a session and written into the
+    ledger. Thin by construction, and it grows as the chain runs.
+
+    Grouped by the range itself rather than by the quoted price: the same
+    day gets looked up at slightly different prices as the session moves,
+    and three rows for one day would read as three days of evidence.
+
+    Returned as (date, range as % of price, how many sessions used it).
+    """
+    groups: dict[float, tuple[str, int]] = {}
+    for e in load_ledger():
+        price = e["gold_price"]
+        if price <= 0:
+            continue
+        pct = round((e["day_high"] - e["day_low"]) / price * 100.0, 2)
+        day, count = groups.get(pct, (e["date_utc"][:10], 0))
+        groups[pct] = (day, count + 1)
+    return sorted(((day, pct, n) for pct, (day, n) in groups.items()),
+                  key=lambda row: row[1])
+
+
+def project(days: int = 21, equity_eur: float | None = None,
+            trials: int = 30) -> str:
+    """What a month would look like -- for each kind of day seen so far.
+
+    Deliberately not one number. The chain has established that the day's
+    range is the largest single lever on the result, so a single projection
+    would be a claim about which days happen next, which nobody has. What
+    can honestly be given is the span: if every day were like this one, and
+    if every day were like that one.
+    """
+    ranges = observed_ranges()
+    if not ranges:
+        return "Noch keine beobachteten Tagesspannen im Journal."
+
+    start = current_equity_eur() if equity_eur is None else equity_eur
+    lines = [f"HOCHRECHNUNG UEBER {days} HANDELSTAGE", "=" * 68]
+    lines.append(f"  Start {start:,.2f} €")
+    lines.append(f"  Grundlage: {len(ranges)} unterschiedliche Tagesspannen "
+                 f"aus {sum(n for _, _, n in ranges)} Sitzungen")
+    lines.append("")
+    lines.append(f"  {'Tag':>12} {'Spanne':>8} {'Sitz.':>6} {'Median/Tag':>12} "
+                 f"{'nach ' + str(days) + ' Tagen':>18}")
+    lines.append("  " + "-" * 60)
+
+    for day, pct, count in ranges:
+        span = 4_100.0 * pct / 100.0
+        d = distribution(gold_price=4_100.0, day_high=4_100.0 + span / 2,
+                         day_low=4_100.0 - span / 2, equity_eur=start,
+                         days=trials, seed_base=950_000)
+        ending = start * (1 + d.median_pct / 100.0) ** days
+        lines.append(f"  {day:>12} {pct:>7.2f}% {count:>6} "
+                     f"{d.median_pct:>+11.2f}% {ending:>17,.0f} €")
+
+    lines.append("")
+    lines.append("  Das ist KEINE Prognose. Es ist die Spanne dessen, was")
+    lines.append("  herauskaeme, wenn ein ganzer Monat aus lauter Tagen einer")
+    lines.append("  Sorte bestuende. Welche Sorte kommt, weiss niemand.")
+    lines.append("")
+    lines.append("  Und alles davon steht auf dem Simulator. Der reale Test")
+    lines.append("  ist der Backtest auf echter Historie.")
+    return "\n".join(lines)
+
+
 def render_volatility_dependence(v: VolatilityDependence) -> str:
     lines = ["ABHAENGIGKEIT VON DER TAGESSPANNE", "=" * 68]
     lines.append(f"  {'Spanne':>8} {'Median':>9} {'Mittel':>9} {'Tage im Plus':>14}")

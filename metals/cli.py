@@ -623,6 +623,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
 
+    if args.project:
+        from .paper import project
+        print(project(days=args.days, equity_eur=args.equity))
+        return 0
     if args.volatility:
         from .paper import render_volatility_dependence, volatility_dependence
         if args.price is None:
@@ -920,6 +924,9 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--evidence", action="store_true",
                     help="was die gesammelten Trades belegen — mit "
                          "Unsicherheitsband und der noetigen Stichprobe")
+    pa.add_argument("--project", action="store_true",
+                    help="Hochrechnung ueber mehrere Handelstage, je "
+                         "beobachteter Tagessorte")
     pa.add_argument("--volatility", action="store_true",
                     help="wie stark das Ergebnis an der Tagesspanne haengt")
     pa.add_argument("--table", action="store_true",
