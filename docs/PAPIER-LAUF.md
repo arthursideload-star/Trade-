@@ -129,6 +129,40 @@ Strategie gebaut wurde. Wer nach Stop-Breite filtert, filtert die guten Signale 
 Es gibt hier also keine kostenlose Lösung, sondern eine Abwägung. Sie ist als Test
 festgehalten, damit sie nicht stillschweigend verschwindet.
 
+## Der größte Hebel auf die Kette ist, welchen Tag sie wiederholt
+
+Die ersten elf Sitzungen liefen auf dem 30. Juli — einem FOMC-Tag mit **2,23 %**
+Tagesspanne gegen typische 1,57 %. Das stand bisher als Vorbehalt da. Jetzt ist es
+gemessen:
+
+```bash
+python -m metals paper --volatility --price 4086.21 --equity 1600
+```
+
+| Tagesspanne | Median | Mittel | Tage im Plus |
+|---:|---:|---:|---:|
+| 0,6 % | +0,25 % | +0,25 % | 60 % |
+| 0,9 % | +0,63 % | +0,42 % | 62 % |
+| 1,2 % | +1,07 % | +1,07 % | 80 % |
+| 1,6 % | +0,71 % | +0,79 % | 62 % |
+| 2,0 % | +1,10 % | +1,41 % | 68 % |
+| 2,6 % | +2,03 % | +2,25 % | 75 % |
+| 3,2 % | **+4,37 %** | +4,15 % | 88 % |
+
+**Die Spanne wächst um das 5,3-fache, der Median um das 17,5-fache.**
+
+Das ist die entscheidende Beobachtung, und sie ist schärfer als „der Simulator ist zu
+leicht": Der Ertrag wächst **schneller** als die Volatilität. Das ist die Signatur einer
+Strategie, die **Spanne erntet** — sie kauft am Rand der Tagesspanne und verkauft in
+Richtung Mitte. In einem Generator, der innerhalb des Tages zur Mitte zurückkehrt, ist
+das ein zuverlässiges Geschäft. Echtes Gold kehrt nicht auf Bestellung zurück; an einem
+Trendtag läuft es durch und der Stop greift.
+
+Praktische Folge für jede Zahl auf dieser Seite: **Welchen Tag die Kette wiederholt, ist
+keine Nebensache, sondern der größte einzelne Hebel auf das Ergebnis.** Die Sitzungen 37
+bis 39 liefen auf einem ruhigen Tag (1,01 %) und gingen alle drei ins Minus — dieselbe
+Strategie, dieselben Regeln, nur ein anderer Tag.
+
 ## Was eine Siegesserie wert ist: nichts
 
 Nach drei Sitzungen stand die Kette bei 400 → 544 €, alle drei im Plus. Bevor daraus

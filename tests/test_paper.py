@@ -855,6 +855,54 @@ class TestTheOutputReadsAsSentences(LedgerFixture):
         self.assertIn("Vorzeichen", text)
 
 
+class TestVolatilityDependence(LedgerFixture):
+    """The chain's single biggest lever, measured instead of caveated.
+
+    Eleven sessions ran on 30 July, an FOMC day with a 2.23% range against
+    a typical 1.57%. "That flatters the result" was already in the docs as
+    a warning; this turns it into a number.
+    """
+
+    def test_a_wider_day_pays_more(self):
+        v = paper.volatility_dependence(4_086.21, range_pcts=(0.6, 3.2),
+                                        equity_eur=1_600.0, days=20)
+        self.assertGreater(v.wildest[1], v.quietest[1])
+
+    def test_the_return_grows_faster_than_the_range(self):
+        """The mechanistic finding: this is range harvesting, and a
+        generator that mean-reverts inside the day is generous with range
+        in a way real gold is not."""
+        v = paper.volatility_dependence(4_086.21,
+                                        range_pcts=(0.6, 1.2, 2.0, 3.2),
+                                        equity_eur=1_600.0, days=25)
+        self.assertGreater(v.return_multiple, v.range_multiple)
+        self.assertTrue(v.grows_faster_than_the_range)
+
+    def test_the_report_says_which_day_was_repeated_matters(self):
+        v = paper.volatility_dependence(4_086.21, range_pcts=(0.6, 3.2),
+                                        equity_eur=1_600.0, days=15)
+        text = paper.render_volatility_dependence(v)
+        self.assertIn("Kette", text)
+        self.assertIn("Hebel", text)
+
+    def test_rows_are_ordered_by_range(self):
+        v = paper.volatility_dependence(4_086.21,
+                                        range_pcts=(0.6, 1.2, 2.0),
+                                        equity_eur=1_600.0, days=10)
+        self.assertEqual([r[0] for r in v.rows], [0.6, 1.2, 2.0])
+
+    def test_each_range_uses_its_own_markets(self):
+        """Otherwise the comparison would be one market seen seven times,
+        and the trend would be an artefact of that market."""
+        v1 = paper.volatility_dependence(4_086.21, range_pcts=(1.2,),
+                                         equity_eur=1_600.0, days=10,
+                                         seed_base=800_000)
+        v2 = paper.volatility_dependence(4_086.21, range_pcts=(1.2,),
+                                         equity_eur=1_600.0, days=10,
+                                         seed_base=900_000)
+        self.assertNotEqual(v1.rows[0][1], v2.rows[0][1])
+
+
 class TestTheBlockTable(LedgerFixture):
     """The five-session overview, which is read far more often than the
     ledger and therefore has more room to mislead."""

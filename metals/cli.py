@@ -623,6 +623,15 @@ def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
 
+    if args.volatility:
+        from .paper import render_volatility_dependence, volatility_dependence
+        if args.price is None:
+            print("Auch dieser Test braucht --price.")
+            return 2
+        print(render_volatility_dependence(volatility_dependence(
+            gold_price=args.price, equity_eur=args.equity or 400.0,
+            days=args.days)))
+        return 0
     if args.table:
         from .paper import render_blocks
         print(render_blocks(size=args.block))
@@ -911,6 +920,8 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--evidence", action="store_true",
                     help="was die gesammelten Trades belegen — mit "
                          "Unsicherheitsband und der noetigen Stichprobe")
+    pa.add_argument("--volatility", action="store_true",
+                    help="wie stark das Ergebnis an der Tagesspanne haengt")
     pa.add_argument("--table", action="store_true",
                     help="Ueberblick der Kette in Bloecken")
     pa.add_argument("--block", type=int, default=5,

@@ -430,6 +430,92 @@ def distribution(gold_price: float, day_high: float, day_low: float,
     return Distribution(returns_pct=returns, equity_eur=equity_eur)
 
 
+@dataclass
+class VolatilityDependence:
+    """How the day's range maps onto the day's result."""
+
+    rows: list[tuple[float, float, float, float]]
+    # range as % of price, median return %, mean return %, share positive
+
+    @property
+    def quietest(self) -> tuple[float, float, float, float]:
+        return self.rows[0]
+
+    @property
+    def wildest(self) -> tuple[float, float, float, float]:
+        return self.rows[-1]
+
+    @property
+    def return_multiple(self) -> float:
+        """How many times larger the wide-day median is."""
+        if self.quietest[1] <= 0:
+            return float("inf")
+        return self.wildest[1] / self.quietest[1]
+
+    @property
+    def range_multiple(self) -> float:
+        return self.wildest[0] / self.quietest[0]
+
+    @property
+    def grows_faster_than_the_range(self) -> bool:
+        """The signature that matters.
+
+        A strategy whose return merely tracks volatility is sizing off
+        volatility. One whose return grows *faster* than volatility is
+        harvesting range -- and range is harvestable in a generator that
+        mean-reverts within the day in a way real gold does not oblige.
+        """
+        return self.return_multiple > self.range_multiple
+
+
+def volatility_dependence(
+        gold_price: float,
+        range_pcts: tuple[float, ...] = (0.6, 0.9, 1.2, 1.6, 2.0, 2.6, 3.2),
+        equity_eur: float = 400.0, days: int = 40,
+        seed_base: int = 800_000) -> VolatilityDependence:
+    """Same rules, same account, only the day's range changed.
+
+    This exists because the chain spent its first eleven sessions on 30 July
+    -- an FOMC day with a 2.23% range against a typical 1.57% -- and the
+    question "how much of the result was that choice" deserved a number
+    rather than a caveat.
+    """
+    rows = []
+    for i, pct in enumerate(range_pcts):
+        span = gold_price * pct / 100.0
+        d = distribution(gold_price=gold_price,
+                         day_high=gold_price + span / 2,
+                         day_low=gold_price - span / 2,
+                         equity_eur=equity_eur, days=days,
+                         seed_base=seed_base + i * 5_000)
+        rows.append((pct, d.median_pct, d.mean_pct, d.share_positive))
+    return VolatilityDependence(rows=rows)
+
+
+def render_volatility_dependence(v: VolatilityDependence) -> str:
+    lines = ["ABHAENGIGKEIT VON DER TAGESSPANNE", "=" * 68]
+    lines.append(f"  {'Spanne':>8} {'Median':>9} {'Mittel':>9} {'Tage im Plus':>14}")
+    lines.append("  " + "-" * 44)
+    for pct, median, mean, positive in v.rows:
+        lines.append(f"  {pct:>7.1f}% {median:>+8.2f}% {mean:>+8.2f}% "
+                     f"{positive * 100:>13.0f}%")
+    lines.append("")
+    lines.append(f"  Die Spanne waechst um das {v.range_multiple:.1f}-fache,")
+    lines.append(f"  der Median um das {v.return_multiple:.1f}-fache.")
+    if v.grows_faster_than_the_range:
+        lines.append("")
+        lines.append("  Der Ertrag waechst SCHNELLER als die Volatilitaet.")
+        lines.append("  Das ist die Signatur einer Strategie, die Spanne")
+        lines.append("  erntet — und Spanne laesst sich in einem Generator")
+        lines.append("  ernten, der innerhalb des Tages zurueckkehrt. Echtes")
+        lines.append("  Gold tut das nicht auf Bestellung.")
+    lines.append("")
+    lines.append("  Folge fuer die Kette: Welchen Tag sie wiederholt, ist")
+    lines.append("  keine Nebensache, sondern der groesste einzelne Hebel")
+    lines.append("  auf das Ergebnis.")
+    return "\n".join(lines)
+
+
 def render_distribution(d: Distribution) -> str:
     lines = [f"VERTEILUNG — {len(d.returns_pct)} UNABHAENGIGE HANDELSTAGE",
              "=" * 68]
