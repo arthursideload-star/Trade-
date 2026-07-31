@@ -229,6 +229,44 @@ Unsicherheitsbänder, kleine nicht — und das ist genau die Grenze, an der eine
 eine Empfehlung zu sein.
 
 
+---
+
+## A14 · Der eine Regler, der auf deinem Konto zählt — und warum er bleibt, wo er ist
+
+Aus A13 folgt: Auf einem Mindestlot-Konto schließt der EA **jeden** Trade komplett beim
+ersten Ziel. Damit ist `InpFirstTargetR` nicht einer von mehreren Reglern, sondern der
+einzige, der das Ergebnis bestimmt. Der Kommentar im Code sagt „measured: 0.5 beats 1.0" —
+gemessen wurde das aber für die Scalping-Setups, nicht für die Tagesspanne-Strategie.
+
+Also nachgemessen, 20 Märkte à 15.000 Bars:
+
+| erstes Ziel | Trades | Treffer | Erwartung | 95 %-Band |
+|---:|---:|---:|---:|---|
+| 0,25 R | 1.803 | 80,0 % | +0,0830 R | +0,066 … +0,100 |
+| 0,40 R | 1.354 | 71,4 % | +0,1003 R | +0,075 … +0,126 |
+| **0,50 R (Standard)** | 1.225 | 67,7 % | +0,1044 R | +0,074 … +0,135 |
+| 0,75 R | 1.085 | 61,9 % | +0,1187 R | +0,081 … +0,157 |
+
+**Ergebnis: kein Grund, etwas zu ändern.** 0,75 R sieht am besten aus, aber sein Band
+(+0,081 … +0,157) überlappt das von 0,25 R (+0,066 … +0,100). Über die ganze sinnvolle
+Spannbreite ist der Erwartungswert innerhalb der Unsicherheit gleich.
+
+Sauber ist nur die Trefferquote: 80 % → 62 %, monoton fallend mit dem Zielabstand. Genau
+das muss sein, und es ist die Plausibilitätsprüfung für die ganze Reihe.
+
+### Zwei Zeilen, die ich weggelassen habe — und warum das wichtig ist
+
+Der erste Durchlauf enthielt auch 1,00 R und 1,50 R. Beide sind **wertlos**, und zwar
+unbemerkt: Die Strategie hat ein eigenes Ziel bei 50 % der Vorhersage, also bei 1,0 R. Ein
+„erstes Ziel" bei 1,5 R wird nie erreicht, bevor das eigene Ziel feuert — die Zeile
+misst schlicht die Basisvariante unter falschem Namen. Nachweis: `unsplittable_closes = 0`
+und identische Endstände.
+
+Eine Parametersuche, die stillschweigend Zeilen enthält, die nichts messen, liest sich wie
+sechs vergleichbare Ergebnisse und ist es nicht. Ein Test prüft jetzt, dass ein Ziel
+unterhalb von 1,0 R tatsächlich greift und eines darüber als entartet erkannt wird.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

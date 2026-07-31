@@ -929,3 +929,62 @@ class TestTheUnsplittableCloseIsNotTrailed(unittest.TestCase):
         r = run(cfg, seed=91, bars=15_000)
         self.assertGreater(r.partials_taken, 0)
         self.assertGreater(max(r.r_multiples), cfg.first_target_r)
+
+
+class TestTheFirstTargetSweepStaysMeaningful(unittest.TestCase):
+    """On a minimum-lot account every trade closes at first_target_r, so
+    that value is the one dial that matters. Sweeping it is worthwhile --
+    and a sweep that quietly includes rows testing nothing is worse than no
+    sweep, because it reads like six comparable measurements.
+
+    Above the strategy's own target the EA path never activates: the plain
+    take-profit fires first and the row is just the baseline wearing a
+    different label.
+    """
+
+    BASE = replace(DayRangeConfig(), ea_exit=True, lot=0.01,
+                   start_equity=1_928.0, time_stop_bars=240)
+
+    def test_a_target_below_the_strategy_target_actually_binds(self):
+        for r_target in (0.25, 0.50, 0.75):
+            r = run(replace(self.BASE, first_target_r=r_target),
+                    seed=970_001, bars=15_000)
+            self.assertGreater(r.unsplittable_closes, 0, r_target)
+            self.assertLessEqual(max(r.r_multiples), r_target + 1e-6, r_target)
+
+    def test_a_target_above_it_is_degenerate_and_must_not_be_read(self):
+        """1.5R never binds: take_fraction 0.5 of the predicted move is
+        1.0R, and that target is reached first. The row is the baseline."""
+        r = run(replace(self.BASE, first_target_r=1.5), seed=970_001,
+                bars=15_000)
+        self.assertEqual(r.unsplittable_closes, 0)
+        plain = run(replace(DayRangeConfig(), lot=0.01,
+                            start_equity=1_928.0, time_stop_bars=240),
+                    seed=970_001, bars=15_000)
+        self.assertEqual(r.trades, plain.trades)
+        self.assertEqual(r.end_equity, plain.end_equity)
+
+    def test_the_win_rate_falls_as_the_target_moves_away(self):
+        """The one relationship that is clean here, and the sanity check on
+        the whole sweep: a nearer target is reached more often."""
+        near = sweep(replace(self.BASE, first_target_r=0.25), markets=10,
+                     bars=15_000, seed_base=970_000)
+        far = sweep(replace(self.BASE, first_target_r=0.75), markets=10,
+                    bars=15_000, seed_base=970_000)
+        self.assertGreater(near.mean_win_rate, far.mean_win_rate)
+
+    def test_no_first_target_in_range_is_shown_to_beat_the_default(self):
+        """Measured: 0.25 gives +0.083R, 0.50 gives +0.104R, 0.75 gives
+        +0.119R, and every 95% band overlaps every other. There is no basis
+        to move InpFirstTargetR off 0.5, and this test exists so that
+        "0.75 looked best" cannot quietly become a change."""
+        from metals.journal import mean_interval
+        bands = {}
+        for r_target in (0.25, 0.50, 0.75):
+            s = sweep(replace(self.BASE, first_target_r=r_target), markets=12,
+                      bars=15_000, seed_base=970_000)
+            rs = [x for run_ in s.runs for x in run_.r_multiples]
+            bands[r_target] = mean_interval(rs)
+        self.assertLess(bands[0.75][0], bands[0.25][1],
+                        "if these ever separate, the default deserves a "
+                        "second look and this test should say so")
