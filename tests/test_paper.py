@@ -1821,3 +1821,127 @@ class TestTheSpreadMustBeReadNotAssumed(LedgerFixture):
             code, _ = self._run(self._argv("--spread", "0"))
         self.assertEqual(code, 0)
         self.assertEqual(captured.get("spread_usd_oz"), 0.0)
+
+
+class TestTheCalendarCanFillInR4(LedgerFixture):
+    """`--news auto`: read the release times instead of typing them.
+
+    Two failures argue for this. A9 shipped ten sessions with a --news that
+    silently did nothing. Session 6 traded straight through an FOMC day
+    because nobody typed the time. Both are the same shape -- a rule that
+    only works when a human remembers -- and A20 showed the calendar behind
+    it had no FOMC in it either.
+
+    The distinction this class exists to protect: a calendar that was asked
+    and found nothing is not the same as a session where nobody asked. Both
+    produce an empty list.
+    """
+
+    def _run(self, argv: list[str]) -> tuple[int, str]:
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from metals.cli import build_parser
+        args = build_parser().parse_args(argv)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = args.func(args)
+        return code, out.getvalue() + err.getvalue()
+
+    def _argv(self, *extra: str) -> list[str]:
+        return ["paper", "--price", "4105.62", "--high", "4137.85",
+                "--low", "4073.39", "--spread", "0.50", "--dry-run", *extra]
+
+    def test_an_fomc_day_yields_both_legs_of_the_decision(self):
+        from datetime import date
+        from metals.cli import _news_times_from_calendar
+        times, labels, _ = _news_times_from_calendar(date(2026, 7, 29))
+        self.assertEqual(times, ((18, 0), (18, 30)))
+        self.assertTrue(any("FOMC" in line for line in labels))
+
+    def test_an_ecb_day_yields_the_frankfurt_times(self):
+        from datetime import date
+        from metals.cli import _news_times_from_calendar
+        times, labels, _ = _news_times_from_calendar(date(2026, 7, 23))
+        self.assertEqual(times, ((12, 15), (12, 45)))
+        self.assertTrue(any("ECB" in line for line in labels))
+
+    def test_a_quiet_day_yields_nothing_and_says_which_day(self):
+        from datetime import date
+        from metals.cli import _news_times_from_calendar
+        times, labels, horizon = _news_times_from_calendar(date(2026, 7, 31))
+        self.assertEqual(times, ())
+        self.assertEqual(labels, [])
+        self.assertIsNone(horizon)
+
+    def test_past_the_horizon_the_emptiness_is_flagged(self):
+        """Silence past the listed decisions means "unknown", not "clear"."""
+        from datetime import date
+        from metals.cli import _news_times_from_calendar
+        _, _, horizon = _news_times_from_calendar(date(2028, 3, 15))
+        self.assertIsNotNone(horizon)
+
+    def test_auto_records_that_the_calendar_was_asked(self):
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            code, text = self._run(self._argv("--news", "auto"))
+        self.assertEqual(code, 0)
+        self.assertEqual(captured.get("news_source"), "kalender")
+        self.assertIn("Kalender", text)
+
+    def test_typed_times_are_recorded_as_typed(self):
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            self._run(self._argv("--news", "12:30,18:00"))
+        self.assertEqual(captured.get("news_times_utc"), ((12, 30), (18, 0)))
+        self.assertEqual(captured.get("news_source"), "manuell")
+
+    def test_no_news_at_all_records_no_source(self):
+        s = run_session(**TODAY, start_equity_eur=400.0)
+        self.assertEqual(s.news_source, "")
+
+    def test_the_three_states_read_differently(self):
+        """The whole point: "asked, nothing found" and "never asked" must not
+        produce the same sentence."""
+        asked = run_session(**TODAY, start_equity_eur=400.0,
+                            news_source="kalender")
+        never = run_session(**TODAY, start_equity_eur=400.0)
+        found = run_session(**TODAY, start_equity_eur=400.0,
+                            news_times_utc=((18, 0),), news_source="kalender")
+        a, n, f = paper.render(asked), paper.render(never), paper.render(found)
+        self.assertIn("Kalender abgefragt", a)
+        self.assertNotIn("Kalender abgefragt", n)
+        self.assertIn("Keine Nachrichtensperre gesetzt", n)
+        self.assertIn("18:00", f)
+        self.assertIn("kalender", f)
+
+    def test_the_source_survives_the_ledger_round_trip(self):
+        paper.append(run_session(**TODAY, start_equity_eur=400.0,
+                                 news_source="kalender"))
+        self.assertEqual(paper.load_ledger()[-1]["news_source"], "kalender")
+
+    def test_rows_written_before_the_field_still_load(self):
+        """57 sessions predate it. They must read as "nobody asked", which is
+        what they were."""
+        import json
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "index": 0, "timestamp": 0.0, "date_utc": "2026-07-31 12:00",
+                "gold_price": 4_100.0, "day_high": 4_130.0, "day_low": 4_070.0,
+                "price_source": "t", "start_equity_eur": 400.0,
+                "end_equity_eur": 440.0, "lot": 0.01, "forced_risk_pct": 1.0,
+                "trades": 3, "wins": 2, "losses": 1, "expectancy_r": 0.1,
+                "could_not_trade": "", "exits": {}, "signals": 3,
+            }) + "\n")
+        self.assertEqual(paper.load_ledger()[0].get("news_source", ""), "")

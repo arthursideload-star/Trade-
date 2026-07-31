@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from .risk import (MAX_RISK_PER_TRADE_PCT, RULES, AccountState,
                    size_position)
@@ -630,6 +630,28 @@ def _parse_news_times(value: str | None) -> tuple[tuple[int, int], ...]:
     return tuple(out)
 
 
+def _news_times_from_calendar(day: date) -> tuple[tuple[tuple[int, int], ...],
+                                                  list[str], str | None]:
+    """R4's blackout times for one day, read rather than typed.
+
+    Typing them is how A9 shipped ten sessions with a --news that did
+    nothing, and how session 6 traded straight through an FOMC day. The
+    calendar knows; asking it removes a step where a human has to remember.
+
+    Returns (times, labels, horizon_warning) so the caller can print what it
+    found. A silent empty tuple is exactly the failure mode of A20 -- "no
+    releases today" and "I have nothing for this date" must not look alike.
+    """
+    from .sources.calendar import StaticCalendar
+
+    cal = StaticCalendar()
+    events = [e for e in cal.events(day, days=1)
+              if e.impact == "high" and e.when.date() == day]
+    times = tuple((e.when.hour, e.when.minute) for e in events)
+    labels = [f"{e.when:%H:%M} UTC  {e.name}" for e in events]
+    return times, labels, cal.horizon_gap(day, days=1)
+
+
 def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
@@ -720,13 +742,32 @@ def cmd_paper(args: argparse.Namespace) -> int:
         print("Aufschluesselung: python -m metals paper --provenance")
         return 3
 
+    if (args.news or "").strip().lower() == "auto":
+        day = datetime.now(timezone.utc).date()
+        news_times, labels, horizon = _news_times_from_calendar(day)
+        print(f"R4 aus dem Kalender fuer {day.isoformat()}:")
+        for line in labels:
+            print(f"  {line}")
+        if not labels:
+            print("  keine hochwirksame Veroeffentlichung eingetragen")
+        if horizon:
+            # Not decoration: past the listed horizon an empty result means
+            # "unknown", not "clear", and those must not read the same.
+            print(f"  ACHTUNG: {horizon}")
+        print()
+        news_source = "kalender"
+    else:
+        news_times = _parse_news_times(args.news)
+        news_source = "manuell" if news_times else ""
+
     try:
         s = run_session(gold_price=args.price, day_high=args.high,
                         day_low=args.low, price_source=args.source,
                         start_equity_eur=args.equity,
                         spread_usd_oz=args.spread,
-                        news_times_utc=_parse_news_times(args.news),
-                    range_observed=not args.assumed_range)
+                        news_times_utc=news_times,
+                        news_source=news_source,
+                        range_observed=not args.assumed_range)
     except PriceInputError as exc:
         print(f"Kursangaben passen nicht zusammen: {exc}", file=sys.stderr)
         return 2
@@ -965,7 +1006,9 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--news", default=None,
                     help="Zeiten hochwirksamer Veroeffentlichungen in UTC, "
                          "z.B. \"12:30,18:00\" — R4 sperrt 30 Minuten drum "
-                         "herum")
+                         "herum. \"auto\" liest sie aus dem eingebauten "
+                         "Kalender (FOMC, EZB, NFP, CPI-Fenster) statt sie "
+                         "tippen zu lassen")
     pa.add_argument("--source", default="manuell",
                     help="woher der Kurs stammt — wird mitprotokolliert")
     pa.add_argument("--equity", type=float, default=None,

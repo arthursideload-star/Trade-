@@ -189,6 +189,13 @@ class Session:
     # Recorded because "the bot traded through FOMC" is only visible after
     # the fact if the session says which releases it knew about.
     news_times_utc: list[list[int]] = field(default_factory=list)
+    # How those times were obtained: "" (nobody asked), "manuell" (typed on
+    # the command line) or "kalender" (read from the built-in schedule).
+    # A20 is the reason this is separate from the list being empty: a
+    # calendar that was asked and found nothing, and a session where the
+    # question never came up, produce the same empty list and mean opposite
+    # things. Rows written before this field default to "".
+    news_source: str = ""
     # Every trade's R multiple, not just the session mean. Kept because the
     # session mean cannot be turned back into a confidence interval, and the
     # whole point of a chain is that the trades accumulate into a sample the
@@ -332,6 +339,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
                 seed: int | None = None,
                 spread_usd_oz: float | None = None,
                 news_times_utc: tuple[tuple[int, int], ...] = (),
+                news_source: str = "",
                 range_observed: bool = True) -> Session:
     """One trading day on an account carried forward from the last one.
 
@@ -417,6 +425,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         stopped_out=bool(result.stopped_out) if result else False,
         could_not_trade=could_not,
         news_times_utc=[list(pair) for pair in base.news_times_utc],
+        news_source=news_source or ("manuell" if news_times_utc else ""),
         r_multiples=[round(x, 6) for x in result.r_multiples] if result else [],
         intraday_drawdown_pct=round(result.max_drawdown_pct, 2) if result else 0.0,
     )
@@ -1472,7 +1481,13 @@ def render(s: Session) -> str:
                  f"Einstiegskosten")
     if s.news_times_utc:
         times = ", ".join(f"{h:02d}:{m:02d}" for h, m in s.news_times_utc)
-        lines.append(f"  Nachrichtensperre (R4) um {times} UTC")
+        origin = f" ({s.news_source})" if s.news_source else ""
+        lines.append(f"  Nachrichtensperre (R4) um {times} UTC{origin}")
+    elif s.news_source == "kalender":
+        # Asked and answered. Distinct from the line below on purpose: A20
+        # was a calendar that returned nothing and looked like a quiet week.
+        lines.append("  Kalender abgefragt: an diesem Tag keine hochwirksame "
+                     "Veroeffentlichung")
     else:
         lines.append("  Keine Nachrichtensperre gesetzt — R4 greift nicht")
     lines.append(f"  Quelle: {s.price_source}")

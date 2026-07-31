@@ -19,8 +19,50 @@ import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 
-from ..sessions import us_dst_active
+from ..sessions import eu_dst_active, us_dst_active
 from .http import FetchError, HttpClient
+
+# --- Central bank decision dates -------------------------------------------
+#
+# These are the two events the computed schedule could not derive from a rule,
+# and the reason it emitted nothing at all on the days that matter most: an
+# FOMC decision is not "the first Friday" or "the 10th to the 15th", it is
+# whatever the committee published. So they are listed.
+#
+# Day 2 of each meeting is the decision day. Statement at 14:00 ET, press
+# conference at 14:30 ET -- both from the Fed's own meeting pages.
+# Source: federalreserve.gov/monetarypolicy/fomccalendars.htm
+# Cross-checked against the fallback list in worldmonitor's calendar seeder,
+# which scrapes the same page; the two agree for every 2026 date.
+FOMC_DECISION_DATES: tuple[str, ...] = (
+    # 2026 -- confirmed
+    "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+    "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-09",
+    # 2027 -- tentative. The Fed marks each date tentative until the meeting
+    # before it confirms them, so these can move.
+    "2027-01-29", "2027-03-19", "2027-04-28", "2027-06-09",
+    "2027-07-28", "2027-09-15", "2027-10-27", "2027-12-08",
+)
+
+# ECB Governing Council monetary policy meetings, decision day. Rate decision
+# at 14:15 CET/CEST, press conference at 14:45.
+# Source: ecb.europa.eu/press/calendars/mgcgc, cross-checked against the ECB's
+# own published decisions (ecb.mp260205, ecb.mp260611, ecb.mp260723).
+#
+# The ECB matters to gold for a reason that is easy to overlook: this account
+# is denominated in euro. A euro move changes the account's value without gold
+# moving at all.
+#
+# The first 2026 entry is a correction. Worldmonitor's calendar seeder carries
+# a fallback list with 2026-01-30 in this slot, and 30 January 2026 is a
+# Friday -- the Governing Council announces on Thursdays. The actual first
+# 2026 decision was 5 February (ECB press release ecb.mp260205). The
+# weekday invariant is a test, so the same class of transcription error
+# cannot enter this list again unnoticed.
+ECB_DECISION_DATES: tuple[str, ...] = (
+    "2026-02-05", "2026-03-19", "2026-04-30", "2026-06-11",
+    "2026-07-23", "2026-09-10", "2026-10-29", "2026-12-17",
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +93,9 @@ IMPACT_NOTES: dict[str, str] = {
            "into the real-yield calculation that prices gold",
     "FOMC": "the statement moves gold, the press conference 30 minutes later "
             "often moves it further and in the opposite direction",
+    "ECB": "moves gold in dollars less than the Fed does, but it moves EUR/USD "
+           "-- and this account is kept in euro, so the euro result changes "
+           "even when gold does not",
     "PPI": "smaller than CPI but same direction of transmission",
     "PCE": "the Fed's preferred inflation measure; matters more than its "
            "media coverage suggests",
@@ -66,6 +111,29 @@ def _et_to_utc(day: date, hour: int, minute: int) -> datetime:
     offset = -4 if us_dst_active(probe) else -5
     naive = datetime.combine(day, time(hour, minute))
     return (naive - timedelta(hours=offset)).replace(tzinfo=timezone.utc)
+
+
+def _ce_to_utc(day: date, hour: int, minute: int) -> datetime:
+    """Convert a Frankfurt wall-clock time to UTC for that date."""
+    probe = datetime.combine(day, time(12, 0), tzinfo=timezone.utc)
+    offset = 2 if eu_dst_active(probe) else 1
+    naive = datetime.combine(day, time(hour, minute))
+    return (naive - timedelta(hours=offset)).replace(tzinfo=timezone.utc)
+
+
+def _parse_dates(values: tuple[str, ...]) -> list[date]:
+    return sorted(date.fromisoformat(v) for v in values)
+
+
+def known_through() -> date:
+    """The last day this schedule can speak for.
+
+    Beyond it the listed decisions run out, and a calendar that answers
+    "no high-impact release" for a date it simply does not cover is worse
+    than one that says it does not know. Callers ask; `events` warns.
+    """
+    return min(_parse_dates(FOMC_DECISION_DATES)[-1],
+               _parse_dates(ECB_DECISION_DATES)[-1])
 
 
 def first_friday(year: int, month: int) -> date:
@@ -110,15 +178,62 @@ class StaticCalendar:
         "emergency FOMC meeting, a rescheduled release, or a shutdown delaying "
         "a print -- which are exactly the cases where a blackout matters most.",
         "CPI and PPI dates are windows, not exact times, without a live feed.",
-        "Non-US events (ECB, BoE, China data) are not covered here and do move "
-        "metals.",
+        "BoE and China data are not covered here and do move metals. FOMC and "
+        "ECB decisions are listed rather than derived, so they stop at the "
+        "published horizon -- see horizon_gap.",
         "Use this as a floor under the news veto. A live calendar feed replaces "
         "it; it does not replace a live feed.",
     )
 
+    def horizon_gap(self, start: date, days: int = 14) -> str | None:
+        """Say so when the window reaches past the listed decisions.
+
+        The silent version of this is the bug that produced A20: a schedule
+        with no FOMC in it does not look broken, it looks like a quiet week.
+        """
+        end = start + timedelta(days=days)
+        last = known_through()
+        if end <= last:
+            return None
+        return (f"Central bank decisions are listed only through "
+                f"{last.isoformat()}; this window runs to {end.isoformat()}. "
+                f"Days after the horizon carry no FOMC or ECB event here, "
+                f"which is not the same as there being none.")
+
     def events(self, start: date, days: int = 14) -> list[CalendarEvent]:
         out: list[CalendarEvent] = []
         end = start + timedelta(days=days)
+
+        # Listed, not derived. Both legs of each decision are emitted: with a
+        # 30-minute blackout either side, the statement (14:00 ET) and the
+        # press conference (14:30 ET) merge into one continuous stand-aside
+        # from 13:30 to 15:00 ET, which is the behaviour the impact note
+        # describes and the one that was missing entirely.
+        for d in _parse_dates(FOMC_DECISION_DATES):
+            if not (start <= d <= end):
+                continue
+            tentative = d.year >= 2027
+            note = ("published FOMC schedule"
+                    + (" -- 2027 dates are tentative until the Fed confirms "
+                       "them at the preceding meeting" if tentative else ""))
+            out.append(CalendarEvent(
+                "FOMC rate decision", _et_to_utc(d, 14, 0), "high",
+                typical_gold_move=IMPACT_NOTES["FOMC"], note=note))
+            out.append(CalendarEvent(
+                "FOMC press conference", _et_to_utc(d, 14, 30), "high",
+                typical_gold_move=IMPACT_NOTES["FOMC"], note=note))
+
+        for d in _parse_dates(ECB_DECISION_DATES):
+            if not (start <= d <= end):
+                continue
+            out.append(CalendarEvent(
+                "ECB rate decision", _ce_to_utc(d, 14, 15), "high",
+                currency="EUR", typical_gold_move=IMPACT_NOTES["ECB"],
+                note="published ECB Governing Council schedule"))
+            out.append(CalendarEvent(
+                "ECB press conference", _ce_to_utc(d, 14, 45), "high",
+                currency="EUR", typical_gold_move=IMPACT_NOTES["ECB"],
+                note="published ECB Governing Council schedule"))
 
         for d in nfp_dates(start, months=3):
             if start <= d <= end:
@@ -273,11 +388,18 @@ def _parse_when(value) -> datetime | None:  # type: ignore[no-untyped-def]
 # Feed providers spell the same release several ways ("Non-Farm Payrolls",
 # "Nonfarm Payrolls", "Employment Situation"), so matching on the short key
 # alone silently drops the impact note on exactly the events that matter most.
+#
+# Order matters and is load-bearing: the first match wins, so the specific
+# central bank must be tried before the generic "rate decision". With FOMC
+# listed first and owning that phrase, a feed row named "ECB Rate Decision"
+# was handed the Fed's impact note -- wrong bank, wrong currency, wrong
+# expected move.
 _NOTE_ALIASES: dict[str, tuple[str, ...]] = {
     "NFP": ("nfp", "non-farm", "nonfarm", "payroll", "employment situation"),
     "CPI": ("cpi", "consumer price"),
     "PPI": ("ppi", "producer price"),
     "PCE": ("pce", "personal consumption"),
+    "ECB": ("ecb", "european central bank", "lagarde"),
     "FOMC": ("fomc", "fed interest rate", "federal funds", "rate decision"),
     "Retail Sales": ("retail sales",),
     "ISM": ("ism",),

@@ -9,7 +9,7 @@ Verlust werden mitgenommen.
 
 ```bash
 python -m metals paper --price 4114.79 --high 4120.16 --low 4028.77 \
-    --spread 0.34 --news "18:00" --source "investing.com 30.07.2026"
+    --spread 0.34 --news auto --source "investing.com 30.07.2026"
 python -m metals paper --summary
 python -m metals paper --distribution --price 4114.79 \
     --high 4120.16 --low 4028.77
@@ -17,7 +17,21 @@ python -m metals paper --distribution --price 4114.79 \
 
 `--spread` kommt aus dem beobachteten Ask minus Bid und ist **Pflicht** — er wird nicht
 vorbelegt, weil der Vorgabewert über das Vorzeichen des Erwartungswerts entschied (A19, unten).
-`--news` kommt aus dem Wirtschaftskalender
+`--news auto` liest die Sperrzeiten aus dem eingebauten Kalender (FOMC, EZB, NFP,
+CPI-Fenster), statt sie tippen zu lassen — und sagt dazu, was es gefunden hat:
+
+```
+R4 aus dem Kalender fuer 2026-07-29:
+  18:00 UTC  FOMC rate decision
+  18:30 UTC  FOMC press conference
+```
+
+Die Sitzung schreibt mit, **woher** die Zeiten kamen (`news_source`: `kalender`,
+`manuell` oder leer). Das ist kein Beiwerk: Ein Kalender, der gefragt wurde und nichts
+fand, und eine Sitzung, in der niemand gefragt hat, erzeugen dieselbe leere Liste und
+bedeuten das Gegenteil. Genau daran ist A20 vorbeigerutscht.
+
+Alternativ kommt `--news` von Hand aus dem Wirtschaftskalender
 (Rule R4 sperrt 30 Minuten um jede genannte Zeit). Ohne `--news` greift die Sperre **nicht**
 — das steht dann auch so in der Ausgabe, damit ein durchgehandelter FOMC-Tag nicht
 unbemerkt bleibt. Genau das war Auditbefund A7.

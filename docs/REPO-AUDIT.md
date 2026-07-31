@@ -536,6 +536,74 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A20 · Der Kalender versprach FOMC und lieferte nie eines — **behoben**
+
+Der Modul-Docstring von `metals/sources/calendar.py` sagt seit jeher:
+
+> „FOMC statements at 14:00 ET on their published schedule … so the schedule is
+> *computed* here rather than fetched."
+
+`IMPACT_NOTES` enthielt einen FOMC-Eintrag. Die Alias-Tabelle kannte vier Schreibweisen
+davon. Nur eines fehlte: **`StaticCalendar.events()` gab kein einziges FOMC-Ereignis aus.**
+Erzeugt wurden ausschließlich NFP, CPI-Fenster und Erstanträge.
+
+Nachgewiesen am 29.07.2026, einem FOMC-Entscheidungstag:
+
+```
+Ereignisse 27.07.–03.08.2026:
+  2026-07-30 12:30 UTC  medium  Initial Jobless Claims
+FOMC enthalten? False
+blackout() um 14:00 ET: (False, None)
+```
+
+Ein Sieben-Tage-Fenster über einen Zinsentscheid liefert **ein** Ereignis, und das
+ist nicht der Zinsentscheid.
+
+### Warum das durchrutschte
+
+Weil es nicht wie ein Fehler aussieht. Ein Kalender ohne FOMC meldet keine Ausnahme
+und gibt keine leere Liste zurück — er meldet **eine ruhige Woche**. Genau deshalb
+konnte A7 als „behoben" gelten: A7 hat dafür gesorgt, dass `news_times_utc` die
+Strategie erreicht, aber der Kalender, der die Zeit liefern sollte, hatte keine.
+Die Reparatur lag eine Schicht zu hoch.
+
+Ableitbar war es auch nicht: NFP ist „erster Freitag", CPI ist „10. bis 15." — ein
+Zinsentscheid ist das, was das Gremium veröffentlicht hat. Deshalb steht er jetzt als
+**Liste** im Code, nicht als Regel.
+
+**Behoben.** `FOMC_DECISION_DATES` (2026 bestätigt, 2027 vorläufig, Quelle
+federalreserve.gov) und `ECB_DECISION_DATES` (Quelle ecb.europa.eu). Je Entscheid
+werden **zwei** Ereignisse erzeugt — Statement 14:00 ET und Pressekonferenz 14:30 ET.
+Mit je 30 Minuten Sperre davor und danach ergibt das ein durchgehendes Fenster von
+13:30 bis 15:00 ET. Das ist beabsichtigt: Die Pressekonferenz dreht die Bewegung des
+Statements regelmäßig um.
+
+Die EZB ist mit aufgenommen, aus einem Grund, den man leicht übersieht: **Das Konto
+läuft in Euro.** Ein EZB-Entscheid verändert das Ergebnis, ohne dass Gold sich bewegt.
+
+### Zwei Fehler, die beim Einbau aufgefallen sind
+
+**1. Ein falsches Datum in der übernommenen Quelle.** Worldmonitors Kalender-Seeder
+führt als ersten EZB-Termin 2026 den **30.01.2026**. Das ist ein **Freitag** — der
+EZB-Rat verkündet donnerstags. Der tatsächliche erste Entscheid 2026 war der
+**05.02.2026** (EZB-Pressemitteilung `ecb.mp260205`). Gefunden hat das kein Mensch,
+sondern ein Test, der auf jedem Datum der Liste den Wochentag prüft. Er bleibt drin.
+
+**2. „Rate Decision" gehörte der falschen Notenbank.** `_match_note` nimmt den ersten
+Treffer, und FOMC stand vor EZB und besaß die Wendung `"rate decision"`. Eine
+Live-Feed-Zeile „ECB Rate Decision" bekam damit die Fed-Notiz: falsche Notenbank,
+falsche Währung, falsche erwartete Bewegung. Die Reihenfolge ist jetzt umgekehrt und
+durch einen Test festgehalten.
+
+### Und wo die Liste endet, sagt sie das
+
+Eine Liste läuft irgendwann aus. Eine ausgelaufene Liste, die stumm bleibt, antwortet
+„keine hochwirksame Veröffentlichung" für ein Datum, über das sie nichts weiß — also
+exakt derselbe Fehler wie A20, nur verschoben auf das Jahr, in dem die Liste endet.
+`horizon_gap()` nennt den letzten abgedeckten Tag, und `known_through()` nimmt den
+**früheren** der beiden Listenenden, nicht den späteren.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei
