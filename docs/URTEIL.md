@@ -104,3 +104,32 @@ festgelegt, bevor der erste Trade läuft.
 
 *Reproduzierbar: `python -m metals paper --verify` rechnet jede Sitzung aus ihren eigenen
 Eingaben neu und prüft sie gegen das Journal. Stand: 36 Sitzungen, keine Abweichung.*
+
+---
+
+## Nachprüfung bei 361 Trades
+
+Das Urteil oben wurde bei den vorher festgelegten ~300 Trades gefällt (Sitzung 36). Seither
+sind 59 Trades dazugekommen — **überwiegend am ruhigeren 31. Juli** (1,01 % Tagesspanne
+statt 2,23 %), also unter Bedingungen, unter denen die Strategie nachweislich schlechter
+abschneidet.
+
+| | bei 302 Trades | bei 361 Trades |
+|---|---:|---:|
+| Trefferquote | 61,3 % | 61,5 % |
+| Erwartungswert | +0,198 R | **+0,191 R** |
+| 95 %-Band | +0,098 bis +0,297 R | **+0,101 bis +0,281 R** |
+
+**Die Schätzung bewegt sich kaum**, das Band wird etwas schmaler. Das ist die erwartete
+Entwicklung, wenn zusätzliche Daten aus derselben Grundgesamtheit kommen — und es ist
+mildernd, weil die neuen Trades aus einem *ungünstigeren* Regime stammen und den Wert
+trotzdem kaum gedrückt haben.
+
+**Was das belegt:** dass die Messung stabil ist. Eine Zahl, die bei jedem Nachschlagen
+irgendwo anders steht, wäre ein Warnsignal gewesen; diese tut es nicht.
+
+**Was es nicht belegt:** irgendetwas über echtes Gold. Alle fünf Gründe oben gelten
+unverändert. Der Mehrfachvergleichs-Einwand wird sogar **schlimmer**: Bei inzwischen 44
+Auswertungen liegt die Chance, dass ein 95-%-Band irgendwann zufällig über der Null steht,
+bei bis zu **90 %**. Die Vorfestlegung bei 300 Trades bleibt das einzige, was diesen Einwand
+mildert — und sie war, wie oben gesagt, keine saubere Vorregistrierung.
