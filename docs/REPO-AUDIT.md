@@ -321,6 +321,113 @@ Bei 0,01 Lot ist das verkraftbar. Der Punkt ist nicht die Höhe, sondern dass **
 nicht mehr das ist, das die Regeln kalkuliert haben** — und genau das soll R1 verhindern.
 
 
+---
+
+## A16 · Die Prüfung, die das Nachlesen ersetzt — und R2, die sie sofort fand
+
+A15 endete mit der Feststellung, dass dreimal derselbe Fehler auftrat und jedes Mal durch
+Nachlesen gefunden wurde. Das ist kein Verfahren. Also eine Registratur:
+
+`dayrange.RULE_COVERAGE` führt **jede** Regel aus `metals.risk.RULES` mit einem Status —
+`implemented` oder `n/a` **mit Begründung**. Ein Test schlägt fehl, sobald eine Regel dort
+keinen Eintrag hat. Eine Regel, die neu in die Risikoschicht kommt, kann damit nicht mehr
+still an der handelnden Engine vorbeigehen.
+
+Die Registratur fand beim ersten Lauf sofort einen Fall:
+
+| Regel | Status | |
+|---|---|---|
+| **R2** — Tagesverlustlimit −3 % | **fehlte** | jetzt implementiert |
+| R3 — Mindest-CRV 1:2 | n/a | folgt aus `take_fraction`/`stop_fraction`, die gesweept werden; ein hartes 1:2 löschte den Hauptregler der Strategie |
+| R6 — kein Martingale | n/a | Größe steigt nach einem Verlust konstruktionsbedingt nie: entweder festes Lot oder aus dem (gefallenen) Kapital abgeleitet |
+| M2 — Puffer jenseits des Levels | n/a | der Stop ist ein Anteil der Vorhersage, kein Level mit Puffer — es gibt hier kein strukturelles Level |
+| M4 — gemeinsames Metallbudget | n/a | diese Engine handelt ein Symbol; das Budget gehört in die Schicht, die beide führt |
+
+### R2, und warum die Messung verkehrt herum aussieht
+
+| | Trades | Erwartung | Median | schlechtester Markt |
+|---|---:|---:|---:|---:|
+| mit R2 | 67 | +0,1002 R | +9,90 % | **−2,78 %** |
+| ohne R2 | 68 | +0,1127 R | +11,79 % | **+0,86 %** |
+
+Die Schutzregel macht den schlechtesten Markt **schlechter**. Wer das flüchtig liest, hält R2
+für schädlich.
+
+Was tatsächlich dasteht: Der Simulator gibt der Strategie eine echte Kante. Wer nach einem
+schlechten Tag aufhört, verpasst die Erholung, die dieser Markt anschließend liefert. **Ein
+Markt, der einen fürs Weitermachen bezahlt, kann eine Versicherung nicht bepreisen.**
+
+R2 ist die Versicherung gegen den Fall, dass die Kante **nicht** da ist — und das ist genau der
+Fall, den für echtes Gold niemand ausgeschlossen hat. Dieselbe Lage wie bei R4 und M5: Der
+Simulator kann die Regel nicht bewerten, der Test prüft ihre Einhaltung, nicht ihren Nutzen.
+
+Der Tag wird dabei am **Broker-Rollover** begrenzt, nicht um Mitternacht UTC — sonst füllte
+sich das Budget mitten in der New Yorker Session wieder auf, also genau dort, wo die Verluste
+entstehen, die es auslösen.
+
+
+---
+
+## A17 · R2 und der Risikodeckel greifen ineinander — und R2 kippt das 400-€-Konto
+
+Kaum war R2 aktiv, fielen zwei Tests um. Beide waren **keine** Testfehler.
+
+### Erstens: R2 macht aus einem Gewinntag einen Verlusttag
+
+Auf dem 400-€-Konto, 40 unabhängige Handelstage:
+
+| | Median | Tage im Plus | schlechtester | bester |
+|---|---:|---:|---:|---:|
+| mit R2 | **−2,73 %** | 40 % | −9,20 % | +34,00 % |
+| ohne R2 | **+8,19 %** | 75 % | −14,30 % | +34,00 % |
+
+Der Grund ist Arithmetik, nicht Marktverhalten: Auf diesem Konto erzwingt das Mindestlot
+**1,3 % bis 8,7 % Risiko je Trade**. Ein Tageslimit von −3 % ist damit nach **ein bis zwei
+Verlierern** erreicht — und der Tag ist vorbei, oft während das Konto unten steht.
+
+R2 wurde für ein Konto entworfen, das R1 einhalten kann: Bei 1 % je Trade bedeutet −3 % *drei*
+Verlierer. **R1 und R2 sind aufeinander kalibriert. Wenn R1 nicht einhaltbar ist, wird R2 zu
+etwas anderem.**
+
+Das ist kein Argument, R2 abzuschalten — der schlechteste Tag verbessert sich von −14,3 % auf
+−9,2 %, die Regel tut genau das, wofür sie da ist. Es ist ein weiteres Argument dafür, dass
+**400 € für dieses Regelwerk zu wenig sind**, dieselbe Schlussfolgerung wie in
+[KONTOGROESSE.md](./KONTOGROESSE.md).
+
+Der Regelstand steht ab jetzt **in jeder Journalzeile** (`daily_loss_limit`), wie schon der
+Slippage-Wechsel. Die 54 Sitzungen davor liefen ohne R2 und sind mit späteren nicht direkt
+vergleichbar.
+
+### Zweitens: Ein Deckel über dem Tageslimit macht daraus ein Ein-Trade-Limit
+
+| Deckel | Bars mit aktivem R2 | größter Einsatz |
+|---:|---:|---:|
+| keiner | **17,9 %** | 15,3 % |
+| 10 % | 17,8 % | 12,2 % |
+| 6 % | 16,3 % | 6,8 % |
+| 4 % | 12,1 % | 4,4 % |
+| **2,5 %** | **4,3 %** | 2,5 % |
+| 2 % | 1,4 % | 2,0 % |
+
+Monoton, und die Kante liegt genau dort, wo der Deckel unter die 3 % des Tageslimits fällt.
+Solange ein einzelner Trade mehr riskieren darf als der Tag erlaubt, beendet **ein** Verlierer
+den Tag.
+
+**Praktische Folge:** Wer `max_risk_pct` setzt, sollte es unter `DAILY_LOSS_LIMIT_PCT` setzen,
+sonst hebt der Deckel das Tageslimit auf, statt mit ihm zusammenzuarbeiten.
+
+### Was dabei ein Test falsch behauptet hat
+
+Der umgefallene Deckel-Test behauptete, ein engerer Deckel koste Erwartungswert je Trade. Über
+40 Märkte gemessen überlappen die Bänder vollständig (+0,10…+0,30 gegen +0,00…+0,35) — die
+Differenz war **nie belegt**. Der Test hielt Rauschen fest und ging erwartungsgemäß kaputt,
+sobald R2 es verschob.
+
+Neu prüft er, was monoton und robust ist: Der Deckel gibt Rendite ab und verbessert den
+schlechtesten Fall. Das ist weniger, als ich damals geschrieben habe, und es ist das, was die
+Daten hergeben.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

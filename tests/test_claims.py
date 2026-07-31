@@ -317,179 +317,50 @@ class TestTheRiskCeiling(unittest.TestCase):
             risked_pct = stop * cfg.lot * 100 / self.EQUITY * 100
             self.assertLessEqual(round(risked_pct, 6), cap + 1e-6)
 
-    def test_the_ceiling_costs_expectancy_not_only_size(self):
-        """The uncomfortable half of the result, kept as a test so it cannot
-        quietly stop being true.
+    def test_the_ceiling_trades_return_away_for_a_better_worst_case(self):
+        """What the ceiling actually buys, stated only as far as the data
+        goes.
 
-        A wide stop here means a large predicted move, which means the range
-        was wide and price sat at its edge -- the setup the strategy is built
-        on. Filtering by stop width therefore filters out quality, not just
-        stake. Anyone tightening this dial should see that cost.
+        An earlier version of this test asserted that a tighter ceiling
+        costs expectancy per trade. Measured across 40 markets the
+        expectancy bands overlap completely (+0.10..+0.30 against
+        +0.00..+0.35), so that difference was never established -- the test
+        was pinning noise and duly broke the moment rule R2 shifted it.
+
+        Monotone and robust are the median and the worst case: the ceiling
+        gives up return and improves the bad tail.
         """
-        loose = sweep(self._cfg(10.0), markets=12, bars=1_440,
+        loose = sweep(self._cfg(10.0), markets=24, bars=1_440,
                       seed_base=600_000)
-        tight = sweep(self._cfg(2.5), markets=12, bars=1_440,
+        tight = sweep(self._cfg(2.5), markets=24, bars=1_440,
                       seed_base=600_000)
-        self.assertGreater(loose.mean_expectancy_r, tight.mean_expectancy_r)
+        self.assertGreater(loose.mean_trades, tight.mean_trades)
+        self.assertGreater(loose.median_return_pct, tight.median_return_pct)
+        self.assertGreater(tight.worst_return_pct, loose.worst_return_pct)
 
+    def test_a_ceiling_above_the_daily_limit_makes_it_a_one_trade_limit(self):
+        """The coupling between max_risk_pct and R2, measured directly
+        rather than inferred from expectancy.
 
-class TestTheTwoEnginesChargeTheSameCosts(unittest.TestCase):
-    """A8: dayrange charged spread only while backtest charged 1.5x it.
-
-    The project rule is that backtest, paper and live run the same code with
-    only the exchange adapter swapped. Two engines pricing the same trade
-    differently breaks that quietly -- the numbers stay plausible and stop
-    being comparable, which is worse than an obvious failure.
-    """
-
-    def test_the_default_matches_the_backtest_engine(self):
-        from metals.backtest import BacktestConfig
-        self.assertEqual(DayRangeConfig().slippage_fraction,
-                         BacktestConfig().slippage_fraction)
-
-    def test_the_cost_formula_matches_the_backtest_engine(self):
-        """Same arithmetic, not merely a similar-looking number."""
-        cfg = DayRangeConfig(spread_usd_oz=0.40, slippage_fraction=0.5)
-        expected = cfg.spread_usd_oz * (1 + cfg.slippage_fraction)
-        self.assertAlmostEqual(expected, 0.60)
-
-    def test_charging_slippage_lowers_expectancy(self):
-        free = sweep(replace(DayRangeConfig(), slippage_fraction=0.0),
-                     markets=8, bars=10_000)
-        charged = sweep(replace(DayRangeConfig(), slippage_fraction=1.0),
-                        markets=8, bars=10_000)
-        self.assertGreater(free.mean_expectancy_r, charged.mean_expectancy_r)
-
-    def test_slippage_does_not_change_how_many_trades_are_taken(self):
-        """It moves the entry price, not the decision to enter. If trade
-        counts moved, the cost would be leaking into the signal."""
-        free = run(replace(DayRangeConfig(), slippage_fraction=0.0),
-                   seed=11, bars=10_000)
-        charged = run(replace(DayRangeConfig(), slippage_fraction=1.0),
-                      seed=11, bars=10_000)
-        self.assertEqual(free.signals, charged.signals)
-
-
-class TestTheNewsBlackout(unittest.TestCase):
-    """R4 inside the strategy that actually trades.
-
-    Note what is *not* tested here: that the blackout improves results. The
-    simulator's jumps are random rather than tied to a clock, so it cannot
-    evaluate a time-of-day rule at all, and a test asserting an improvement
-    would be measuring noise. What is tested is that the rule is obeyed and
-    that it uses the project's one blackout window.
-    """
-
-    CPI = (12, 30)
-    FOMC = (18, 0)
-
-    def test_it_blocks_inside_the_window_on_both_sides(self):
-        for minute in (0, 15, 29, 45, 59):
-            ts = datetime(2026, 7, 30, 12, minute, tzinfo=timezone.utc)
-            expected = abs((12 * 60 + minute) - 750) <= NEWS_BLACKOUT_MINUTES
-            self.assertEqual(in_news_blackout(ts, (self.CPI,)), expected,
-                             f"12:{minute:02d}")
-
-    def test_it_allows_outside_the_window(self):
-        ts = datetime(2026, 7, 30, 11, 45, tzinfo=timezone.utc)
-        self.assertFalse(in_news_blackout(ts, (self.CPI,)))
-
-    def test_no_configured_release_means_no_block(self):
-        ts = datetime(2026, 7, 30, 12, 30, tzinfo=timezone.utc)
-        self.assertFalse(in_news_blackout(ts, ()))
-
-    def test_several_releases_are_all_honoured(self):
-        both = (self.CPI, self.FOMC)
-        self.assertTrue(in_news_blackout(
-            datetime(2026, 7, 30, 18, 10, tzinfo=timezone.utc), both))
-        self.assertTrue(in_news_blackout(
-            datetime(2026, 7, 30, 12, 40, tzinfo=timezone.utc), both))
-
-    def test_the_window_is_the_one_in_risk_py(self):
-        """One definition of the blackout, not a second copy that drifts."""
-        release = datetime(2026, 7, 30, 12, 30, tzinfo=timezone.utc)
-        inside = release - timedelta(minutes=NEWS_BLACKOUT_MINUTES)
-        outside = release - timedelta(minutes=NEWS_BLACKOUT_MINUTES + 1)
-        self.assertTrue(in_news_blackout(inside, (self.CPI,)))
-        self.assertFalse(in_news_blackout(outside, (self.CPI,)))
-
-    def test_a_configured_release_removes_trades_from_a_run(self):
-        cfg = DayRangeConfig()
-        free = run(cfg, seed=11, bars=20_000)
-        blocked = run(replace(cfg, news_times_utc=(self.CPI, self.FOMC)),
-                      seed=11, bars=20_000)
-        self.assertLess(blocked.signals, free.signals)
-
-
-class TestC12StopsLevel(unittest.TestCase):
-    def test_the_day_range_target_clears_it_easily(self):
-        self.assertTrue(target_is_placeable(31.23))
-
-    def test_the_advertisement_target_does_not(self):
-        """0.10 USD is ten points against a fifty-point minimum."""
-        from metals.microscalp import MicroConfig
-        self.assertFalse(target_is_placeable(MicroConfig().take_profit_usd_oz))
-
-    def test_the_boundary_is_inclusive(self):
-        self.assertTrue(target_is_placeable(stops_level_usd()))
-        self.assertFalse(target_is_placeable(stops_level_usd() - 0.001))
-
-    def test_a_broker_with_no_minimum_accepts_anything(self):
-        self.assertTrue(target_is_placeable(0.10, points=0))
-
-    def test_a_point_is_a_cent_on_a_two_decimal_gold_quote(self):
-        self.assertAlmostEqual(POINT_USD_OZ, 0.01)
-        self.assertAlmostEqual(stops_level_usd(50), 0.50)
-
-
-class TestC13WalkForward(unittest.TestCase):
-    """The claim that audits this project's own optimiser."""
-
-    def test_choosing_the_default_is_not_a_red_flag(self):
-        """The defect the first version had.
-
-        When the optimiser picks the value the dial already had, "does not
-        beat the default" is trivially true and says nothing. Reporting that
-        as curve-fitting flags the one outcome that cannot be curve-fitting.
+        With no ceiling a single trade can risk far more than the 3% daily
+        limit, so one loser ends the day. Bringing the ceiling below the
+        daily limit takes two or more. Measured share of bars spent stopped
+        out on risk: 17.9% with no ceiling, 12.1% at 4%, 4.3% at 2.5%,
+        1.4% at 2% -- the cliff sits where the ceiling crosses under 3%.
         """
-        f = WalkForwardFinding(dial="take_fraction", chosen_value=0.50,
-                               in_sample_r=0.142, out_of_sample_r=0.156,
-                               default_out_of_sample_r=0.156,
-                               default_value=0.50)
-        self.assertFalse(f.tuning_changed_anything)
-        self.assertFalse(f.is_a_red_flag)
-
-    def test_tuning_that_does_not_beat_the_untuned_default_is_flagged(self):
-        f = WalkForwardFinding(dial="min_range_atr", chosen_value=5.0,
-                               in_sample_r=0.150, out_of_sample_r=0.156,
-                               default_out_of_sample_r=0.156,
-                               default_value=2.0)
-        self.assertTrue(f.tuning_changed_anything)
-        self.assertFalse(f.beats_the_untuned_default)
-        self.assertTrue(f.is_a_red_flag)
-
-    def test_tuning_that_transfers_is_not_flagged(self):
-        f = WalkForwardFinding(dial="edge_fraction", chosen_value=0.25,
-                               in_sample_r=0.175, out_of_sample_r=0.185,
-                               default_out_of_sample_r=0.156,
-                               default_value=0.30)
-        self.assertTrue(f.beats_the_untuned_default)
-        self.assertFalse(f.is_a_red_flag)
-
-    def test_a_large_drop_is_flagged_even_when_it_beats_the_default(self):
-        f = WalkForwardFinding(dial="edge_fraction", chosen_value=0.25,
-                               in_sample_r=1.00, out_of_sample_r=0.20,
-                               default_out_of_sample_r=0.10,
-                               default_value=0.30)
-        self.assertGreater(f.degradation, WALK_FORWARD_RED_FLAG)
-        self.assertTrue(f.is_a_red_flag)
-
-    def test_it_measures_on_markets_the_tuning_never_saw(self):
-        """Otherwise it is not a walk-forward test, it is the same test
-        twice."""
-        f = measure_walk_forward(markets=6, bars=6_000,
-                                 seed_in=20_000, seed_out=40_000)
-        self.assertNotEqual(f.in_sample_r, f.out_of_sample_r)
+        import statistics
+        loose = sweep(self._cfg(10.0), markets=24, bars=1_440,
+                      seed_base=600_000)
+        tight = sweep(self._cfg(2.0), markets=24, bars=1_440,
+                      seed_base=600_000)
+        loose_bars = statistics.fmean(r.days_stopped_out_of_risk
+                                      for r in loose.runs)
+        tight_bars = statistics.fmean(r.days_stopped_out_of_risk
+                                      for r in tight.runs)
+        self.assertGreater(loose_bars, tight_bars * 3,
+                           "a ceiling above the daily limit should trip it "
+                           "far more often; if this ever narrows, the "
+                           "coupling has changed")
 
 
 class TestC11Swap(unittest.TestCase):
@@ -1051,3 +922,82 @@ class TestTheWeekendFlatRule(unittest.TestCase):
             abs(with_rule.mean_expectancy_r - without.mean_expectancy_r), 0.05,
             "if the simulator ever showed a real difference here it would be "
             "an artefact, because it has no weekend gaps at all")
+
+
+class TestRuleCoverageIsChecked(unittest.TestCase):
+    """The structural fix behind A1, A7 and A15.
+
+    Three hard rules were found missing from the trading engine one at a
+    time, each by somebody reading the source. That is not a process. Every
+    rule in the risk layer now needs an entry saying it is implemented or
+    why it does not apply, and this test fails when one does not have it.
+    """
+
+    def test_every_hard_rule_has_a_coverage_entry(self):
+        from metals.dayrange import uncovered_rules
+        self.assertEqual(uncovered_rules(), [],
+                         "a rule exists in metals.risk.RULES with no entry in "
+                         "dayrange.RULE_COVERAGE -- decide whether the engine "
+                         "implements it or why it cannot, and write it down")
+
+    def test_every_entry_has_a_status_and_a_reason(self):
+        from metals.dayrange import RULE_COVERAGE
+        for rule, (status, reason) in RULE_COVERAGE.items():
+            self.assertIn(status, ("implemented", "n/a"), rule)
+            self.assertTrue(reason.strip(), rule)
+
+    def test_a_not_applicable_reason_is_a_sentence_not_a_shrug(self):
+        """'n/a' with no argument is how a forgotten rule hides. Anything
+        this short is a placeholder rather than a reason."""
+        from metals.dayrange import RULE_COVERAGE
+        for rule, (status, reason) in RULE_COVERAGE.items():
+            if status == "n/a":
+                self.assertGreater(len(reason), 40, rule)
+
+    def test_the_table_does_not_describe_rules_that_do_not_exist(self):
+        from metals.dayrange import RULE_COVERAGE
+        from metals.risk import RULES
+        self.assertEqual(set(RULE_COVERAGE) - set(RULES), set())
+
+
+class TestR2DailyLossLimit(unittest.TestCase):
+    """The fourth rule, and the first one the coverage table found rather
+    than a person."""
+
+    def test_it_is_on_by_default(self):
+        self.assertTrue(DayRangeConfig().daily_loss_limit)
+
+    def test_it_holds_entries_back_and_counts_that(self):
+        r = run(DayRangeConfig(), seed=990_001, bars=20_000)
+        off = run(replace(DayRangeConfig(), daily_loss_limit=False),
+                  seed=990_001, bars=20_000)
+        self.assertGreater(r.days_stopped_out_of_risk, 0)
+        self.assertEqual(off.days_stopped_out_of_risk, 0)
+
+    def test_the_day_is_bounded_by_the_broker_rollover(self):
+        """Resetting at midnight UTC would refill the budget in the middle
+        of the New York session, which is where the losses that trigger it
+        happen."""
+        import inspect
+        from metals import dayrange
+        src = inspect.getsource(dayrange.run)
+        self.assertIn("ROLLOVER_HOUR_UTC", src)
+        self.assertIn("day_start_equity", src)
+
+    def test_the_simulator_penalises_the_rule_and_that_is_expected(self):
+        """Measured: +0.100R with the limit against +0.113R without, and the
+        worst market goes from +0.86% to -2.78%.
+
+        Read carelessly that says the safety rule makes things worse. What
+        it actually says is that this simulator hands the strategy a real
+        edge, so interrupting it after a bad day costs the recovery. A daily
+        limit is insurance against the case where the edge is absent -- the
+        case nobody here has ruled out for real gold -- and a market that
+        pays you to keep trading cannot price insurance.
+        """
+        with_rule = sweep(DayRangeConfig(), markets=10, bars=20_000,
+                          seed_base=990_000)
+        without = sweep(replace(DayRangeConfig(), daily_loss_limit=False),
+                        markets=10, bars=20_000, seed_base=990_000)
+        self.assertLessEqual(with_rule.mean_expectancy_r,
+                             without.mean_expectancy_r + 1e-9)

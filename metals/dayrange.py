@@ -34,12 +34,12 @@ from __future__ import annotations
 import random
 import statistics
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from .candles import Candle, CandleSeries
 from .microscalp import EU_RETAIL_LEVERAGE_GOLD, STOP_OUT_LEVEL
-from .risk import (MAX_RISK_PER_TRADE_PCT, NEWS_BLACKOUT_MINUTES,
-                   WEEKEND_FLAT_HOUR_UTC)
+from .risk import (DAILY_LOSS_LIMIT_PCT, MAX_RISK_PER_TRADE_PCT,
+                   NEWS_BLACKOUT_MINUTES, RULES, WEEKEND_FLAT_HOUR_UTC)
 from .specs import get_spec
 
 # A day's range on gold is a real reference level -- the high and low that
@@ -144,6 +144,14 @@ class DayRangeConfig:
     # that actually trades was the last place the rules reached.
     weekend_flat: bool = True
 
+    # Rule R2: at -DAILY_LOSS_LIMIT_PCT on the day, no new entries until the
+    # next session. On by default, same reasoning as M5 -- it is a hard rule.
+    #
+    # Found by the coverage table below rather than by reading, which was the
+    # point of building it: R1, R4 and M5 each took a manual discovery, and
+    # this one did not.
+    daily_loss_limit: bool = True
+
     # --- the prediction ---
     # How close to an end of the day's range price must sit before the bot
     # will trade against it. 0.30 means the lower or upper third.
@@ -215,6 +223,58 @@ def in_news_blackout(ts: datetime,
     minutes_now = ts.hour * 60 + ts.minute
     return any(abs(minutes_now - (h * 60 + m)) <= NEWS_BLACKOUT_MINUTES
                for h, m in news_times_utc)
+
+
+# --------------------------------------------------------------------------
+# Which hard rules this engine implements, and which it does not
+# --------------------------------------------------------------------------
+# Three rules were found missing here one at a time, by reading: R1 (A1),
+# R4 (A7), M5 (A15). Each time the fix was to carry the rule across by hand,
+# and each time the *next* gap stayed invisible until somebody happened to
+# look. That is the actual defect, and it is what this table fixes.
+#
+# Every rule in metals.risk.RULES must appear below with a status. A test
+# fails when one does not, so a rule added to the risk layer cannot quietly
+# fail to reach the code that trades.
+#
+# "n/a" is a legitimate answer and requires a reason. A rule that does not
+# apply is different from a rule nobody thought about, and the difference has
+# to be written down or it is lost.
+RULE_COVERAGE: dict[str, tuple[str, str]] = {
+    "R1": ("implemented", "lots_for caps risk_pct at MAX_RISK_PER_TRADE_PCT"),
+    "R2": ("implemented", "daily loss limit stops new entries for the day"),
+    "R3": ("n/a", "reward/risk follows from take_fraction and stop_fraction, "
+                  "which are swept rather than fixed at 1:2. A hard 1:2 floor "
+                  "would delete the strategy's main dial."),
+    "R4": ("implemented", "in_news_blackout refuses entries around releases"),
+    "R5": ("implemented", "rollover is handled; the Friday late session is "
+                          "covered by M5 below"),
+    "R6": ("n/a", "size never increases after a loss by construction: it is "
+                  "either a constant lot or derived from equity, which falls. "
+                  "There is no path that scales up on a loser."),
+    "R6b": ("implemented", "max_positions, default 1"),
+    "R7": ("implemented", "every trade carries stop_loss from the moment it "
+                          "is opened; there is no unprotected path"),
+    "R8": ("implemented", "lots_for takes the stop distance as input, so size "
+                          "follows the stop and never the reverse"),
+    "M1": ("implemented", "min_range_atr refuses ranges narrower than the ATR "
+                          "multiple"),
+    "M2": ("n/a", "the stop is a fraction of the predicted move, not a level "
+                  "with a buffer. There is no structural level here to sit "
+                  "beyond."),
+    "M3": ("implemented", "spread_usd_oz is charged with slippage on entry"),
+    "M4": ("n/a", "this engine trades one symbol. The shared gold/silver "
+                  "budget belongs to the layer that runs both, not here."),
+    "M5": ("implemented", "past_weekend_flat closes and blocks from Friday"),
+    "M6": ("n/a", "stops are derived from the predicted move, so they land "
+                  "where the arithmetic puts them rather than on a chosen "
+                  "level that could be a round number."),
+}
+
+
+def uncovered_rules() -> list[str]:
+    """Rules in the risk layer with no entry above. Should always be empty."""
+    return [key for key in RULES if key not in RULE_COVERAGE]
 
 
 def past_weekend_flat(ts: datetime) -> bool:
@@ -355,6 +415,10 @@ class Result:
     skipped_no_margin: int = 0
     skipped_stop_too_wide: int = 0
     partials_taken: int = 0
+    # Bars on which R2 held new entries back. Counted rather than
+    # silent, because 'the strategy made 4%' means something
+    # different when it also spent a third of the run switched off.
+    days_stopped_out_of_risk: int = 0
     # Trades where the position could not be split and the EA
     # therefore closed in full at the first target. On a
     # minimum-lot account this is every trade.
@@ -415,8 +479,19 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                  peak_equity=equity, trough_equity=equity)
     open_trades: list[Trade] = []
     last_rollover: date | None = None
+    # R2 bookkeeping. The trading day is bounded by the broker rollover, not
+    # by midnight UTC -- otherwise the limit would reset in the middle of the
+    # New York session, which is where the losses that trigger it happen.
+    day_start_equity = equity
+    current_day: date | None = None
 
     for i, bar in enumerate(candles):
+        trading_day = (bar.ts.date() if bar.ts.hour < ROLLOVER_HOUR_UTC
+                       else bar.ts.date() + timedelta(days=1))
+        if current_day is None or trading_day != current_day:
+            current_day = trading_day
+            day_start_equity = equity
+
         # Overnight financing, charged before anything else this bar. A
         # position that is still open when the broker rolls the day pays for
         # the privilege, and for long gold that is not a rounding error.
@@ -556,7 +631,15 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                 equity = 0.0
                 break
 
+        day_loss_pct = ((day_start_equity - equity) / day_start_equity * 100.0
+                        if day_start_equity > 0 else 0.0)
+        daily_stop = (cfg.daily_loss_limit
+                      and day_loss_pct >= DAILY_LOSS_LIMIT_PCT)
+        if daily_stop:
+            res.days_stopped_out_of_risk += 1
+
         if (len(open_trades) < cfg.max_positions and i < len(candles) - 1
+                and not daily_stop
                 and not (cfg.weekend_flat and past_weekend_flat(bar.ts))):
             p = predict(candles, i, cfg)
             if p.direction != "none":

@@ -157,6 +157,13 @@ class Session:
     # that does not say which cost model produced a row cannot be compared
     # across the change.
     slippage_fraction: float = 0.0
+    # Whether rule R2 (-3% daily) was in force. Recorded per session for the
+    # same reason slippage is: it changed mid-chain, and on a small account
+    # it changes the result completely -- a median session goes from +8.19%
+    # to -2.73% because the forced 1-3% risk per trade hits a -3% day limit
+    # after one or two losers. A ledger that does not say which rule set
+    # produced a row cannot be compared across the change.
+    daily_loss_limit: bool = False
     risk_pct_min: float = 0.0
     risk_pct_max: float = 0.0
 
@@ -382,6 +389,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         gold_price=gold_price, day_high=day_high, day_low=day_low,
         price_source=price_source, spread_usd_oz=base.spread_usd_oz,
         slippage_fraction=base.slippage_fraction,
+        daily_loss_limit=session_cfg.daily_loss_limit,
         start_equity_eur=round(equity_eur, 2),
         end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
         lot=MIN_LOT,
@@ -1183,6 +1191,7 @@ def verify(start_equity_eur: float = 400.0,
             lot=MIN_LOT, risk_pct=None,
             spread_usd_oz=row.get("spread_usd_oz") or base.spread_usd_oz,
             slippage_fraction=row.get("slippage_fraction", 0.0),
+            daily_loss_limit=row.get("daily_loss_limit", False),
             news_times_utc=tuple(tuple(x)
                                  for x in row.get("news_times_utc", [])))
         res = run(cfg, series=series, seed=seed)

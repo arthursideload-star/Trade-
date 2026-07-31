@@ -778,15 +778,33 @@ class TestTheEndOfDayExit(LedgerFixture):
 class TestTheDistribution(LedgerFixture):
     """The defence against reading a trend into a winning streak."""
 
-    def test_three_green_days_are_unremarkable_at_this_win_rate(self):
+    def test_the_streak_probability_follows_the_measured_rate(self):
+        """Originally this asserted a majority of days were green, because
+        they were: 78% before rule R2 was enforced. With R2 on a 400-euro
+        account the rate is 40%, since a forced 1-3% risk per trade meets a
+        -3% daily limit after one or two losers.
+
+        Lowering the threshold to keep the test passing would have hidden
+        that. What the test is actually for is the arithmetic -- the streak
+        probability must follow whatever the measured rate is -- and the
+        rate itself belongs in the report, not in an assertion.
+        """
         d = paper.distribution(**{k: v for k, v in TODAY.items()
                                   if k != "price_source"}, days=30)
-        self.assertGreater(d.share_positive, 0.5)
         self.assertAlmostEqual(d.streak_probability_3,
                                d.share_positive ** 3, places=9)
-        self.assertGreater(d.streak_probability_3, 0.1,
-                           "if a streak of three were rare, the chain would "
-                           "be evidence -- it is not")
+        self.assertGreaterEqual(d.share_positive, 0.0)
+        self.assertLessEqual(d.share_positive, 1.0)
+
+    def test_a_high_daily_win_rate_makes_a_streak_meaningless(self):
+        """The point the original test was making, stated so it does not
+        depend on today's rule set."""
+        high = paper.Distribution(returns_pct=[1.0] * 8 + [-1.0] * 2,
+                                  equity_eur=400)
+        self.assertGreater(high.streak_probability_3, 0.5)
+        low = paper.Distribution(returns_pct=[1.0] * 3 + [-1.0] * 7,
+                                 equity_eur=400)
+        self.assertLess(low.streak_probability_3, 0.05)
 
     def test_it_reports_the_spread_not_only_the_middle(self):
         d = paper.distribution(**{k: v for k, v in TODAY.items()
