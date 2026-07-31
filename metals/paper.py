@@ -900,7 +900,12 @@ def provenance() -> Provenance:
         price = row["gold_price"]
         pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
         assumed = abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02
-        key = ("assumed",) if assumed else ("observed", round(pct, 2))
+        # Grouped by the observed high/low, not by the derived percentage --
+        # see day_key. The percentage split one real day into two rows and
+        # merged three assumed ones into a single row, so distinct_observed_days
+        # reported four when the true count was three.
+        key = (("assumed",) if assumed
+               else ("observed",) + day_key(row["day_high"], row["day_low"]))
         g = groups.setdefault(key, {"pct": [], "sessions": 0, "trades": 0,
                                     "pnl": 0.0, "r": [], "ret": [],
                                     "sources": set()})
@@ -971,19 +976,38 @@ def observed_chain(start_eur: float = 400.0) -> ObservedChain:
                          end_equity_eur=equity, start_equity_eur=start_eur)
 
 
-def day_picture_counts() -> dict[str, int]:
-    """How many sessions each distinct picture of a day has carried.
+def day_key(day_high: float, day_low: float) -> tuple[float, float]:
+    """What identifies one observed trading day.
+
+    The high/low pair, not the range as a percentage of price. Keying on the
+    percentage was wrong in both directions and the ledger shows both:
+
+    * The 30 July high/low was looked up at three different spot quotes, so
+      the same day landed in buckets "2.22" and "2.23" -- one observation of
+      20 sessions read as two of 13 and 7, and a fresh quote against that
+      same range would have produced "2.26" and slipped past the guard
+      entirely.
+    * The assumed range was applied at three different price levels, which
+      the percentage merged into one bucket of 21.
+
+    The high and low are the observation. The percentage is a derived
+    quantity that happens to move when the denominator does.
+    """
+    return (round(day_high, 2), round(day_low, 2))
+
+
+def day_picture_counts() -> dict[tuple[float, float], int]:
+    """How many sessions each distinct observed day has carried.
 
     Used to refuse piling more sessions onto a day the chain already has
     plenty of. Repetition of one day looks like a growing sample and is not
     one -- which is exactly how this chain came to rest on three observed
-    days across fifty-three sessions.
+    days across fifty-odd sessions.
     """
-    counts: dict[str, int] = {}
+    counts: dict[tuple[float, float], int] = {}
     for row in load_ledger():
-        price = row["gold_price"]
-        pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
-        counts[f"{pct:.2f}"] = counts.get(f"{pct:.2f}", 0) + 1
+        key = day_key(row["day_high"], row["day_low"])
+        counts[key] = counts.get(key, 0) + 1
     return counts
 
 
@@ -997,12 +1021,12 @@ def oversampled_warning(gold_price: float, day_high: float,
     if gold_price <= 0:
         return None
     pct = (day_high - day_low) / gold_price * 100
-    n = day_picture_counts().get(f"{pct:.2f}", 0)
+    n = day_picture_counts().get(day_key(day_high, day_low), 0)
     if n < OVERSAMPLED_AT:
         return None
-    return (f"Dieses Tagesbild ({pct:.2f} % Spanne) traegt schon {n} "
-            f"Sitzungen. Eine weitere vergroessert die Schieflage, statt "
-            f"etwas zu messen.")
+    return (f"Dieser Handelstag ({day_low:,.2f}-{day_high:,.2f}, "
+            f"{pct:.2f} % Spanne) traegt schon {n} Sitzungen. Eine weitere "
+            f"vergroessert die Schieflage, statt etwas zu messen.")
 
 
 def render_provenance() -> str:
@@ -1057,9 +1081,9 @@ def render_provenance() -> str:
     heavy = {k: v for k, v in counts.items() if v >= OVERSAMPLED_AT}
     if heavy:
         lines.append("")
-        lines.append("  Ueberrepraesentierte Tagesbilder:")
-        for pct, n in sorted(heavy.items(), key=lambda kv: -kv[1]):
-            lines.append(f"    {float(pct):.2f} % Spanne: {n} Sitzungen")
+        lines.append("  Ueberrepraesentierte Handelstage:")
+        for (high, low), n in sorted(heavy.items(), key=lambda kv: -kv[1]):
+            lines.append(f"    {low:,.2f}-{high:,.2f}: {n} Sitzungen")
         lines.append("    Weitere Sitzungen darauf zaehlen als Wiederholung,")
         lines.append("    nicht als Stichprobe.")
     return "\n".join(lines)

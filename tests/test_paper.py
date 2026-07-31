@@ -1586,3 +1586,62 @@ class TestTheVolatilityFloorVerdict(unittest.TestCase):
         text = paper.render_volatility_dependence(d)
         self.assertIn("Buckel", text)
         self.assertIn("ruhigstes Drittel", text)
+
+
+class TestTheDayKeyIdentifiesTheObservation(LedgerFixture):
+    """What counts as "the same trading day".
+
+    The guard and the provenance report both keyed on the range as a
+    percentage of price, and the ledger shows that was wrong in both
+    directions: one real day looked up at three spot quotes split into two
+    buckets, and one assumed range applied at three price levels merged into
+    one. The published count of observed days was 4 when it was 3.
+    """
+
+    def _row(self, index, price, high, low):
+        return Session(index=index, timestamp=0.0, date_utc="2026-07-31 12:00",
+                       gold_price=price, day_high=high, day_low=low,
+                       price_source="t", start_equity_eur=400.0,
+                       end_equity_eur=400.0, lot=MIN_LOT, forced_risk_pct=1.0,
+                       trades=1)
+
+    def test_the_same_range_at_different_quotes_is_one_day(self):
+        for i, price in enumerate((4_114.79, 4_102.83, 4_114.23)):
+            paper.append(self._row(i, price, 4_120.16, 4_028.77))
+        counts = paper.day_picture_counts()
+        self.assertEqual(len(counts), 1)
+        self.assertEqual(list(counts.values()), [3])
+
+    def test_different_ranges_at_the_same_percentage_are_different_days(self):
+        """Two genuinely different days can share a range percentage. The
+        percentage key called them one."""
+        paper.append(self._row(0, 4_100.0, 4_141.0, 4_059.0))
+        paper.append(self._row(1, 4_500.0, 4_545.0, 4_455.0))
+        self.assertEqual(len(paper.day_picture_counts()), 2)
+
+    def test_a_fresh_quote_against_a_used_range_cannot_evade_the_guard(self):
+        """The concrete escape hatch: a new spot price against 30 July's
+        high and low produced a new percentage bucket and walked past a
+        guard that had already refused that day twenty times."""
+        for i in range(paper.OVERSAMPLED_AT):
+            paper.append(self._row(i, 4_102.83, 4_120.16, 4_028.77))
+        self.assertIsNotNone(
+            paper.oversampled_warning(4_049.28, 4_120.16, 4_028.77))
+
+    def test_the_warning_names_the_day_rather_than_a_percentage(self):
+        for i in range(paper.OVERSAMPLED_AT):
+            paper.append(self._row(i, 4_102.83, 4_120.16, 4_028.77))
+        warn = paper.oversampled_warning(4_102.83, 4_120.16, 4_028.77)
+        self.assertIn("4,028.77", warn)
+        self.assertIn("4,120.16", warn)
+
+    def test_provenance_counts_the_observation_not_the_bucket(self):
+        for i, price in enumerate((4_114.79, 4_102.83, 4_114.23)):
+            paper.append(self._row(i, price, 4_120.16, 4_028.77))
+        paper.append(self._row(3, 4_100.0, 4_111.19, 4_069.83))
+        self.assertEqual(paper.provenance().distinct_observed_days, 2)
+
+    def test_rounding_is_to_the_cent_so_a_requote_does_not_split_a_day(self):
+        paper.append(self._row(0, 4_100.0, 4_120.164, 4_028.771))
+        paper.append(self._row(1, 4_100.0, 4_120.161, 4_028.774))
+        self.assertEqual(len(paper.day_picture_counts()), 1)

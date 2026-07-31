@@ -95,6 +95,37 @@ Entstehungsgeschichte dieser Kette: Sie kam auf 53 Sitzungen aus drei beobachtet
 **weil nichts Halt gesagt hat.** Wiederholung eines Tages lässt die Sitzungszahl wachsen
 und die Stichprobe nicht.
 
+### Nachtrag: die Zählung selbst war falsch
+
+Die Aufschlüsselung gruppierte nach der Tagesspanne **in Prozent des Kurses**. Das ist eine
+abgeleitete Größe, und sie war in beide Richtungen falsch:
+
+- Der 30. Juli wurde bei drei verschiedenen Spotkursen abgefragt (4.114,79 / 4.102,83 /
+  4.114,23). Dieselbe Beobachtung landete dadurch in zwei Zeilen — „2,22 %" und „2,23 %" —
+  und **eine Beobachtung mit 20 Sitzungen las sich wie zwei mit 13 und 7**.
+- Umgekehrt wurde die angesetzte Spanne auf drei verschiedenen Kursniveaus angewandt und vom
+  Prozentschlüssel zu **einer** Zeile verschmolzen.
+
+Schlimmer noch: Ein frischer Spotkurs gegen dieselbe 30.-Juli-Spanne ergab den neuen
+Schlüssel „2,26 %" und wäre am Übersampel-Wächter **vorbeigelaufen**, der genau diesen Tag
+schon zwanzigmal abgelehnt hatte.
+
+Der Schlüssel ist jetzt das **Hoch/Tief-Paar** — das ist die Beobachtung. Der Prozentwert ist
+eine Zahl, die sich mitbewegt, wenn der Nenner sich bewegt.
+
+**Korrigierte Zählung: drei beobachtete Handelstage**, nicht vier. Ich hatte nach Sitzung 54
+„vier" gemeldet; der vierte existierte nur als Aufspaltungsartefakt.
+
+| Tagesbild | Sitzungen | Gewinn | Anteil |
+|---|---:|---:|---:|
+| ANGESETZT 1,57 % | 21 | +779,33 € | 56,2 % |
+| beobachtet 30.07. (4.028,77–4.120,16) | 20 | +514,03 € | 37,1 % |
+| beobachtet 31.07. (4.069,83–4.111,19) | 12 | +91,77 € | 6,6 % |
+| beobachtet 31.07. (4.021,07–4.111,81) | 1 | +1,76 € | 0,1 % |
+
+An der Kernaussage ändert das nichts — sie wird schärfer: **93 % des Gewinns stammen aus
+einer angesetzten Spanne und einem einzigen echten Handelstag.**
+
 ## Was das heißt — und was nicht
 
 **Es heißt:** Die Maschinerie funktioniert. Die Regeln lesen tatsächlich Struktur aus dem
