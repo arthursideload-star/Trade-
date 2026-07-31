@@ -634,6 +634,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
 
+    if args.replay:
+        from .paper import render_replay, replay_chain
+        print(render_replay(replay_chain(runs=args.runs)))
+        return 0
     if args.project:
         from .paper import project
         print(project(days=args.days, equity_eur=args.equity))
@@ -935,6 +939,11 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--evidence", action="store_true",
                     help="was die gesammelten Trades belegen — mit "
                          "Unsicherheitsband und der noetigen Stichprobe")
+    pa.add_argument("--replay", action="store_true",
+                    help="die Kette auf anderen Maerkten nachspielen — wie "
+                         "viel der Schlagzeile ist die Zufallsfolge?")
+    pa.add_argument("--runs", type=int, default=25,
+                    help="wie oft nachgespielt wird")
     pa.add_argument("--project", action="store_true",
                     help="Hochrechnung ueber mehrere Handelstage, je "
                          "beobachteter Tagessorte")

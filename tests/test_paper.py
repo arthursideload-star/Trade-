@@ -910,6 +910,65 @@ class TestObservedRangesAndProjection(LedgerFixture):
             paper.append(s)
 
 
+class TestReplayingTheChain(LedgerFixture):
+    """How much of the recorded result is the rules and how much the draw.
+
+    The chain is one path. Re-running it on markets it never saw, with every
+    session keeping its own calibration and order, isolates that question --
+    and the answer turned out to matter: the recorded run sits at the 92nd
+    percentile, so the headline owes most of its size to the sequence.
+    """
+
+    def _session(self, i, start, end):
+        return Session(index=i, timestamp=0.0, date_utc="2026-07-30 12:00",
+                       gold_price=4_100.0, day_high=4_141.0, day_low=4_100.0,
+                       price_source="t", start_equity_eur=start,
+                       end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=5.0,
+                       trades=4, wins=2, losses=2, expectancy_r=0.1)
+
+    def test_an_empty_ledger_replays_to_nothing_rather_than_crashing(self):
+        r = paper.replay_chain(runs=2)
+        self.assertEqual(r.finals_eur, [])
+        self.assertIn("Noch keine", paper.render_replay(r))
+
+    def test_every_replay_starts_where_the_real_chain_started(self):
+        paper.append(self._session(0, 400.0, 450.0))
+        paper.append(self._session(1, 450.0, 500.0))
+        r = paper.replay_chain(runs=3)
+        self.assertEqual(r.start_eur, 400.0)
+        self.assertEqual(r.actual_eur, 500.0)
+        self.assertEqual(len(r.finals_eur), 3)
+
+    def test_replays_differ_from_each_other(self):
+        """If they did not, the seeds would not be doing their job and the
+        whole comparison would be one run counted many times."""
+        paper.append(self._session(0, 400.0, 450.0))
+        r = paper.replay_chain(runs=4)
+        self.assertGreater(len(set(r.finals_eur)), 1)
+
+    def test_the_percentile_places_the_actual_run_among_them(self):
+        r = paper.Replay(finals_eur=[100.0, 200.0, 300.0, 400.0],
+                         actual_eur=350.0, start_eur=100.0)
+        self.assertAlmostEqual(r.percentile_of_actual, 75.0)
+
+    def test_a_lucky_run_is_called_lucky(self):
+        r = paper.Replay(finals_eur=[float(x) for x in range(100)],
+                         actual_eur=95.0, start_eur=10.0)
+        text = paper.render_replay(r)
+        self.assertIn("oberen Fuenftel", text)
+        self.assertIn("Marktfolge", text)
+
+    def test_an_unlucky_run_is_called_that_too(self):
+        r = paper.Replay(finals_eur=[float(x) for x in range(100)],
+                         actual_eur=5.0, start_eur=1.0)
+        self.assertIn("unteren Fuenftel", paper.render_replay(r))
+
+    def test_it_counts_replays_that_lost_money(self):
+        r = paper.Replay(finals_eur=[50.0, 150.0, 200.0, 300.0],
+                         actual_eur=200.0, start_eur=100.0)
+        self.assertAlmostEqual(r.share_losing, 0.25)
+
+
 class TestVolatilityDependence(LedgerFixture):
     """The chain's single biggest lever, measured instead of caveated.
 

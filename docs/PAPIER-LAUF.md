@@ -163,6 +163,44 @@ keine Nebensache, sondern der größte einzelne Hebel auf das Ergebnis.** Die Si
 bis 39 liefen auf einem ruhigen Tag (1,01 %) und gingen alle drei ins Minus — dieselbe
 Strategie, dieselben Regeln, nur ein anderer Tag.
 
+## Die aufgezeichnete Kette ist eine glückliche
+
+Die Kette ist **ein** Pfad. Wie viel davon sind die Regeln, wie viel die konkrete
+Marktfolge? Das lässt sich direkt messen: dieselben Sitzungen, dieselbe Kalibrierung,
+dieselbe Reihenfolge — nur andere Märkte.
+
+```bash
+python -m metals paper --replay --runs 25
+```
+
+Nach 46 Sitzungen, 25-mal nachgespielt:
+
+| | |
+|---|---:|
+| **Tatsächlich** | **1.666,34 €** |
+| Median der Wiederholungen | **1.293,76 €** |
+| schlechteste | 575,24 € |
+| beste | 1.888,10 € |
+| Läufe unter dem Startkapital | 0 % |
+
+**Der aufgezeichnete Lauf liegt auf dem 92. Perzentil.** Er gehört also zu den besten 8 %
+dessen, was diese Regeln an diesen Tagen produzieren. Der typische Ausgang wäre rund
+**1.294 €** gewesen, der schlechteste **575 €** — bei identischen Regeln, identischen Tagen,
+identischer Reihenfolge.
+
+Das ist keine Korrektur nach unten aus Bescheidenheit, sondern eine Messung: Wer die
+Kurve ansieht, sieht einen überdurchschnittlichen Zufallspfad und hält ihn für das
+Verfahren. **Rund ein Drittel des Endstands ist Glück in der Reihenfolge.**
+
+Warum das gerade beim Zinseszins so stark durchschlägt: Ein schlechter Tag früh verkleinert
+jede Position danach. Zwei Ketten mit derselben Trefferquote können deshalb weit
+auseinanderlaufen, je nachdem *wann* die Verluste kamen. Genau das misst dieser Test und
+eine Verteilung unabhängiger Einzeltage nicht.
+
+Die letzte Zeile gehört auch dazu: **kein einziger von 25 Läufen endete unter 400 €.** Auf
+diesem Simulator verliert die Strategie praktisch nie — was erneut mehr über den Simulator
+sagt als über die Strategie.
+
 ## Was eine Siegesserie wert ist: nichts
 
 Nach drei Sitzungen stand die Kette bei 400 → 544 €, alle drei im Plus. Bevor daraus

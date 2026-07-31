@@ -560,6 +560,105 @@ def project(days: int = 21, equity_eur: float | None = None,
     return "\n".join(lines)
 
 
+@dataclass
+class Replay:
+    """The same chain re-run on different markets."""
+
+    finals_eur: list[float]
+    actual_eur: float
+    start_eur: float
+
+    @property
+    def median_eur(self) -> float:
+        return statistics.median(self.finals_eur)
+
+    @property
+    def percentile_of_actual(self) -> float:
+        """Where the chain that happened sits among the ones that could have.
+
+        Near 50 means the recorded run was ordinary. Near 100 means the
+        headline owes most of its size to the particular sequence of
+        markets, not to the rules.
+        """
+        below = sum(1 for f in self.finals_eur if f < self.actual_eur)
+        return below / len(self.finals_eur) * 100.0
+
+    @property
+    def share_losing(self) -> float:
+        return (sum(1 for f in self.finals_eur if f < self.start_eur)
+                / len(self.finals_eur))
+
+
+def replay_chain(runs: int = 25, seed_offset: int = 2_000_000) -> Replay:
+    """Re-run the recorded chain on markets it never saw.
+
+    Every session keeps its own calibration -- same price, same day range,
+    same spread, same order -- and only the market seed changes. So this
+    isolates one question: how much of the recorded result is the rules, and
+    how much is the particular draw?
+
+    Compounding is preserved, which is the point. Independent single days
+    already have a distribution; what a chain adds is that a bad day early
+    shrinks every position after it.
+    """
+    ledger = load_ledger()
+    if not ledger:
+        return Replay(finals_eur=[], actual_eur=0.0, start_eur=0.0)
+
+    start = ledger[0]["start_equity_eur"]
+    base = DayRangeConfig()
+    finals: list[float] = []
+
+    for run_index in range(runs):
+        equity = start
+        for i, entry in enumerate(ledger):
+            s = run_session(
+                gold_price=entry["gold_price"],
+                day_high=entry["day_high"],
+                day_low=entry["day_low"],
+                price_source="replay",
+                start_equity_eur=equity,
+                spread_usd_oz=entry.get("spread_usd_oz", base.spread_usd_oz),
+                seed=seed_offset + run_index * 100_000 + i * 97)
+            equity = s.end_equity_eur
+        finals.append(equity)
+
+    return Replay(finals_eur=finals, actual_eur=ledger[-1]["end_equity_eur"],
+                  start_eur=start)
+
+
+def render_replay(r: Replay) -> str:
+    if not r.finals_eur:
+        return "Noch keine Kette zum Nachspielen."
+
+    ordered = sorted(r.finals_eur)
+    n = len(ordered)
+    lines = [f"KETTE {n}x NACHGESPIELT", "=" * 68]
+    lines.append(f"  Gleiche Sitzungen, gleiche Kalibrierung, gleiche")
+    lines.append(f"  Reihenfolge — nur andere Maerkte.")
+    lines.append("")
+    lines.append(f"  Tatsaechlich    {r.actual_eur:>10,.2f} €")
+    lines.append(f"  Median          {r.median_eur:>10,.2f} €")
+    lines.append(f"  Schlechteste    {ordered[0]:>10,.2f} €")
+    lines.append(f"  Beste           {ordered[-1]:>10,.2f} €")
+    lines.append("")
+    lines.append(f"  Der tatsaechliche Lauf liegt auf dem "
+                 f"{r.percentile_of_actual:.0f}. Perzentil.")
+    if r.percentile_of_actual >= 80:
+        lines.append("  Also im oberen Fuenftel: ein guter Teil der Schlagzeile")
+        lines.append("  ist die konkrete Marktfolge, nicht die Regeln.")
+    elif r.percentile_of_actual <= 20:
+        lines.append("  Also im unteren Fuenftel: der aufgezeichnete Lauf war")
+        lines.append("  eher ungluecklich als glaenzend.")
+    else:
+        lines.append("  Also unauffaellig — die Schlagzeile ist typisch fuer")
+        lines.append("  das, was diese Regeln auf diesen Tagen produzieren.")
+    lines.append("")
+    lines.append(f"  Laeufe unter dem Startkapital: "
+                 f"{r.share_losing * 100:.0f} %")
+    return "\n".join(lines)
+
+
 def render_volatility_dependence(v: VolatilityDependence) -> str:
     lines = ["ABHAENGIGKEIT VON DER TAGESSPANNE", "=" * 68]
     lines.append(f"  {'Spanne':>8} {'Median':>9} {'Mittel':>9} {'Tage im Plus':>14}")
