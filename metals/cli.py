@@ -623,6 +623,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
     """One compounding paper session on a market calibrated to today's gold."""
     from .paper import append, current_equity_eur, render, run_session, summarise
 
+    if args.table:
+        from .paper import render_blocks
+        print(render_blocks(size=args.block))
+        return 0
     if args.summary:
         print(summarise())
         return 0
@@ -907,6 +911,10 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--evidence", action="store_true",
                     help="was die gesammelten Trades belegen — mit "
                          "Unsicherheitsband und der noetigen Stichprobe")
+    pa.add_argument("--table", action="store_true",
+                    help="Ueberblick der Kette in Bloecken")
+    pa.add_argument("--block", type=int, default=5,
+                    help="wie viele Sitzungen ein Block umfasst")
     pa.add_argument("--distribution", action="store_true",
                     help="viele unabhaengige Handelstage statt der Kette — "
                          "sagt, ob eine Siegesserie etwas bedeutet")

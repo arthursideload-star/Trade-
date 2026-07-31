@@ -1,5 +1,8 @@
 # Papier-Lauf: 400 € Startkapital, fortlaufend
 
+> **Das Ergebnis an der vorher festgelegten Stichprobe steht in
+> [URTEIL.md](./URTEIL.md).** Diese Seite ist die Methodik dahinter.
+
 Eine Kette von Sitzungen auf einem Konto, das mitläuft. Jede Sitzung ist ein Handelstag.
 Das Konto startet bei dem Stand, mit dem die vorige Sitzung geendet hat — Gewinn wie
 Verlust werden mitgenommen.

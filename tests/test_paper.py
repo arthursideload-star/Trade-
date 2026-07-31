@@ -816,6 +816,62 @@ class TestTheDistribution(LedgerFixture):
         self.assertAlmostEqual(d.implied_days_to_double, 1.0)
 
 
+class TestTheBlockTable(LedgerFixture):
+    """The five-session overview, which is read far more often than the
+    ledger and therefore has more room to mislead."""
+
+    def _fill(self, ends):
+        start = 400.0
+        for i, end in enumerate(ends):
+            paper.append(Session(index=i, timestamp=0.0, date_utc="x",
+                                 gold_price=4_100.0, day_high=4_150.0,
+                                 day_low=4_050.0, price_source="t",
+                                 start_equity_eur=start, end_equity_eur=end,
+                                 lot=MIN_LOT, forced_risk_pct=5.0,
+                                 trades=4, wins=2, losses=2,
+                                 expectancy_r=0.1))
+            start = end
+
+    def test_blocks_are_contiguous_and_cover_everything(self):
+        self._fill([410, 420, 430, 440, 450, 460, 470])
+        bs = paper.blocks(size=5)
+        self.assertEqual([(b.first, b.last) for b in bs], [(1, 5), (6, 7)])
+        self.assertEqual(sum(b.trades for b in bs), 7 * 4)
+
+    def test_a_block_carries_the_equity_across_its_own_span(self):
+        self._fill([410, 420, 430, 440, 450])
+        b = paper.blocks(size=5)[0]
+        self.assertEqual(b.start_equity_eur, 400.0)
+        self.assertEqual(b.end_equity_eur, 450.0)
+        self.assertAlmostEqual(b.pnl_eur, 50.0)
+
+    def test_a_losing_session_inside_a_winning_block_is_still_counted(self):
+        """Grouping hides single-session noise on purpose. It must not also
+        hide a bad session -- otherwise the table reads smoother than the
+        chain actually was."""
+        self._fill([500, 300, 600, 700, 800])
+        b = paper.blocks(size=5)[0]
+        self.assertGreater(b.return_pct, 0)
+        self.assertEqual(b.sessions_up, 4)
+
+    def test_the_total_row_matches_the_chain_ends(self):
+        self._fill([410, 420, 430, 440, 450, 460])
+        bs = paper.blocks(size=5)
+        self.assertEqual(bs[0].start_equity_eur, 400.0)
+        self.assertEqual(bs[-1].end_equity_eur, 460.0)
+
+    def test_the_table_says_a_session_is_a_day_not_an_hour(self):
+        """The misreading that actually happened, pinned so it cannot
+        return: the chain was read as hours of trading."""
+        self._fill([410, 420])
+        text = paper.render_blocks(size=5)
+        self.assertIn("HANDELSTAG", text)
+        self.assertIn("URTEIL", text)
+
+    def test_it_says_so_when_there_is_nothing_yet(self):
+        self.assertIn("Noch keine", paper.render_blocks())
+
+
 class TestTheSummary(LedgerFixture):
     def test_it_says_so_when_there_is_nothing_yet(self):
         self.assertIn("Noch keine", paper.summarise())
@@ -915,3 +971,55 @@ class TestTheDrawdownIsNotUnderstated(LedgerFixture):
         s = run_session(**TODAY)
         if s.intraday_drawdown_pct > 0:
             self.assertIn("Unterwegs", paper.render(s))
+
+
+class TestTheVerdictDocumentStaysTrue(unittest.TestCase):
+    """docs/URTEIL.md is the one page someone might read on its own.
+
+    It reports a positive result, which is exactly when the caveats are
+    most likely to get trimmed later. These tests hold the five of them in
+    place and check the headline figures against the code rather than
+    against the last time someone typed them.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import pathlib
+        cls.text = pathlib.Path("docs/URTEIL.md").read_text(encoding="utf-8")
+
+    def test_it_names_all_five_reasons_the_result_is_not_transferable(self):
+        for phrase in ("Simulator enthält", "36-mal hingesehen",
+                       "volatilen Tag", "Kostenmodelle", "EA steigt anders"):
+            self.assertIn(phrase, self.text,
+                          f"the caveat about {phrase!r} has gone missing")
+
+    def test_it_admits_the_preregistration_was_not_clean(self):
+        """The most tempting thing to quietly drop: the sample size was
+        fixed after 155 trades were already visible."""
+        self.assertIn("keine saubere Vorregistrierung", self.text)
+        self.assertIn("155", self.text)
+
+    def test_it_does_not_claim_the_strategy_earns_on_real_gold(self):
+        lowered = self.text.lower()
+        for phrase in ("verdient auf echtem gold", "beweist, dass",
+                       "garantiert", "risikofrei"):
+            self.assertNotIn(phrase, lowered)
+
+    def test_the_shuffle_range_it_quotes_matches_the_training_log(self):
+        from metals.train import load_log
+        log = load_log()
+        if not log:
+            self.skipTest("no training log")
+        survives = [max(0.0, e["shuffle_random_r"] / e["shuffle_real_r"])
+                    for e in log if e["shuffle_real_r"] > 0]
+        if survives:
+            self.assertLessEqual(max(survives), 0.30,
+                                 "the document claims 0-26% survives "
+                                 "shuffling; the log now says otherwise")
+
+    def test_it_points_at_real_data_as_the_next_step_not_more_sessions(self):
+        self.assertIn("--file XAU_5m_data.csv", self.text)
+        self.assertIn("Nicht mehr Sitzungen auf dem Simulator", self.text)
+
+    def test_it_states_the_intraday_drawdown_rather_than_the_flattering_one(self):
+        self.assertIn("23,1", self.text)

@@ -720,9 +720,13 @@ def evidence() -> str:
             lines.append(f"  lief, laesst den Nachweis fast fertig aussehen.")
             lines.append(f"  Fuer einen nuechternen Vorteil von "
                          f"{REFERENCE_EDGE_R:+.2f}R waeren es")
-            lines.append(f"  rund {modest:,} Trades, also etwa "
-                         f"{(modest - len(rs)) / per_session:.0f} weitere "
-                         f"Sitzungen.")
+            remaining = max(0.0, (modest - len(rs)) / per_session)
+            if remaining <= 0:
+                lines.append(f"  rund {modest:,} Trades — und die sind "
+                             f"erreicht.")
+            else:
+                lines.append(f"  rund {modest:,} Trades, also etwa "
+                             f"{remaining:.0f} weitere Sitzungen.")
     if len(rs) < MIN_TRADES_FOR_A_BREAKDOWN:
         lines.append("")
         lines.append(f"  Unter {MIN_TRADES_FOR_A_BREAKDOWN} Trades wird hier")
@@ -806,6 +810,110 @@ def render(s: Session) -> str:
         lines.append("  Trades gewonnen haben, nicht wie viele.")
     if s.stopped_out:
         lines.append("  BROKER-STOP-OUT in dieser Sitzung.")
+    return "\n".join(lines)
+
+
+@dataclass
+class Block:
+    """A group of consecutive sessions, summarised."""
+
+    first: int                 # 1-based session number
+    last: int
+    start_equity_eur: float
+    end_equity_eur: float
+    trades: int
+    wins: int
+    losses: int
+    expectancy_r: float
+    mean_risk_pct: float
+    sessions_up: int
+
+    @property
+    def pnl_eur(self) -> float:
+        return self.end_equity_eur - self.start_equity_eur
+
+    @property
+    def return_pct(self) -> float:
+        if self.start_equity_eur <= 0:
+            return 0.0
+        return self.pnl_eur / self.start_equity_eur * 100.0
+
+    @property
+    def win_rate(self) -> float:
+        return self.wins / self.trades if self.trades else 0.0
+
+
+def blocks(size: int = 5) -> list[Block]:
+    """The chain in groups, so a trend is visible without reading 36 lines.
+
+    Grouping hides single-session noise, which is the point -- and it also
+    hides single-session disasters, which is why the block still carries the
+    number of losing sessions inside it.
+    """
+    ledger = load_ledger()
+    out: list[Block] = []
+    for start in range(0, len(ledger), size):
+        group = ledger[start:start + size]
+        trades = sum(e["trades"] for e in group)
+        traded = [e for e in group if e["trades"]]
+        out.append(Block(
+            first=start + 1,
+            last=start + len(group),
+            start_equity_eur=group[0]["start_equity_eur"],
+            end_equity_eur=group[-1]["end_equity_eur"],
+            trades=trades,
+            wins=sum(e["wins"] for e in group),
+            losses=sum(e["losses"] for e in group),
+            expectancy_r=(statistics.fmean([e["expectancy_r"] for e in traded])
+                          if traded else 0.0),
+            mean_risk_pct=(statistics.fmean([e["forced_risk_pct"]
+                                             for e in traded])
+                           if traded else 0.0),
+            sessions_up=sum(1 for e in group
+                            if e["end_equity_eur"] > e["start_equity_eur"]),
+        ))
+    return out
+
+
+def render_blocks(size: int = 5) -> str:
+    bs = blocks(size)
+    if not bs:
+        return "Noch keine Papier-Sitzungen."
+
+    lines = [f"UEBERBLICK — {bs[-1].last} SITZUNGEN IN {size}er-SCHRITTEN",
+             "=" * 78]
+    lines.append(f"  {'Sitzungen':>10} {'Konto von':>11} {'auf':>10} "
+                 f"{'Ergebnis':>10} {'%':>8} {'Trades':>7} {'Treffer':>8} "
+                 f"{'Erwart.':>8}")
+    lines.append("  " + "-" * 74)
+    for b in bs:
+        span = f"{b.first}-{b.last}" if b.last > b.first else f"{b.first}"
+        lines.append(
+            f"  {span:>10} {b.start_equity_eur:>11,.2f} "
+            f"{b.end_equity_eur:>10,.2f} {b.pnl_eur:>+10,.2f} "
+            f"{b.return_pct:>+7.1f}% {b.trades:>7} "
+            f"{b.win_rate * 100:>7.1f}% {b.expectancy_r:>+7.3f}R")
+    lines.append("  " + "-" * 74)
+    total_trades = sum(b.trades for b in bs)
+    total_wins = sum(b.wins for b in bs)
+    first, last = bs[0], bs[-1]
+    lines.append(
+        f"  {'gesamt':>10} {first.start_equity_eur:>11,.2f} "
+        f"{last.end_equity_eur:>10,.2f} "
+        f"{last.end_equity_eur - first.start_equity_eur:>+10,.2f} "
+        f"{(last.end_equity_eur / first.start_equity_eur - 1) * 100:>+7.1f}% "
+        f"{total_trades:>7} {total_wins / total_trades * 100:>7.1f}%")
+    lines.append("")
+    down = sum(b.last - b.first + 1 - b.sessions_up for b in bs)
+    lines.append(f"  Verlustsitzungen: {down} von {bs[-1].last}")
+    lines.append(f"  Risiko je Trade: {bs[0].mean_risk_pct:.1f} % im ersten "
+                 f"Block, {bs[-1].mean_risk_pct:.1f} % im letzten")
+    lines.append("  (faellt, weil 0,01 Lot bei wachsendem Konto ein kleinerer")
+    lines.append("   Anteil davon ist — nicht weil der Bot vorsichtiger wird)")
+    lines.append("")
+    lines.append("  ACHTUNG: Eine Sitzung ist ein simulierter HANDELSTAG, keine")
+    lines.append("  Stunde. Und der Markt ist erzeugt, nicht echt. Warum diese")
+    lines.append("  Kurve nichts ueber echtes Gold sagt: docs/URTEIL.md.")
     return "\n".join(lines)
 
 
