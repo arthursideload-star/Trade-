@@ -133,6 +133,49 @@ eingebaut. Das wäre eine Strategieänderung und gehört gemessen, nicht nebenbe
 
 ---
 
+---
+
+## A12 · Der EA-Ausstieg kostet nicht 20 %, sondern 89 % — und der Zeitstop ist schuld
+
+A11 konnte den Unterschied nur **schätzen**, indem zwei Zeilen einer Ziel-Tabelle gemischt
+wurden: „grob +0,088 R gegen +0,110 R, rund 20 % weniger". Die EA-Struktur ist jetzt im
+Python-Motor nachgebaut (`DayRangeConfig.ea_exit`) und damit **gemessen**, 20 Märkte à
+15.000 Bars:
+
+| | Trades | Treffer | Erwartung | Median |
+|---|---:|---:|---:|---:|
+| Python-Ausstieg, Zeitstop 240 (Basis) | 54 | 57,8 % | **+0,1281 R** | +11,63 % |
+| Python-Ausstieg, Zeitstop **45** | 152 | 48,6 % | +0,0237 R | +4,97 % |
+| EA-Ausstieg, Zeitstop 240 | 63 | 66,9 % | +0,0755 R | +7,05 % |
+| **EA-Ausstieg, Zeitstop 45 (der echte EA)** | 153 | 50,4 % | **+0,0145 R** | +3,42 % |
+
+**−89 %, nicht −20 %.** Und die Aufteilung dreht die Schuldfrage um:
+
+- der **Zeitstop allein** kostet 81 % (+0,128 → +0,024 R)
+- die **geteilte Ausstiegsstruktur allein** kostet 41 % (+0,128 → +0,076 R)
+
+A11 hatte den Zeitstop in seiner Tabelle stehen, aber **nicht in die Schätzung
+eingerechnet**. Der Hauptschaden kommt von dort, und der Grund ist inhaltlich einleuchtend:
+Die Tagesspanne-Strategie zielt auf das **andere Ende der Tagesspanne**. Das dauert Stunden.
+Ein Schnitt nach 45 Minuten schließt die meisten dieser Trades, bevor ihre eigene These
+überhaupt entschieden ist.
+
+**Behoben, und zwar hart.** `InpTimeStopMinutes` ist ein globaler Input — 45 Minuten sind
+für die Scalping-Setups richtig und für DR falsch. Der EA **verweigert jetzt den Start**
+(`INIT_PARAMETERS_INCORRECT`), wenn `InpUseDayRange = true` mit weniger als
+`DR_MIN_TIME_STOP_MINUTES` (240) kombiniert wird:
+
+```
+REFUSED: InpUseDayRange needs InpTimeStopMinutes >= 240 (currently 45).
+```
+
+Verweigert statt gewarnt, weil der Fehler unsichtbar ist: Der EA handelt einfach weiter und
+verdient weniger. Eine Warnung im Log hätte niemand gelesen.
+
+**Was offen bleibt:** Ob die Datei kompiliert, konnte hier weiterhin niemand prüfen. Der
+Wächter ist als Quelltextprüfung getestet, nicht als Programmlauf.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

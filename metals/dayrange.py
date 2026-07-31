@@ -102,6 +102,22 @@ class DayRangeConfig:
     # and "let the market decide how much to bet".
     max_risk_pct: float | None = None
 
+    # --- the exit scheme the MQL5 expert actually runs -------------------
+    # Off by default, so every number measured so far keeps its meaning.
+    # When on, the exit matches SECTION 10 of the EA: close a share of the
+    # position at a near target, move the stop to break-even, and trail the
+    # remainder with ATR up to a far target.
+    #
+    # It exists because audit finding A11 could only *estimate* the cost of
+    # the difference, by blending two rows of a target sweep. An estimate of
+    # what the thing that will actually trade does is not good enough when
+    # the alternative is to measure it.
+    ea_exit: bool = False
+    first_target_r: float = 0.5        # InpFirstTargetR
+    first_target_fraction: float = 0.60  # InpFirstTargetPct / 100
+    runner_target_r: float = 2.5       # InpRunnerTargetR
+    trail_atr_mult: float = 1.2        # InpTrailAtrMult
+
     # High-impact releases to stand aside for, as UTC (hour, minute) pairs.
     # Rule R4 bans an entry within NEWS_BLACKOUT_MINUTES either side of one.
     #
@@ -273,6 +289,21 @@ class Trade:
     stop_loss: float
     predicted: float
     opened_at: int
+    # Set only under the EA exit scheme, which closes part of the position
+    # at a near target and lets the rest run. The original stop distance is
+    # kept because R has to stay measured against the risk the trade was
+    # opened with -- moving the stop to break-even must not silently
+    # redefine what one R is.
+    original_lots: float = 0.0
+    original_risk_per_unit: float = 0.0
+    partial_taken: bool = False
+    banked_pnl: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.original_lots:
+            self.original_lots = self.lots
+        if not self.original_risk_per_unit:
+            self.original_risk_per_unit = abs(self.entry - self.stop_loss)
 
 
 @dataclass
@@ -293,6 +324,7 @@ class Result:
     skipped_too_small: int = 0
     skipped_no_margin: int = 0
     skipped_stop_too_wide: int = 0
+    partials_taken: int = 0
     # Positive means financing cost the account money over the run. Tracked
     # separately from trade P&L because it is not a trading result -- it is
     # rent, and it accrues whether the position is right or wrong.
@@ -368,6 +400,44 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
 
         still: list[Trade] = []
         for t in open_trades:
+            if cfg.ea_exit and not t.partial_taken:
+                # First target: bank part of the position and move the stop
+                # to break-even, which is what makes the remainder a free
+                # option. Checked before the stop test only when the bar did
+                # not also reach the stop -- adverse-first still governs.
+                r_unit = t.original_risk_per_unit
+                first = (t.entry + r_unit * cfg.first_target_r if t.long
+                         else t.entry - r_unit * cfg.first_target_r)
+                reached = (bar.high >= first if t.long else bar.low <= first)
+                stopped = (bar.low <= t.stop_loss if t.long
+                           else bar.high >= t.stop_loss)
+                if reached and not stopped:
+                    part = round(t.lots * cfg.first_target_fraction, 8)
+                    part = int(part / cfg.lot_step) * cfg.lot_step
+                    if part >= cfg.min_lot and t.lots - part >= cfg.min_lot:
+                        gain = (first - t.entry) if t.long else (t.entry - first)
+                        t.banked_pnl += gain * part * oz
+                        equity += gain * part * oz
+                        t.lots = round(t.lots - part, 8)
+                        t.stop_loss = t.entry          # break-even
+                        t.take_profit = (
+                            t.entry + r_unit * cfg.runner_target_r if t.long
+                            else t.entry - r_unit * cfg.runner_target_r)
+                        res.partials_taken += 1
+                    t.partial_taken = True
+
+            if cfg.ea_exit and t.partial_taken and t.lots > 0:
+                # ATR trail on the remainder, never loosening.
+                atr_now = _atr(candles, i)
+                if atr_now > 0:
+                    dist = atr_now * cfg.trail_atr_mult
+                    candidate = (bar.close - dist if t.long
+                                 else bar.close + dist)
+                    if t.long and candidate > t.stop_loss:
+                        t.stop_loss = candidate
+                    elif not t.long and candidate < t.stop_loss:
+                        t.stop_loss = candidate
+
             # Adverse first: when a bar spans both levels the stop is taken,
             # because which came first cannot be known from a bar.
             hit_stop = bar.low <= t.stop_loss if t.long else bar.high >= t.stop_loss
@@ -388,8 +458,14 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
 
             pnl = ((exit_price - t.entry) if t.long else (t.entry - exit_price)) \
                 * t.lots * oz
-            risk = abs(t.entry - t.stop_loss) * t.lots * oz
-            equity += pnl
+            # R is measured against the risk the trade was OPENED with, on
+            # the size it was opened with. Using the current stop would make
+            # every break-even exit an infinite R, and using the reduced
+            # size would credit the runner with the whole trade's risk.
+            risk = t.original_risk_per_unit * t.original_lots * oz
+            pnl += t.banked_pnl
+            equity += ((exit_price - t.entry) if t.long
+                       else (t.entry - exit_price)) * t.lots * oz
             res.trades += 1
             res.exits[why] = res.exits.get(why, 0) + 1
             res.r_multiples.append(pnl / risk if risk > 0 else 0.0)
@@ -460,13 +536,15 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
 
     last = candles[-1].close
     for t in open_trades:
-        pnl = ((last - t.entry) if t.long else (t.entry - last)) * t.lots * oz
+        remainder = ((last - t.entry) if t.long else (t.entry - last)) \
+            * t.lots * oz
+        pnl = remainder + t.banked_pnl
         # These used to be counted as trades and as wins or losses while
         # being left out of r_multiples, so expectancy was a mean over a
         # subset reported as if it covered everything. Every other exit path
         # records its R here; this one has to as well.
-        risk = abs(t.entry - t.stop_loss) * t.lots * oz
-        equity += pnl
+        risk = t.original_risk_per_unit * t.original_lots * oz
+        equity += remainder
         res.trades += 1
         res.exits["still_open"] = res.exits.get("still_open", 0) + 1
         res.r_multiples.append(pnl / risk if risk > 0 else 0.0)

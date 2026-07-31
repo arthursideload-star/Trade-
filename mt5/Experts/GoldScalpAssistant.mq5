@@ -65,6 +65,12 @@
 #define MAX_CONSECUTIVE_LOSSES  2
 #define COOLDOWN_AFTER_LOSS_MIN 20
 #define MAX_OPEN_POSITIONS      1      // one scalp at a time
+// Smallest time stop the day-range setup may run with. 240 minutes is the
+// four hours metals/dayrange.py uses; below it the setup is cut off before
+// its own thesis can play out. A hard floor rather than an input, because
+// the failure it prevents is invisible -- the EA keeps trading and simply
+// earns less.
+#define DR_MIN_TIME_STOP_MINUTES 240
 
 // Metal-specific (M1-M6 in the Python package)
 #define MIN_STOP_ATR_MULTIPLE   0.8    // M1: tighter than this is noise
@@ -891,6 +897,25 @@ int OnInit()
    if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
       Print("WARNING: algo trading is disabled for this account. Nothing will "
             "be placed even in Auto mode.");
+
+   // The time stop is global, and 45 minutes is right for the scalping
+   // setups. The day-range setup aims at the far end of the day's range,
+   // which takes hours -- cutting at 45 minutes closes most of those trades
+   // before they resolve. Measured in Python: expectancy falls from
+   // +0.128 R to +0.024 R, a loss of 81%, larger than the cost of the
+   // different exit structure itself. Refused rather than warned about,
+   // because the combination silently trades a strategy nobody measured.
+   if(InpUseDayRange && InpTimeStopMinutes < DR_MIN_TIME_STOP_MINUTES)
+   {
+      PrintFormat("REFUSED: InpUseDayRange needs InpTimeStopMinutes >= %d "
+                  "(currently %d). The day-range setup targets the other end "
+                  "of the day's range and needs hours; at %d minutes its "
+                  "measured expectancy drops by about 80%%. Raise the time "
+                  "stop or switch the setup off.",
+                  DR_MIN_TIME_STOP_MINUTES, InpTimeStopMinutes,
+                  InpTimeStopMinutes);
+      return INIT_PARAMETERS_INCORRECT;
+   }
 
    const bool is_demo =
       (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO);

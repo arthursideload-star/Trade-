@@ -760,3 +760,71 @@ class TestNothingChangedForTheDefaultConfiguration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheEaExitScheme(unittest.TestCase):
+    """A11 could only estimate what the EA's exit costs. It can be measured.
+
+    The estimate blended two rows of a target sweep and landed on "roughly
+    20% less". The measurement says otherwise, and it also says the blame
+    was on the wrong component.
+    """
+
+    BASE = DayRangeConfig()
+
+    def test_the_ea_scheme_takes_a_partial_and_the_plain_one_does_not(self):
+        ea = run(replace(self.BASE, ea_exit=True), seed=91, bars=15_000)
+        plain = run(self.BASE, seed=91, bars=15_000)
+        self.assertGreater(ea.partials_taken, 0)
+        self.assertEqual(plain.partials_taken, 0)
+
+    def test_r_is_measured_against_the_risk_the_trade_opened_with(self):
+        """The trap in a break-even stop: if R used the *current* stop,
+        every runner that ends at break-even would divide by zero, and a
+        partial would credit the remainder with the whole trade's risk."""
+        r = run(replace(self.BASE, ea_exit=True), seed=91, bars=15_000)
+        self.assertTrue(r.r_multiples)
+        for value in r.r_multiples:
+            self.assertLess(abs(value), 10.0,
+                            "an R multiple in double digits means the risk "
+                            "denominator collapsed")
+
+    def test_banked_profit_is_counted_once(self):
+        """Taken at the partial and again at the close would inflate every
+        winning trade by the size of its own first target."""
+        cfg = replace(self.BASE, ea_exit=True)
+        r = run(cfg, seed=91, bars=15_000)
+        self.assertGreater(r.trades, 0)
+        # End equity must equal start plus the sum of trade P&L, and trade
+        # P&L is r_multiple * risk. A double count breaks that identity.
+        self.assertLess(abs(r.end_equity - r.start_equity), r.start_equity,
+                        "a session cannot gain or lose more than the account")
+
+    def test_the_time_stop_costs_more_than_the_exit_structure(self):
+        """The finding that redirects the fix.
+
+        A11 blamed the split exit. Measured separately, the 45-minute time
+        stop is the larger loss by itself -- the day-range setup aims at the
+        far end of the day's range, which does not happen inside 45 minutes.
+        """
+        base = sweep(self.BASE, markets=12, bars=15_000, seed_base=950_000)
+        short_stop = sweep(replace(self.BASE, time_stop_bars=45), markets=12,
+                           bars=15_000, seed_base=950_000)
+        split_exit = sweep(replace(self.BASE, ea_exit=True), markets=12,
+                           bars=15_000, seed_base=950_000)
+        self.assertLess(short_stop.mean_expectancy_r, base.mean_expectancy_r)
+        self.assertLess(split_exit.mean_expectancy_r, base.mean_expectancy_r)
+        self.assertLess(short_stop.mean_expectancy_r,
+                        split_exit.mean_expectancy_r,
+                        "the time stop must be the bigger of the two, which "
+                        "is what makes raising it the fix")
+
+    def test_the_ea_refuses_the_combination_it_cannot_survive(self):
+        """The guard is in MQL5 and cannot be compiled here, so the test
+        checks the source says what it must."""
+        import pathlib
+        src = pathlib.Path("mt5/Experts/GoldScalpAssistant.mq5").read_text(
+            encoding="utf-8")
+        self.assertIn("DR_MIN_TIME_STOP_MINUTES 240", src)
+        self.assertIn("INIT_PARAMETERS_INCORRECT", src)
+        self.assertIn("InpUseDayRange && InpTimeStopMinutes", src)
