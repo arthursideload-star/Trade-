@@ -687,6 +687,19 @@ def cmd_paper(args: argparse.Namespace) -> int:
               "wertlos.")
         return 2
 
+    # Same reasoning as the price, and A19 is why it is enforced rather than
+    # defaulted: observed quotes on this instrument ranged from 0.34 to 1.04
+    # USD/oz, and in a one-day session that difference decides the sign of
+    # the expectancy. A silent fallback would carry the cheaper value
+    # forward for weeks, which is exactly what happened.
+    if args.spread is None:
+        print("Bitte --spread angeben (Ask minus Bid aus derselben "
+              "Kursabfrage).\nEr wird nicht vorbelegt: beobachtete Spreads "
+              "lagen zwischen 0,34 und\n1,04 $/oz, und in einer Tagessitzung "
+              "entscheidet das ueber das Vorzeichen\ndes Erwartungswerts "
+              "(docs/REPO-AUDIT.md, A19).")
+        return 5
+
     # Checked before the session runs, not after: once it is in the ledger
     # the imbalance is already there. The chain reached fifty-three sessions
     # off three observed days precisely because nothing said stop.
@@ -947,8 +960,8 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--low", type=float, default=None,
                     help="Tagestief in USD/oz")
     pa.add_argument("--spread", type=float, default=None,
-                    help="beobachteter Spread in USD/oz, z.B. aus Ask minus "
-                         "Bid; ohne Angabe die Voreinstellung der Strategie")
+                    help="beobachteter Spread in USD/oz, Ask minus Bid — "
+                         "erforderlich, wird nicht vorbelegt")
     pa.add_argument("--news", default=None,
                     help="Zeiten hochwirksamer Veroeffentlichungen in UTC, "
                          "z.B. \"12:30,18:00\" — R4 sperrt 30 Minuten drum "

@@ -519,6 +519,22 @@ als C2 nahelegt. Zwei Beobachtungen sind keine Verteilung — was daraus folgt, 
 Spread ist 1,04", sondern **„der Spread gehört bei jeder Sitzung frisch abgelesen, nicht
 fortgeschrieben"**.
 
+### Behoben: `--spread` wird verlangt, nicht vorbelegt
+
+Genau das war vorher nicht durchsetzbar. `--spread` fiel still auf **0,30 $** zurück, wenn
+man es wegließ — also auf den Wert, der nach der Tabelle oben über das Vorzeichen entscheidet.
+Ein Vorgabewert, der das Ergebnis dreht, ist keine Bequemlichkeit.
+
+`python -m metals paper` bricht jetzt mit **Rückgabecode 5** ab, wenn `--spread` fehlt, und
+nennt die Quelle (Ask minus Bid aus derselben Kursabfrage). Anders als bei der angesetzten
+Spanne (Code 4) und beim übersampelten Tag (Code 3) gibt es dafür **kein `--force`**: Diese
+beiden überstimmen eine Einschätzung, die man sehen kann. Hier gäbe es nichts zu überstimmen
+außer einer Zahl, die man sich ausdenken müsste.
+
+Ein ausdrücklich angegebener Spread von 0,00 $ bleibt erlaubt. Er ist für Gold falsch, aber
+er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im Unterschied zu
+einem, den nie jemand getippt hat.
+
 
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 

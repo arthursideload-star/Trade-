@@ -272,8 +272,10 @@ class TestTheCommandLineActuallyPassesItsArguments(LedgerFixture):
         return args
 
     def _base_argv(self) -> list[str]:
+        # --spread is not optional any more (A19), so every case that wants
+        # to reach the engine has to carry one. A later --spread wins.
         return ["paper", "--price", "4105.62", "--high", "4137.85",
-                "--low", "4073.39", "--dry-run"]
+                "--low", "4073.39", "--spread", "0.50", "--dry-run"]
 
     def test_news_reaches_the_session(self):
         from metals.cli import cmd_paper
@@ -1727,3 +1729,95 @@ class TestAnAssumedRangeIsRecordedAndRefused(LedgerFixture):
                 "could_not_trade": "", "exits": {}, "signals": 3,
             }) + "\n")
         self.assertEqual(paper.provenance().distinct_observed_days, 0)
+
+
+class TestTheSpreadMustBeReadNotAssumed(LedgerFixture):
+    """A19: the number that decided the sign was the one nobody typed.
+
+    `--spread` used to fall back to 0.30 $/oz. The chain therefore charged
+    0.34 for fifty-three sessions while the observed quote on 31 July was
+    bid 4,048.35 / ask 4,049.39 -- 1.04. Measured over one-day sessions the
+    difference is not a rounding matter: +0.1141R at 0.34 against -0.0647R
+    at 1.04. A default that flips the expectancy is not a convenience, so
+    the command refuses instead of guessing.
+
+    The refusal is deliberately unforceable. --force exists for the assumed
+    range and the repeated day, where the operator can at least see what
+    they are overriding; there is nothing to see here except a number they
+    would have to invent.
+    """
+
+    def _argv(self, *extra: str) -> list[str]:
+        return ["paper", "--price", "4105.62", "--high", "4137.85",
+                "--low", "4073.39", "--dry-run", *extra]
+
+    def _run(self, argv: list[str]) -> tuple[int, str]:
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from metals.cli import build_parser
+        args = build_parser().parse_args(argv)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = args.func(args)
+        return code, out.getvalue() + err.getvalue()
+
+    def test_a_session_without_a_spread_is_refused(self):
+        code, text = self._run(self._argv())
+        self.assertEqual(code, 5)
+        self.assertIn("--spread", text)
+
+    def test_the_refusal_does_not_run_a_session(self):
+        called: list[dict] = []
+
+        def spy(**kwargs):
+            called.append(kwargs)
+            raise AssertionError("the session ran without a spread")
+
+        with mock.patch.object(paper, "run_session", spy):
+            code, _ = self._run(self._argv())
+        self.assertEqual(code, 5)
+        self.assertEqual(called, [])
+
+    def test_giving_the_spread_lets_the_session_through(self):
+        code, _ = self._run(self._argv("--spread", "1.04"))
+        self.assertEqual(code, 0)
+
+    def test_force_does_not_buy_a_way_past_it(self):
+        """Unlike the other two refusals: --force overrides a judgement,
+        and there is no judgement to override when the number is missing."""
+        code, _ = self._run(self._argv("--force"))
+        self.assertEqual(code, 5)
+
+    def test_the_message_says_where_to_get_the_number(self):
+        _, text = self._run(self._argv())
+        self.assertIn("Ask", text)
+        self.assertIn("Bid", text)
+
+    def test_the_refusal_has_its_own_exit_code(self):
+        """Each guard has its own code -- 2 no price, 3 oversampled day,
+        4 assumed range, 5 no spread -- so a script can tell which one
+        fired. Three of the four are cheap to trigger here; the
+        oversampled path needs ten sessions on one day and is covered in
+        TestOversamplingGuard."""
+        codes = set()
+        codes.add(self._run(["paper", "--dry-run", "--spread", "0.5"])[0])
+        codes.add(self._run(self._argv())[0])
+        codes.add(self._run(self._argv("--spread", "0.5",
+                                       "--assumed-range"))[0])
+        self.assertEqual(codes, {2, 4, 5})
+
+    def test_the_zero_spread_is_a_choice_and_is_allowed(self):
+        """Refusing a missing value is not the same as refusing a cheap one.
+        0.0 is wrong for gold, but it is stated, recorded, and shows up in
+        the ledger's cost model where it can be argued with."""
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            code, _ = self._run(self._argv("--spread", "0"))
+        self.assertEqual(code, 0)
+        self.assertEqual(captured.get("spread_usd_oz"), 0.0)

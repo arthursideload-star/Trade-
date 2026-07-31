@@ -70,8 +70,8 @@ python -m metals microscalp --markets 100        # 'Sofort schliessen wenn im Pl
 python -m metals claims                         # Was im Netz behauptet wird
 python -m metals claims --measure               # ... und was davon einer Messung standhält
 python -m metals dayrange --equity 432 --risk 1 # Strategie unter der 1-%-Regel
-python -m metals paper --price 4102.83 \
-    --high 4120.16 --low 4028.77          # Papier-Sitzung, Konto laeuft fort
+python -m metals paper --price 4102.83 --high 4120.16 \
+    --low 4028.77 --spread 1.04           # Papier-Sitzung, Konto laeuft fort
 python -m metals paper --summary                 # Stand der Papier-Kette
 python -m metals paper --evidence                # Was die Trades belegen (mit Band)
 python -m metals paper --verify                  # Journal aus seinen Eingaben nachrechnen

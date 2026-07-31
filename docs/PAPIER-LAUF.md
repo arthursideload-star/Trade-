@@ -15,7 +15,9 @@ python -m metals paper --distribution --price 4114.79 \
     --high 4120.16 --low 4028.77
 ```
 
-`--spread` kommt aus dem beobachteten Ask minus Bid, `--news` aus dem Wirtschaftskalender
+`--spread` kommt aus dem beobachteten Ask minus Bid und ist **Pflicht** — er wird nicht
+vorbelegt, weil der Vorgabewert über das Vorzeichen des Erwartungswerts entschied (A19, unten).
+`--news` kommt aus dem Wirtschaftskalender
 (Rule R4 sperrt 30 Minuten um jede genannte Zeit). Ohne `--news` greift die Sperre **nicht**
 — das steht dann auch so in der Ausgabe, damit ein durchgehandelter FOMC-Tag nicht
 unbemerkt bleibt. Genau das war Auditbefund A7.
@@ -518,10 +520,10 @@ jemand die Strategie durchhält.
 
 Jede Sitzung meldet ihren Wert jetzt einzeln, die Bilanz beide nebeneinander mit Etikett.
 
-## Der Lauf lehnt jetzt zwei Arten von Sitzung ab
+## Der Lauf lehnt jetzt drei Arten von Sitzung ab
 
-Aus der Herkunftsrechnung folgten zwei Schranken, und beide sind im Kommando, nicht nur im
-Text.
+Aus der Herkunftsrechnung folgten zwei Schranken, aus A19 eine dritte — alle drei stehen im
+Kommando, nicht nur im Text.
 
 **1. Ein Handelstag, der schon zehn oder mehr Sitzungen trägt**
 
@@ -544,6 +546,25 @@ stehen bereits auf solchen Zeilen.
 ```
 
 Beides mit `--force` überschreibbar, aber dann bewusst.
+
+**3. Eine Sitzung ohne abgelesenen Spread**
+
+```
+Bitte --spread angeben (Ask minus Bid aus derselben Kursabfrage).
+Er wird nicht vorbelegt: beobachtete Spreads lagen zwischen 0,34 und
+1,04 $/oz, und in einer Tagessitzung entscheidet das ueber das Vorzeichen
+des Erwartungswerts (docs/REPO-AUDIT.md, A19).
+```
+
+Vorher fiel `--spread` still auf 0,30 $ zurück. Bei 0,34 $ steht der Erwartungswert bei
++0,1141 R, bei den heute beobachteten 1,04 $ bei −0,0647 R — der Vorgabewert entschied also
+über das Vorzeichen. Hier gibt es **kein `--force`**: Die anderen beiden Schranken überstimmen
+eine Einschätzung, die man sehen kann; diese verlangt eine Zahl, die man sonst erfinden müsste.
+Ausdrücklich `--spread 0` anzugeben bleibt erlaubt — dann steht die Null im Kostenmodell der
+Zeile und kann bestritten werden.
+
+Die Rückgabecodes sind getrennt, damit ein Skript erkennt, welche Schranke gegriffen hat:
+**2** kein Kurs, **3** übersampelter Tag, **4** angesetzte Spanne, **5** kein Spread.
 
 ### Und der Status wird protokolliert, nicht geraten
 

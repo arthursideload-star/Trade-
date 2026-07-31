@@ -165,7 +165,8 @@ class TestTheFlagsThatCarryData(unittest.TestCase):
 
         with mock.patch.object(paper, "run_session", spy):
             run_command(["paper", "--price", "4100", "--high", "4130",
-                         "--low", "4070", "--equity", "1234", "--dry-run"])
+                         "--low", "4070", "--spread", "0.50",
+                         "--equity", "1234", "--dry-run"])
         self.assertEqual(captured.get("start_equity_eur"), 1234.0)
 
 
