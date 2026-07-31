@@ -683,11 +683,16 @@ def cmd_paper(args: argparse.Namespace) -> int:
               "wertlos.")
         return 2
 
-    s = run_session(gold_price=args.price, day_high=args.high,
-                    day_low=args.low, price_source=args.source,
-                    start_equity_eur=args.equity,
-                    spread_usd_oz=args.spread,
-                    news_times_utc=_parse_news_times(args.news))
+    from .paper import PriceInputError
+    try:
+        s = run_session(gold_price=args.price, day_high=args.high,
+                        day_low=args.low, price_source=args.source,
+                        start_equity_eur=args.equity,
+                        spread_usd_oz=args.spread,
+                        news_times_utc=_parse_news_times(args.news))
+    except PriceInputError as exc:
+        print(f"Kursangaben passen nicht zusammen: {exc}", file=sys.stderr)
+        return 2
     print(render(s))
     if not args.dry_run:
         append(s)

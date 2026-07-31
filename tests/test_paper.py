@@ -910,6 +910,62 @@ class TestObservedRangesAndProjection(LedgerFixture):
             paper.append(s)
 
 
+class TestPriceInputsMustAgree(LedgerFixture):
+    """Three numbers from a lookup, easy to take from three places.
+
+    Over one closed weekend the feeds quoted gold at 3,990, 4,052, 4,057 and
+    4,110 at the same moment. Pairing one source's spot with another's range
+    produced a session that ran, reported and compounded exactly like a
+    sound one -- nothing downstream can tell the difference, so the check
+    has to sit at the door.
+    """
+
+    def test_a_price_below_the_days_low_is_refused(self):
+        with self.assertRaises(paper.PriceInputError):
+            paper.check_price_inputs(3_989.95, 4_111.19, 4_069.83)
+
+    def test_a_price_above_the_days_high_is_refused(self):
+        with self.assertRaises(paper.PriceInputError):
+            paper.check_price_inputs(4_200.0, 4_111.19, 4_069.83)
+
+    def test_an_inverted_range_is_refused(self):
+        with self.assertRaises(paper.PriceInputError):
+            paper.check_price_inputs(4_090.0, 4_069.83, 4_111.19)
+
+    def test_the_boundaries_themselves_are_allowed(self):
+        paper.check_price_inputs(4_069.83, 4_111.19, 4_069.83)
+        paper.check_price_inputs(4_111.19, 4_111.19, 4_069.83)
+
+    def test_run_session_refuses_rather_than_producing_a_tidy_nothing(self):
+        with self.assertRaises(paper.PriceInputError):
+            run_session(gold_price=3_989.95, day_high=4_111.19,
+                        day_low=4_069.83, price_source="mismatched")
+
+    def test_the_message_says_what_to_do(self):
+        try:
+            paper.check_price_inputs(3_989.95, 4_111.19, 4_069.83)
+        except paper.PriceInputError as exc:
+            self.assertIn("Quellen", str(exc))
+            self.assertIn("neu holen", str(exc))
+
+    def test_every_session_already_recorded_would_pass(self):
+        """The guard is preventive. If it were retroactively catching
+        entries, the chain would need repairing before anything else."""
+        import json
+        import os
+
+        real = os.path.join("training", "paper-ledger.jsonl")
+        if not os.path.exists(real):
+            self.skipTest("no recorded chain in this checkout")
+        with open(real, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                e = json.loads(line)
+                paper.check_price_inputs(e["gold_price"], e["day_high"],
+                                         e["day_low"])
+
+
 class TestReplayingTheChain(LedgerFixture):
     """How much of the recorded result is the rules and how much the draw.
 

@@ -224,6 +224,35 @@ class Session:
         return (self.expectancy_r > 0) != (self.pnl_eur > 0)
 
 
+class PriceInputError(ValueError):
+    """The price, high and low do not describe the same day."""
+
+
+def check_price_inputs(price: float, high: float, low: float) -> None:
+    """Refuse figures that cannot all be true at once.
+
+    A session takes three numbers from a lookup, and they are easy to take
+    from three different places without noticing -- one feed's spot with
+    another feed's range, or a stale range against a moved price. The
+    combination still produces a market, a P&L and a tidy report, so nothing
+    downstream ever objects.
+
+    Refusing beats warning here. If the price really has left the range,
+    then the range is what is stale, and the fix is to fetch it again rather
+    than to run on figures that disagree.
+    """
+    if not (high > low > 0):
+        raise PriceInputError(
+            f"Tageshoch {high:,.2f} muss ueber dem Tagestief {low:,.2f} "
+            f"liegen, und beide ueber null.")
+    if not (low <= price <= high):
+        raise PriceInputError(
+            f"Kurs {price:,.2f} liegt ausserhalb der Tagesspanne "
+            f"{low:,.2f}-{high:,.2f}. Die drei Zahlen beschreiben nicht "
+            f"denselben Tag — vermutlich Kurs und Spanne aus verschiedenen "
+            f"Quellen. Beide neu holen.")
+
+
 def sessions_so_far() -> int:
     if not os.path.exists(LEDGER_PATH):
         return 0
@@ -285,7 +314,15 @@ def run_session(gold_price: float, day_high: float, day_low: float,
                 seed: int | None = None,
                 spread_usd_oz: float | None = None,
                 news_times_utc: tuple[tuple[int, int], ...] = ()) -> Session:
-    """One trading day on an account carried forward from the last one."""
+    """One trading day on an account carried forward from the last one.
+
+    Raises PriceInputError when the three price figures contradict each
+    other. That is not pedantry: several feeds were quoting gold anywhere
+    between 3,990 and 4,114 over one closed weekend, and a price 80 dollars
+    below the day's own low was accepted in silence, producing a session
+    that read like every other one and meant nothing.
+    """
+    check_price_inputs(gold_price, day_high, day_low)
     index = sessions_so_far()
     equity_eur = (current_equity_eur() if start_equity_eur is None
                   else start_equity_eur)
