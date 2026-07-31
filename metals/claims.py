@@ -842,6 +842,27 @@ def render_measurements(markets: int = 20, bars: int = 12_000) -> str:
     lines.append("")
 
     acc = measure_account_sizes(markets=max(8, markets // 2), bars=bars)
+    wf = measure_walk_forward(markets=max(8, markets // 2), bars=bars)
+    lines.append("  C13 Haelt die Optimierung out-of-sample?")
+    lines.append(f"      Regler {wf.dial}: getunt auf {wf.chosen_value:g} "
+                 f"(Standard {wf.default_value:g})")
+    lines.append(f"      In-Sample {wf.in_sample_r:+.3f}R  ·  "
+                 f"frische Maerkte {wf.out_of_sample_r:+.3f}R")
+    lines.append(f"      Ungetunter Standard auf denselben Maerkten: "
+                 f"{wf.default_out_of_sample_r:+.3f}R")
+    if not wf.tuning_changed_anything:
+        lines.append("      Der Optimierer hat den Standard gewaehlt — hier")
+        lines.append("      gibt es nichts zu uebertragen.")
+    elif wf.is_a_red_flag:
+        lines.append(f"      ROT: Einbruch {wf.degradation * 100:.0f}% "
+                     f"(Schwelle {WALK_FORWARD_RED_FLAG * 100:.0f}%) bzw. "
+                     f"kein Vorsprung")
+        lines.append("      auf den ungetunten Standard. Kurvenanpassung.")
+    else:
+        lines.append("      Haelt: schlaegt out-of-sample den ungetunten")
+        lines.append("      Standard auf denselben Maerkten.")
+    lines.append("")
+
     lines.append("  A1  Was das Konto hergibt")
     lines.append(f"      Typischer Stop dieser Strategie: "
                  f"{acc.mean_stop_usd:.1f} $/oz.")

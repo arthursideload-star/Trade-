@@ -106,16 +106,30 @@ Setups man traut, nicht wohin man lehnt.
 
 ---
 
-## A6 · Offen: VWAP wird versprochen, aber nicht gerechnet
+## A6 · VWAP wurde versprochen, aber nicht gerechnet — **behoben**
 
-`metals/setups.py` nennt bei G-Setups als Zielregel „the opposite prior-day extreme, **or
-the day's VWAP**". `indicators.vwap_session` existiert, ist sauber geschrieben und
-behandelt fehlendes Volumen korrekt — wird aber **von nichts aufgerufen**. Der Assistent
-nennt also ein Ziel, das er nicht ausrechnen kann.
+`metals/setups.py` nennt bei mehreren G-Setups als Zielregel „the opposite prior-day
+extreme, **or the day's VWAP**". `indicators.vwap_session` existierte, sauber geschrieben
+und mit korrekter Behandlung fehlenden Volumens — wurde aber **von nichts aufgerufen**.
+Der Assistent nannte also ein Ziel, das er nicht ausrechnen konnte.
 
-Nicht behoben, bewusst. Es zu verdrahten heißt, eine zweite Zielregel in die Auswertung
-einzuziehen, und das ist eine Strategieänderung, die gemessen gehört und nicht nebenbei
-mitläuft. Bis dahin steht es hier als offener Punkt, statt als stiller Widerspruch.
+Bei der Nachprüfung stellte sich der Befund als kleiner heraus als zunächst angenommen:
+`target_rule` wird **nirgends** in eine Zahl umgesetzt, sondern nur ausgedruckt. Es war
+also kein Rechenfehler, sondern eine Beschreibung ohne Deckung.
+
+**Behoben.** `Context.vwap` wird jetzt berechnet und steht auf der Empfehlungskarte, samt
+Angabe, ob der Kurs darüber oder darunter liegt. Drei Eigenschaften sind getestet:
+
+- **Rücksetzung am Broker-Rollover (21:00 UTC), nicht um Mitternacht.** Sonst mittelt er
+  über zwei Handelstage — eine andere Zahl unter demselben Namen. (Meine erste Fassung
+  hatte hier einen Fehler: beide Zweige der Bedingung lieferten dasselbe Datum, die
+  Rollover-Stunde wurde ignoriert.)
+- **Ohne Volumen gibt es `None`, keinen ungewichteten Mittelwert.** Ein ungewichtetes
+  Mittel sähe aus wie ein VWAP und wäre etwas anderes.
+- Der Wert liegt innerhalb von Hoch und Tief der Serie.
+
+**Was bewusst nicht passiert ist:** VWAP wird *nicht* als Ausstiegsregel in die Strategie
+eingebaut. Das wäre eine Strategieänderung und gehört gemessen, nicht nebenbei verdrahtet.
 
 ---
 

@@ -99,6 +99,63 @@ class TestGatherContext(unittest.TestCase):
         self.assertIn(ctx.regime, ("trending", "trending_volatile", "ranging",
                                    "ranging_quiet", "transitional", "unknown"))
 
+    def test_the_session_vwap_is_computed_not_only_described(self):
+        """Audit finding A6: several setups in the catalogue name "the day's
+        VWAP" as a target rule, and nothing computed it. The assistant was
+        describing a level it could not produce."""
+        from metals.analyze import _session_vwap
+
+        client = client_with(build_fetcher())
+        ctx = gather_context("XAUUSD", MOMENT, client)
+        series = ctx.m15 or ctx.h1
+        if series is not None and series.has_volume:
+            self.assertIsNotNone(ctx.vwap)
+            lows = min(c.low for c in series.candles)
+            highs = max(c.high for c in series.candles)
+            self.assertGreaterEqual(ctx.vwap, lows)
+            self.assertLessEqual(ctx.vwap, highs)
+        else:
+            self.assertIsNone(ctx.vwap)
+
+    def test_a_feed_without_volume_gives_no_vwap_rather_than_a_fake_one(self):
+        """An unweighted mean would look like a VWAP and mean something
+        else, which is worse than not having one."""
+        from datetime import datetime, timezone
+
+        from metals.analyze import _session_vwap
+        from metals.candles import Candle, CandleSeries
+
+        bars = [Candle(ts=datetime(2026, 1, 5, h, tzinfo=timezone.utc),
+                       open=100.0, high=101.0, low=99.0, close=100.0,
+                       volume=None) for h in range(6)]
+        self.assertIsNone(_session_vwap(CandleSeries("XAUUSD", "1h", bars)))
+        self.assertIsNone(_session_vwap(None))
+
+    def test_the_vwap_resets_at_the_broker_rollover_not_at_midnight(self):
+        """Otherwise it averages across two trading days, which is a
+        different number wearing the same name."""
+        from datetime import datetime, timedelta, timezone
+
+        from metals.analyze import _session_vwap
+        from metals.candles import Candle, CandleSeries
+        from metals.dayrange import ROLLOVER_HOUR_UTC
+
+        # Two bars before the rollover at 100, three after it at 200, and
+        # nothing past midnight -- so the current session is exactly the
+        # three 200s and its VWAP can only be 200 if the reset happened.
+        start = datetime(2026, 1, 5, ROLLOVER_HOUR_UTC - 2, tzinfo=timezone.utc)
+        bars = []
+        for i in range(5):
+            ts = start + timedelta(hours=i)
+            price = 100.0 if ts.hour < ROLLOVER_HOUR_UTC else 200.0
+            bars.append(Candle(ts=ts, open=price, high=price, low=price,
+                               close=price, volume=10.0))
+        vwap = _session_vwap(CandleSeries("XAUUSD", "1h", bars))
+        self.assertIsNotNone(vwap)
+        self.assertAlmostEqual(vwap, 200.0, places=6,
+                               msg="bars before the rollover belong to the "
+                                   "previous session and must not be averaged in")
+
     def test_missing_macro_is_recorded_not_hidden(self):
         client = client_with(build_fetcher(macro=False))
         ctx = gather_context("XAUUSD", MOMENT, client)

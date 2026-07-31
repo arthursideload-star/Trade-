@@ -24,9 +24,11 @@ from metals.candles import resample
 from metals.claims import (ASSUMED_EUR_USD, CLAIMS, ASIA_HOURS_UTC,
                            OVERLAP_HOURS_UTC, find, margin_required,
                            measure_account_sizes,
-                           POINT_USD_OZ, measure_win_rate_is_not_an_edge,
+                           POINT_USD_OZ, measure_walk_forward,
+                           measure_win_rate_is_not_an_edge,
                            stops_level_usd, swap_on_one_position,
-                           target_is_placeable)
+                           target_is_placeable, WALK_FORWARD_RED_FLAG,
+                           WalkForwardFinding)
 from metals.dayrange import (ROLLOVER_HOUR_UTC, TRIPLE_SWAP_WEEKDAY,
                              DayRangeConfig, in_news_blackout, lots_for,
                              run, sweep)
@@ -437,6 +439,56 @@ class TestC12StopsLevel(unittest.TestCase):
     def test_a_point_is_a_cent_on_a_two_decimal_gold_quote(self):
         self.assertAlmostEqual(POINT_USD_OZ, 0.01)
         self.assertAlmostEqual(stops_level_usd(50), 0.50)
+
+
+class TestC13WalkForward(unittest.TestCase):
+    """The claim that audits this project's own optimiser."""
+
+    def test_choosing_the_default_is_not_a_red_flag(self):
+        """The defect the first version had.
+
+        When the optimiser picks the value the dial already had, "does not
+        beat the default" is trivially true and says nothing. Reporting that
+        as curve-fitting flags the one outcome that cannot be curve-fitting.
+        """
+        f = WalkForwardFinding(dial="take_fraction", chosen_value=0.50,
+                               in_sample_r=0.142, out_of_sample_r=0.156,
+                               default_out_of_sample_r=0.156,
+                               default_value=0.50)
+        self.assertFalse(f.tuning_changed_anything)
+        self.assertFalse(f.is_a_red_flag)
+
+    def test_tuning_that_does_not_beat_the_untuned_default_is_flagged(self):
+        f = WalkForwardFinding(dial="min_range_atr", chosen_value=5.0,
+                               in_sample_r=0.150, out_of_sample_r=0.156,
+                               default_out_of_sample_r=0.156,
+                               default_value=2.0)
+        self.assertTrue(f.tuning_changed_anything)
+        self.assertFalse(f.beats_the_untuned_default)
+        self.assertTrue(f.is_a_red_flag)
+
+    def test_tuning_that_transfers_is_not_flagged(self):
+        f = WalkForwardFinding(dial="edge_fraction", chosen_value=0.25,
+                               in_sample_r=0.175, out_of_sample_r=0.185,
+                               default_out_of_sample_r=0.156,
+                               default_value=0.30)
+        self.assertTrue(f.beats_the_untuned_default)
+        self.assertFalse(f.is_a_red_flag)
+
+    def test_a_large_drop_is_flagged_even_when_it_beats_the_default(self):
+        f = WalkForwardFinding(dial="edge_fraction", chosen_value=0.25,
+                               in_sample_r=1.00, out_of_sample_r=0.20,
+                               default_out_of_sample_r=0.10,
+                               default_value=0.30)
+        self.assertGreater(f.degradation, WALK_FORWARD_RED_FLAG)
+        self.assertTrue(f.is_a_red_flag)
+
+    def test_it_measures_on_markets_the_tuning_never_saw(self):
+        """Otherwise it is not a walk-forward test, it is the same test
+        twice."""
+        f = measure_walk_forward(markets=6, bars=6_000,
+                                 seed_in=20_000, seed_out=40_000)
+        self.assertNotEqual(f.in_sample_r, f.out_of_sample_r)
 
 
 class TestC11Swap(unittest.TestCase):

@@ -19,11 +19,11 @@ instead of looking identical.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import gsr, seasonality
 from .candles import CandleSeries
-from .indicators import adx, atr, atr_percent
+from .indicators import adx, atr, atr_percent, vwap_session
 from .levels import LevelMap, build_level_map
 from .risk import (AccountState, PositionPlan, check_daily_state,
                    size_position, structural_stop)
@@ -84,6 +84,14 @@ class Context:
     atr_m15: float = 0.0
     atr_pct_h1: float | None = None
     regime: str = "unknown"
+    # Session VWAP, reset at the broker day boundary. None when the feed
+    # carries no volume, which is the honest answer -- an unweighted average
+    # would look like a VWAP and mean something else.
+    #
+    # Present because the setup catalogue names "the day's VWAP" as a target
+    # rule and nothing computed it (REPO-AUDIT.md, A6): the assistant was
+    # describing a level it could not produce.
+    vwap: float | None = None
 
 
 @dataclass
@@ -138,6 +146,13 @@ class Recommendation:
                          f"(risk {self.plan.risk_usd:.2f} USD = "
                          f"{self.plan.risk_pct:.2f}%)")
             lines.append(f"  R:R     1:{self.plan.reward_risk:.2f}")
+
+        if self.context.vwap is not None:
+            # Named as a target rule by several setups in the catalogue, so
+            # it belongs on the card rather than only in the description.
+            side = "above" if self.context.price > self.context.vwap else "below"
+            lines.append(f"\n  Session VWAP {self.context.vwap:g}  "
+                         f"(price is {side} it)")
 
         if self.reasons:
             lines.append("\n  WHY")
@@ -234,6 +249,7 @@ def gather_context(
         )
 
     ctx.levels = build_level_map(canonical, price, ctx.h4, ctx.m15 or h1, moment)
+    ctx.vwap = _session_vwap(ctx.m15 or h1)
     ctx.regime = _classify_regime(ctx)
     ctx.seasonal = seasonality.read(canonical, moment.date())
 
@@ -463,6 +479,40 @@ def _last(values: list) -> float | None:
     for v in reversed(values):
         if v is not None:
             return v
+    return None
+
+
+def _session_vwap(series: CandleSeries | None) -> float | None:
+    """VWAP since the broker day rolled over, or None if it cannot be had.
+
+    Returns None rather than a number whenever the feed carries no volume.
+    Metals CFD volume is tick volume, so this is a relative level and not a
+    real traded average -- but an unweighted mean dressed up as a VWAP would
+    be worse than no VWAP at all.
+    """
+    if series is None or not series.candles or not series.has_volume:
+        return None
+
+    from .dayrange import ROLLOVER_HOUR_UTC
+
+    bars = series.candles
+    starts = []
+    previous = None
+    for bar in bars:
+        # The broker's trading day rolls at ROLLOVER_HOUR_UTC, so a bar at
+        # or after that hour already belongs to the next day's session.
+        day = bar.ts.date()
+        if bar.ts.hour >= ROLLOVER_HOUR_UTC:
+            day += timedelta(days=1)
+        starts.append(previous is None or day != previous)
+        previous = day
+
+    values = vwap_session([b.high for b in bars], [b.low for b in bars],
+                          [b.close for b in bars], [b.volume for b in bars],
+                          starts)
+    for value in reversed(values):
+        if value is not None:
+            return value
     return None
 
 
