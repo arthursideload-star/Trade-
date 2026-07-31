@@ -452,6 +452,71 @@ class TestTheVolatilityWarning(LedgerFixture):
         self.assertAlmostEqual(paper.TYPICAL_DAY_RANGE_PCT, derived, places=1)
 
 
+class TestAFixedLotBehavesLikeAFixedLot(LedgerFixture):
+    """Structural check on the chain, and on the headline it produces.
+
+    With the lot pinned at 0.01 and the price level unchanged, a session's
+    P&L in euro cannot depend on how much money is in the account. So the
+    absolute movement should stay flat as the chain compounds, and the
+    percentage should fall in inverse proportion.
+
+    Measured over the real chain, first nine sessions against last nine:
+    account x2.07, absolute movement x0.90 against an expected x1.00, and
+    percentage movement x0.42 against an expected x0.48.
+
+    That is worth a test in both directions. It would catch a lot size that
+    had started scaling with equity -- and it is also the arithmetic behind
+    the headline: most of a compounded percentage comes from the sessions
+    when the account was smallest, not from the strategy getting better.
+    """
+
+    def _chain(self, equities: list[float], moves: list[float]) -> None:
+        for equity, move in zip(equities, moves):
+            paper.append(Session(
+                index=0, timestamp=0.0, date_utc="x", gold_price=4_100.0,
+                day_high=4_150.0, day_low=4_050.0, price_source="t",
+                start_equity_eur=equity, end_equity_eur=equity + move,
+                lot=MIN_LOT, forced_risk_pct=3.0, trades=8,
+                r_multiples=[0.1] * 8))
+
+    def test_absolute_movement_is_flat_while_percentage_falls(self):
+        """The signature of a fixed lot, stated as the relationship."""
+        equities = [400.0, 800.0, 1_600.0]
+        self._chain(equities, [40.0, 40.0, 40.0])
+        rows = paper.load_ledger()
+        absolutes = [r["end_equity_eur"] - r["start_equity_eur"] for r in rows]
+        percents = [(r["end_equity_eur"] - r["start_equity_eur"])
+                    / r["start_equity_eur"] * 100 for r in rows]
+        self.assertAlmostEqual(absolutes[0], absolutes[-1])
+        self.assertAlmostEqual(percents[-1], percents[0] / 4, places=6)
+
+    def test_the_real_chain_matches_that_shape(self):
+        """Loose bounds on purpose: the point is the order of magnitude,
+        not a number that would need updating every session."""
+        import statistics
+        for _ in range(6):
+            paper.append(run_session(**TODAY))
+        rows = [r for r in paper.load_ledger() if r["trades"]]
+        if len(rows) < 4:
+            self.skipTest("not enough sessions with trades")
+        half = len(rows) // 2
+        early, late = rows[:half], rows[half:]
+
+        def mean_abs(g):
+            return statistics.fmean(
+                abs(r["end_equity_eur"] - r["start_equity_eur"]) for r in g)
+
+        def mean_equity(g):
+            return statistics.fmean(r["start_equity_eur"] for r in g)
+
+        grew = mean_equity(late) / mean_equity(early)
+        absolute_ratio = mean_abs(late) / max(1e-9, mean_abs(early))
+        self.assertGreater(grew, 1.0, "the chain did not grow, nothing to test")
+        self.assertLess(absolute_ratio, grew,
+                        "absolute movement grew as fast as the account, which "
+                        "a fixed lot cannot do -- is the lot still fixed?")
+
+
 class TestTheJournalCanBeRecomputed(LedgerFixture):
     """A ledger nobody can re-derive is a claim, not a record.
 

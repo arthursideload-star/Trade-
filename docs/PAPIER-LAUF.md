@@ -393,6 +393,32 @@ einmal um die Spanne des Risikos je Trade, einmal nach dem `r_multiples`-Bug. Ge
 Ergänzung ist die Operation, die Geschichte still in etwas umschreiben kann, das aus seinen
 Eingaben nicht mehr folgt. Ein Journal, das niemand nachrechnen kann, ist eine Behauptung.
 
+## Warum die Schlagzeile größer ist als die Leistung
+
+Das Lot steht fest bei 0,01, und der Kurs ist über die ganze Kette derselbe. Also **kann**
+der Gewinn einer Sitzung in Euro gar nicht davon abhängen, wie viel auf dem Konto liegt. Was
+sich ändert, ist nur der Nenner.
+
+Gemessen, erste neun Sitzungen gegen die letzten neun:
+
+| | erste 9 | letzte 9 | Faktor | erwartet |
+|---|---:|---:|---:|---:|
+| Konto | 538 € | 1.114 € | ×2,07 | — |
+| Bewegung in Euro | 47,64 € | 42,82 € | **×0,90** | ×1,00 |
+| Bewegung in Prozent | 9,22 % | 3,86 % | **×0,42** | ×0,48 |
+
+Genau die Signatur eines festen Lots. Der absolute Betrag bleibt flach, die Prozentzahl fällt
+im Kehrwert des Kontostands.
+
+**Daraus folgt, wie die Gesamtzahl zu lesen ist:** Der größte Teil einer aufaddierten
+Prozentrendite stammt aus den Sitzungen, in denen das Konto am kleinsten war — nicht daraus,
+dass die Strategie besser geworden wäre. Dieselben Euro auf dem heutigen Kontostand wären
+weniger als die Hälfte der Prozentzahl gewesen.
+
+Ein Test prüft das in beide Richtungen. Er würde anschlagen, wenn die Positionsgröße
+irgendwann anfinge, mit dem Konto mitzuwachsen — und er hält gleichzeitig die Rechnung fest,
+die die Schlagzeile relativiert.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
