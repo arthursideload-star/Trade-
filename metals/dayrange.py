@@ -543,6 +543,62 @@ def optimise(base: DayRangeConfig | None = None, markets: int = 20,
     return out
 
 
+def report_run(r: Result, source: str = "simulated") -> str:
+    """One run over one series -- the shape a real-history test produces.
+
+    Separate from `report_sweep` because the two answer different questions
+    and must not be confused. A sweep says what the rules do across many
+    markets; this says what they did on the one history that actually
+    happened, which is a single sample and is reported as one.
+    """
+    c = r.config
+    lines = [f"TAGESSPANNE-STRATEGIE — EIN LAUF", "=" * 68]
+    lines.append(f"  Daten: {source}")
+    lines.append(f"  Mitnahme {c.take_fraction:.0%} · Stop {c.stop_fraction:.0%} "
+                 f"· Zone {c.edge_fraction:.0%} · {c.confirm_bars} Kerzen")
+    lines.append(f"  Kosten: Spread {c.spread_usd_oz:.2f} $ "
+                 f"+ {c.slippage_fraction:.0%} Slippage")
+    lines.append("")
+    lines.append(f"  Signale            {r.signals:>8}")
+    lines.append(f"  Trades             {r.trades:>8}")
+    if r.skipped_too_small:
+        lines.append(f"  abgelehnt (zu gross){r.skipped_too_small:>7}")
+    if not r.trades:
+        lines.append("")
+        lines.append("  KEIN TRADE. Ohne Trades gibt es nichts auszuwerten —")
+        lines.append("  das ist ein Ergebnis, kein Fehler.")
+        return "\n".join(lines)
+
+    lines.append(f"  Trefferquote       {r.win_rate * 100:>7.1f}%")
+    lines.append(f"  Erwartungswert     {r.expectancy_r:>+7.3f}R")
+    lines.append(f"  Rendite            {r.return_pct:>+7.2f}%")
+    lines.append(f"  Ziel im Schnitt    {r.mean_target_usd:>7.2f} $/oz")
+    if r.swap_paid_usd:
+        lines.append(f"  Swap gezahlt       {r.swap_paid_usd:>+7.2f} $ "
+                     f"({r.nights_held} Naechte)")
+    lines.append("  Ausstiege: " + ", ".join(f"{k} {v}"
+                                             for k, v in sorted(r.exits.items())))
+    lines.append("")
+
+    from .journal import mean_interval, trades_needed
+    lo, hi = mean_interval(r.r_multiples)
+    lines.append(f"  95%-Band auf den Erwartungswert: {lo:+.3f} bis {hi:+.3f} R")
+    if lo <= 0 <= hi:
+        lines.append("  -> Das Band schliesst die Null ein. Kein Vorteil belegt.")
+    elif lo > 0:
+        lines.append("  -> Das Band liegt ueber der Null.")
+    else:
+        lines.append("  -> Das Band liegt unter der Null.")
+    sd = statistics.pstdev(r.r_multiples) if len(r.r_multiples) > 1 else 0.0
+    need = trades_needed(0.1, sd) if sd > 0 else None
+    if need:
+        lines.append(f"  Fuer einen Vorteil von +0.10R braeuchte es rund "
+                     f"{need:,} Trades.")
+    if r.stopped_out:
+        lines.append("  BROKER-STOP-OUT in diesem Lauf.")
+    return "\n".join(lines)
+
+
 def report_sweep(s: Sweep) -> str:
     c = s.config
     lines = [f"TAGESSPANNE-STRATEGIE — {len(s.runs)} MAERKTE", "=" * 68]

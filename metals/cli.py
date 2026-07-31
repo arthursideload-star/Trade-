@@ -514,7 +514,10 @@ def cmd_microscalp(args: argparse.Namespace) -> int:
 
 def cmd_dayrange(args: argparse.Namespace) -> int:
     """The day-range prediction strategy: predict a move, bank part of it."""
-    from .dayrange import DayRangeConfig, optimise, report_sweep, sweep
+    from dataclasses import replace
+
+    from .dayrange import (DayRangeConfig, optimise, report_run, report_sweep,
+                           sweep)
 
     cfg = DayRangeConfig(
         symbol=args.symbol, start_equity=args.equity, lot=args.lot,
@@ -523,6 +526,50 @@ def cmd_dayrange(args: argparse.Namespace) -> int:
         stop_fraction=args.stop, time_stop_bars=args.time_stop,
         risk_pct=args.risk,
     )
+    if args.file:
+        # The whole point of the strategy is to be run on real gold, and
+        # until now only the S1-S6 scalping engine could read a file. A
+        # user arriving at their PC with a downloaded history could
+        # backtest a strategy they had not asked for, and not the one they
+        # had. See docs/PAPIER-LAUF.md.
+        from .dayrange import run as run_once
+        from .sources.history import load, resample
+
+        if not args.tz:
+            print("--file braucht --tz. Es gibt bewusst keine Vorgabe: die "
+                  "falsche Zeitzone\nverschiebt jede Session-Regel, ohne dass "
+                  "es an den Zahlen auffaellt.\n"
+                  "  Dukascopy / EODHD / Twelve Data -> utc\n"
+                  "  Kaggle / MetaTrader-Export      -> broker_gmt3 "
+                  "(Sommer) oder broker_gmt2", file=sys.stderr)
+            return 1
+        series, load_report = load(
+            args.file, args.tz, symbol=args.symbol,
+            timeframe=args.file_timeframe or "5m")
+        print(load_report.render())
+        if not load_report.usable:
+            print("Zu wenige verwertbare Zeilen fuer einen Lauf.",
+                  file=sys.stderr)
+            return 1
+        if args.timeframe and args.timeframe != series.timeframe:
+            series = resample(series, args.timeframe)
+
+        # Bar-counted parameters describe M1. On any other timeframe they
+        # have to be scaled or "the day's range" quietly becomes a week.
+        from .candles import TIMEFRAME_SECONDS
+        factor = TIMEFRAME_SECONDS[series.timeframe] // 60
+        if factor > 1:
+            cfg = replace(cfg, bars_per_day=max(2, cfg.bars_per_day // factor),
+                          min_bars_for_range=max(5,
+                                                 cfg.min_bars_for_range // factor),
+                          time_stop_bars=max(2, cfg.time_stop_bars // factor))
+            print(f"  Zeiteinheit {series.timeframe}: Bar-Parameter durch "
+                  f"{factor} geteilt")
+
+        r = run_once(cfg, series=series, seed=args.seed)
+        print(report_run(r, source=f"{args.file} ({args.tz})"))
+        return 0
+
     if args.train:
         rows = optimise(cfg, markets=args.markets, bars=args.bars,
                         seed_base=args.seed)
@@ -799,6 +846,16 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--stop", type=float, default=0.50,
                     help="Anteil der Vorhersage als Stop-Abstand")
     dr.add_argument("--time-stop", type=int, default=240)
+    dr.add_argument("--file", default=None,
+                    help="echte Historie statt Simulator, z.B. "
+                         "XAU_5m_data.csv")
+    dr.add_argument("--tz", default=None,
+                    help="Zeitzone der Datei — utc, broker_gmt2, "
+                         "broker_gmt3, us_eastern_no_dst")
+    dr.add_argument("--file-timeframe", default=None,
+                    help="Zeiteinheit der Datei, falls sie nicht erkannt wird")
+    dr.add_argument("--timeframe", default=None,
+                    help="auf diese Zeiteinheit zusammenfassen, z.B. 5m")
     dr.add_argument("--markets", type=int, default=30)
     dr.add_argument("--bars", type=int, default=15_000)
     dr.add_argument("--seed", type=int, default=1_000)

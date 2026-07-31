@@ -311,6 +311,32 @@ Kategorien.
 nüchternen Vorteil von +0,10 R, also noch rund 18 Sitzungen. Erst dann ist ein Urteil eines.
 Die Auswertung sagt das jetzt an genau der Stelle, an der die Nachricht gut ist.
 
+## Der Weg zu echten Daten — jetzt für beide Strategien
+
+Bis eben konnte nur die **Scalping-Engine (S1–S6)** eine heruntergeladene Datei lesen. Wer
+mit `XAU_5m_data.csv` am PC ankam, hätte also eine Strategie backtesten können, nach der er
+nie gefragt hat — und die Tagesspanne-Strategie, um die es hier geht, gar nicht.
+
+Das geht jetzt:
+
+```bash
+python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 \
+    --equity 1000 --risk 1
+```
+
+Zwei Dinge nimmt der Befehl dabei ernst:
+
+- **`--tz` ist Pflicht, ohne Vorgabe.** Eine falsche Zeitzone verschiebt jede Session-Regel,
+  und an den Zahlen fällt es nicht auf. Kaggle und MetaTrader-Exporte liefern Brokerzeit
+  (`broker_gmt3` im Sommer, `broker_gmt2` im Winter), Dukascopy und Twelve Data liefern UTC.
+- **Bar-gezählte Parameter werden skaliert.** 1.440 Bars sind auf M1 ein Tag und auf M5 eine
+  Woche. Ohne Umrechnung würde aus „die Tagesspanne" stillschweigend „die Wochenspanne".
+  Der Befehl sagt an, wenn er teilt.
+
+Der Bericht für einen einzelnen Lauf ist bewusst von dem für viele Märkte getrennt: Eine
+echte Historie ist **eine** Stichprobe und wird auch als eine ausgewiesen — mit 95 %-Band
+und der Angabe, wie viele Trades ein Nachweis bräuchte.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

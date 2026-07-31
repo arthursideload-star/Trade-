@@ -169,5 +169,78 @@ class TestTheFlagsThatCarryData(unittest.TestCase):
         self.assertEqual(captured.get("start_equity_eur"), 1234.0)
 
 
+class TestTheRealHistoryPath(unittest.TestCase):
+    """The path that matters once a downloaded history exists.
+
+    Until now only the S1-S6 scalping engine could read a file. Someone
+    arriving at their PC with XAU_5m_data.csv could backtest a strategy they
+    had never asked for, and not the one the whole paper chain runs. These
+    tests exercise the file path for both engines on a file written in the
+    format the Kaggle set actually ships: MetaTrader timestamps in broker
+    time.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import csv
+        from datetime import timedelta
+        from metals import simulate
+
+        series = simulate.generate(
+            bars=4_000, timeframe="5m", seed=4242,
+            params=simulate.MarketParams(start_price=4_105.62))
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.path = os.path.join(cls.tmp.name, "XAU_5m_data.csv")
+        with open(cls.path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["Date", "Open", "High", "Low", "Close", "Volume"])
+            for c in series.candles:
+                ts = c.ts + timedelta(hours=3)      # broker time, as shipped
+                w.writerow([ts.strftime("%Y.%m.%d %H:%M:%S"),
+                            f"{c.open:.2f}", f"{c.high:.2f}",
+                            f"{c.low:.2f}", f"{c.close:.2f}",
+                            int(c.volume or 0)])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_the_scalping_backtest_reads_the_file(self):
+        out = run_command(["backtest", "--source", "file", "--file", self.path,
+                           "--tz", "broker_gmt3"])
+        self.assertIn("HISTORY LOAD REPORT", out)
+        self.assertIn("broker_gmt3", out)
+
+    def test_the_day_range_strategy_reads_the_same_file(self):
+        out = run_command(["dayrange", "--file", self.path,
+                           "--tz", "broker_gmt3", "--equity", "1000",
+                           "--risk", "1"])
+        self.assertIn("HISTORY LOAD REPORT", out)
+        self.assertIn("EIN LAUF", out)
+
+    def test_it_refuses_a_file_without_a_timezone(self):
+        """No default, on purpose: a wrong offset moves every session rule
+        and nothing in the numbers gives it away."""
+        args = build_parser().parse_args(["dayrange", "--file", self.path])
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            code = args.func(args)
+        self.assertEqual(code, 1)
+        self.assertIn("--tz", err.getvalue())
+
+    def test_bar_counted_parameters_are_scaled_to_the_files_timeframe(self):
+        """1,440 bars is a day on M1 and five days on M5. Left unscaled,
+        'the day's range' silently becomes 'the week's range'."""
+        out = run_command(["dayrange", "--file", self.path,
+                           "--tz", "broker_gmt3", "--equity", "1000"])
+        self.assertIn("Bar-Parameter durch 5 geteilt", out)
+
+    def test_the_single_run_report_states_its_uncertainty(self):
+        out = run_command(["dayrange", "--file", self.path,
+                           "--tz", "broker_gmt3", "--equity", "1000",
+                           "--risk", "1"])
+        self.assertIn("95%-Band", out)
+
+
 if __name__ == "__main__":
     unittest.main()
