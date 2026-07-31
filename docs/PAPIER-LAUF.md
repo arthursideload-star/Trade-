@@ -337,6 +337,32 @@ Der Bericht für einen einzelnen Lauf ist bewusst von dem für viele Märkte get
 echte Historie ist **eine** Stichprobe und wird auch als eine ausgewiesen — mit 95 %-Band
 und der Angabe, wie viele Trades ein Nachweis bräuchte.
 
+## Sind 174 Trades wirklich 174 Beobachtungen?
+
+Jedes Band in dieser Auswertung behandelt die Trades als unabhängige Ziehungen. Trades
+derselben Sitzung teilen aber denselben Markt — wenn sie sich dadurch ähneln, ist die
+effektive Stichprobe kleiner als die Anzahl und das Band zu schmal.
+
+Also gemessen statt angenommen, per einfacher Varianzanalyse über 20 Sitzungen:
+
+| | |
+|---|---:|
+| Streuung **zwischen** Sitzungen | 0,4016 |
+| Streuung **innerhalb** einer Sitzung | 0,8487 |
+| Intraklassenkorrelation | **0,00** |
+| Design-Effekt | **1,00** |
+
+Die Streuung zwischen Sitzungen ist sogar **kleiner** als die innerhalb — Sitzungen sind
+also nicht voneinander unterscheidbar. Effektive Stichprobe: 174 von 174. Das Band darf so
+stehen bleiben.
+
+Der Grund ist derselbe Mechanismus wie bei Behauptung C3: **R-Vielfache sind durch ihren
+eigenen Stop normiert**, also kürzt sich die Volatilität eines Tages weitgehend heraus. Was
+den Session-Filter nutzlos machte, macht hier die Stichprobe sauber.
+
+Die Auswertung prüft das jetzt bei jedem Aufruf und warnt, falls der Effekt je über 1,2
+steigt.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

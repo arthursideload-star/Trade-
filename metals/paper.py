@@ -454,6 +454,44 @@ def render_distribution(d: Distribution) -> str:
     return "\n".join(lines)
 
 
+def design_effect(groups: list[list[float]]) -> tuple[float, float]:
+    """How much the confidence interval is inflated by clustering.
+
+    Every interval in this module treats the trades as independent draws.
+    They are not obviously so: trades inside one session share a market, and
+    if that made them alike, the effective sample would be smaller than the
+    count and the band narrower than it deserves.
+
+    So it is measured rather than assumed, by a one-way analysis of
+    variance. Returns (intraclass correlation, design effect); an effect of
+    1.0 means the clustering costs nothing and n is n.
+
+    Measured on the chain at twenty sessions: ICC 0.00, effect 1.00. The
+    between-session variance came out *below* the within-session variance,
+    which is the same mechanism claim C3 found -- R multiples are normalised
+    by their own stop, so a session's volatility largely divides out and
+    sessions stop being distinguishable.
+    """
+    groups = [g for g in groups if g]
+    n_total = sum(len(g) for g in groups)
+    k = len(groups)
+    if k < 2 or n_total <= k:
+        return 0.0, 1.0
+
+    m = n_total / k
+    grand = statistics.fmean([r for g in groups for r in g])
+    ss_between = sum(len(g) * (statistics.fmean(g) - grand) ** 2 for g in groups)
+    ss_within = sum((r - statistics.fmean(g)) ** 2
+                    for g in groups for r in g)
+    ms_between = ss_between / (k - 1)
+    ms_within = ss_within / (n_total - k)
+    if ms_between + (m - 1) * ms_within <= 0:
+        return 0.0, 1.0
+    icc = max(0.0, (ms_between - ms_within)
+              / (ms_between + (m - 1) * ms_within))
+    return icc, 1.0 + (m - 1) * icc
+
+
 def evidence() -> str:
     """What the accumulated trades support, judged by the project's own rules.
 
@@ -499,6 +537,17 @@ def evidence() -> str:
     lines.append(f"  Erwartungswert    {mean:>+6.3f} R   "
                  f"95%-Band {lo:+.3f} bis {hi:+.3f} R")
     lines.append(f"  Streuung          {sd:>6.3f} R")
+
+    icc, deff = design_effect([e.get("r_multiples", []) for e in ledger])
+    if deff > 1.2:
+        lines.append("")
+        lines.append(f"  Trades derselben Sitzung aehneln sich (ICC {icc:.2f}).")
+        lines.append(f"  Die effektive Stichprobe ist deshalb nur "
+                     f"{len(rs) / deff:.0f} statt {len(rs)},")
+        lines.append("  und das Band oben ist entsprechend zu schmal.")
+    else:
+        lines.append(f"  Sitzungs-Clustering geprueft: ICC {icc:.2f}, "
+                     f"Effekt {deff:.2f} — n ist n.")
     lines.append("")
 
     if lo <= 0 <= hi:

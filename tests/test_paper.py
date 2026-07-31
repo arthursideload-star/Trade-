@@ -503,6 +503,31 @@ class TestTheEvidenceReport(LedgerFixture):
         paper.append(self._session_with([1.0, -1.0, 0.5, -0.5]))
         self.assertNotIn("mehrfach", paper.evidence())
 
+    def test_clustering_is_measured_rather_than_assumed_away(self):
+        """Every band here treats trades as independent draws.
+
+        Trades inside one session share a market, so that assumption is not
+        free. Measured on the chain it costs nothing -- ICC 0.00 -- but a
+        report that never checked would be relying on luck.
+        """
+        paper.append(self._session_with([1.0, -1.0, 0.5, -0.5, 0.2]))
+        paper.append(self._session_with([0.8, -0.9, 0.4, -0.6, 0.1]))
+        self.assertIn("Sitzungs-Clustering geprueft", paper.evidence())
+
+    def test_strong_clustering_would_shrink_the_effective_sample(self):
+        """Sessions that disagree with each other far more than their own
+        trades do. Then n is not n, and the report has to say so."""
+        for value in (2.0, -2.0, 2.0, -2.0):
+            paper.append(self._session_with([value] * 8))
+        icc, deff = paper.design_effect([e["r_multiples"]
+                                         for e in paper.load_ledger()])
+        self.assertGreater(deff, 1.2)
+        self.assertIn("effektive Stichprobe", paper.evidence())
+
+    def test_the_design_effect_is_one_when_there_is_nothing_to_cluster(self):
+        self.assertEqual(paper.design_effect([]), (0.0, 1.0))
+        self.assertEqual(paper.design_effect([[1.0, -1.0]]), (0.0, 1.0))
+
     def test_it_reports_how_many_more_trades_are_needed(self):
         paper.append(self._session_with([1.0, -1.0, 1.0, -1.0, 1.0, 0.2]))
         self.assertIn("Trades. Vorhanden", paper.evidence())
