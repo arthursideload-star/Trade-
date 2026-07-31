@@ -744,6 +744,89 @@ def measure_reversion_dependence(markets: int = 12, bars: int = 12_000,
 
 
 # --------------------------------------------------------------------------
+# The assumption the whole edge rests on, measured directly
+# --------------------------------------------------------------------------
+
+# A day whose close lands in the middle third of its own range is a day that
+# came back. The boundaries are a choice, not a law -- stated here rather
+# than buried, so a different choice can be argued with.
+MIDDLE_THIRD_LOW = 1.0 / 3.0
+MIDDLE_THIRD_HIGH = 2.0 / 3.0
+
+
+@dataclass
+class ClosePositionStats:
+    positions: list[float]         # (close - low) / (high - low) per day
+
+    @property
+    def days(self) -> int:
+        return len(self.positions)
+
+    @property
+    def share_closing_mid(self) -> float:
+        """Days that finished in the middle third of their own range.
+
+        This is the observable shadow of mean reversion. A market that
+        wanders out and comes back closes mid-range; a market that trends
+        closes near the extreme it trended toward.
+        """
+        if not self.positions:
+            return 0.0
+        mid = sum(1 for p in self.positions
+                  if MIDDLE_THIRD_LOW <= p <= MIDDLE_THIRD_HIGH)
+        return mid / len(self.positions)
+
+    @property
+    def mean_distance_from_middle(self) -> float:
+        if not self.positions:
+            return 0.0
+        return statistics.fmean(abs(p - 0.5) for p in self.positions)
+
+
+def close_position_stats(series) -> ClosePositionStats:
+    """Where each day's close sits inside that day's own range.
+
+    Exists because of C14: roughly 85% of the strategy's measured edge rests
+    on `simulate.MarketParams.reversion`, an assumption someone wrote into
+    the generator. Whether gold actually behaves that way is an empirical
+    question, and this is the cheapest statistic that answers it -- it needs
+    only OHLC, never tick data.
+
+    Run it on the downloaded history before trusting any backtest number:
+    if real gold closes at its extremes as often as a trending market does,
+    then the edge measured here was measuring the generator.
+
+    Days are grouped by the broker's trading date, not by counting bars. A
+    fixed bar count drifts out of alignment the moment the feed has a gap --
+    and every gold feed has them, at the daily break and over weekends -- so
+    counted "days" would slowly stop being days.
+    """
+    from datetime import timedelta
+
+    from .dayrange import ROLLOVER_HOUR_UTC
+
+    groups: dict[object, list] = {}
+    for bar in series.candles:
+        day = bar.ts.date()
+        if bar.ts.hour >= ROLLOVER_HOUR_UTC:
+            day += timedelta(days=1)
+        groups.setdefault(day, []).append(bar)
+
+    positions: list[float] = []
+    for day in sorted(groups):
+        bars = groups[day]
+        # A handful of bars is a stub session, not a day, and its close
+        # position says nothing.
+        if len(bars) < 20:
+            continue
+        high = max(b.high for b in bars)
+        low = min(b.low for b in bars)
+        if high > low:
+            positions.append((bars[-1].close - low) / (high - low))
+    return ClosePositionStats(positions=positions)
+
+
+# --------------------------------------------------------------------------
 # report
 # --------------------------------------------------------------------------
 

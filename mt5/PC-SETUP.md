@@ -67,6 +67,36 @@ Bruttokante auffressen. Der Report zeigt beides getrennt.
 - **Deutlich positiv** → dann wird es interessant, und dann reden wir über die nächsten
   Schritte.
 
+
+**Und der wichtigste Einzeltest, bevor du irgendeiner Zahl glaubst:**
+
+```bash
+python -c "
+from metals.sources.history import load
+from metals.claims import close_position_stats
+s, _ = load('XAU_5m_data.csv', 'broker_gmt3')
+st = close_position_stats(s)
+print(f'{st.days} Tage · {st.share_closing_mid*100:.0f}% schliessen mittig · Abstand {st.mean_distance_from_middle:.3f}')
+"
+```
+
+Das misst die **eine Annahme, auf der praktisch die gesamte gemessene Kante steht**: dass
+Gold innerhalb des Tages zur Mitte zurückkehrt. Der Simulator hat das eingebaut; schaltet
+man es ab, bleiben von +0,144 R noch +0,021 R ([URTEIL.md](../docs/URTEIL.md)).
+
+Vergleichswerte aus dem Simulator, 120 Tage je Zeile:
+
+| eingebaute Rückkehr | Tage mit Schluss in der Mitte | Abstand von der Mitte |
+|---|---:|---:|
+| voll (0,0020) | **32 %** | 0,227 |
+| schwach (0,0005) | 27 % | 0,259 |
+| keine (0,0000) | **23 %** | 0,266 |
+
+Liegt echtes Gold bei ~23 %, war die gemessene Kante der Generator. Liegt es bei ~32 %,
+ist die Annahme berechtigt. Dazwischen: entsprechend anteilig.
+
+Braucht nur Tageshoch, -tief und -schluss — keine Tickdaten.
+
 Erst danach das hier:
 
 ---

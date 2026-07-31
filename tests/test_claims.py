@@ -585,6 +585,77 @@ class TestC14WhatTheEdgeStandsOn(unittest.TestCase):
                          simulate.MarketParams().reversion)
 
 
+class TestClosePositionDetectsReversion(unittest.TestCase):
+    """The statistic that lets real data answer C14 directly.
+
+    C14 established that ~85% of the measured edge rests on
+    `simulate.MarketParams.reversion`. That makes one empirical question
+    decisive: does real gold revert intraday at that strength? This needs
+    only OHLC, so it can be run on the downloaded history without tick data
+    -- but only if it can actually tell the two worlds apart, which is what
+    these tests check.
+    """
+
+    @staticmethod
+    def _pooled(reversion, markets=6, seed_base=890_000):
+        from metals.claims import ClosePositionStats, close_position_stats
+        positions = []
+        for i in range(markets):
+            params = simulate.MarketParams(start_price=4_100.0,
+                                           reversion=reversion)
+            s = simulate.generate(bars=20_000, timeframe="1m",
+                                  seed=seed_base + i, params=params)
+            positions.extend(close_position_stats(s).positions)
+        return ClosePositionStats(positions)
+
+    def test_reversion_produces_more_mid_range_closes(self):
+        strong = self._pooled(simulate.MarketParams().reversion)
+        none = self._pooled(0.0)
+        self.assertGreater(strong.share_closing_mid, none.share_closing_mid)
+        self.assertLess(strong.mean_distance_from_middle,
+                        none.mean_distance_from_middle)
+
+    def test_it_groups_by_trading_date_not_by_counting_bars(self):
+        """Gold feeds gap at the daily break and over weekends, so counted
+        days drift out of alignment and stop being days."""
+        from datetime import datetime, timedelta, timezone
+
+        from metals.candles import Candle, CandleSeries
+        from metals.claims import close_position_stats
+        from metals.dayrange import ROLLOVER_HOUR_UTC
+
+        bars, start = [], datetime(2026, 1, 5, 0, tzinfo=timezone.utc)
+        for day in range(3):
+            for i in range(30):
+                ts = start + timedelta(days=day, minutes=i)
+                price = 100.0 + i
+                bars.append(Candle(ts=ts, open=price, high=price + 1,
+                                   low=price - 1, close=price, volume=1.0))
+        stats = close_position_stats(CandleSeries("XAUUSD", "1m", bars))
+        self.assertEqual(stats.days, 3)
+        self.assertLess(ROLLOVER_HOUR_UTC, 24)
+
+    def test_a_stub_session_is_not_counted_as_a_day(self):
+        from datetime import datetime, timedelta, timezone
+
+        from metals.candles import Candle, CandleSeries
+        from metals.claims import close_position_stats
+
+        start = datetime(2026, 1, 5, 0, tzinfo=timezone.utc)
+        bars = [Candle(ts=start + timedelta(minutes=i), open=100.0,
+                       high=101.0, low=99.0, close=100.0, volume=1.0)
+                for i in range(5)]
+        self.assertEqual(close_position_stats(
+            CandleSeries("XAUUSD", "1m", bars)).days, 0)
+
+    def test_an_empty_series_gives_zero_rather_than_dividing(self):
+        from metals.claims import ClosePositionStats
+        empty = ClosePositionStats([])
+        self.assertEqual(empty.days, 0)
+        self.assertEqual(empty.share_closing_mid, 0.0)
+        self.assertEqual(empty.mean_distance_from_middle, 0.0)
+
+
 class TestDocumentsDoNotFreezeEachOthersNumbers(unittest.TestCase):
     """One document quoting another's moving figure rots silently.
 
