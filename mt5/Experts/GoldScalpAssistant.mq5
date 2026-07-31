@@ -69,6 +69,10 @@
 // Metal-specific (M1-M6 in the Python package)
 #define MIN_STOP_ATR_MULTIPLE   0.8    // M1: tighter than this is noise
 #define STOP_BUFFER_ATR         0.35   // M2: beyond the level, never on it
+//--- DR: MIN_BARS_FOR_A_RANGE in metals/dayrange.py is 60 M1 bars = one
+//--- hour. On M5 that is 12 bars. Before that, "today's range" is a couple
+//--- of candles and means nothing.
+#define MIN_DR_BARS             12
 #define MAX_SPREAD_ATR_FRACTION 0.15   // M3
 #define MAX_SPREAD_PCT_OF_STOP  10.0   // S6 spread gate
 #define FRIDAY_FLAT_HOUR_UTC    19     // M5: a stop does not cover a gap
@@ -94,6 +98,24 @@ input group "=== Setups (all read M5) ==="
 input bool          InpUseS2           = true;  // S2 Pullback Window Break
 input bool          InpUseS4           = true;  // S4 Round Number Fade
 input bool          InpUseS5           = true;  // S5 Momentum Continuation
+input bool          InpUseDayRange     = false; // DR Tagesspanne (siehe unten)
+
+input group "=== DR: Tagesspanne ==="
+//--- The strategy the user specified and that metals/dayrange.py measures:
+//--- read the day's range, predict a move to its far end, bank a fraction
+//--- of that prediction, stop at a fraction on the other side.
+//---
+//--- OFF by default, and that is deliberate. Its edge is unproven on real
+//--- gold: 180 trades on the simulator give a band that only just clears
+//--- zero, after twenty looks at a growing sample. Switch it on for a demo
+//--- account and the strategy tester, not because a number looked good.
+//---
+//--- The constants below MUST equal DayRangeConfig in metals/dayrange.py.
+//--- tests/test_mt5_parity.py fails if they drift.
+input double        InpDrEdgeFraction  = 0.30;  // Entry zone: outer third of the range
+input int           InpDrConfirmBars   = 3;     // Candles that must agree
+input double        InpDrMinRangeAtr   = 2.0;   // Range narrower than this is noise
+input double        InpDrStopFraction  = 0.50;  // Stop at this share of the prediction
 
 input group "=== Exits ==="
 input double        InpFirstTargetR    = 0.5;   // First target in R (measured: 0.5 beats 1.0)
@@ -1195,6 +1217,7 @@ void LookForSetup(const datetime utc)
    if(InpUseS2 && !s.found) s = DetectS2(atr_value);
    if(InpUseS5 && !s.found) s = DetectS5(atr_value);
    if(InpUseS4 && !s.found) s = DetectS4(atr_value);
+   if(InpUseDayRange && !s.found) s = DetectDayRange(atr_value);
    if(!s.found)
    {
       Note("no setup. Most bars are not an opportunity.");
@@ -1202,6 +1225,89 @@ void LookForSetup(const datetime utc)
    }
 
    ExecuteOrAdvise(s, atr_value, session_label);
+}
+
+//--- DR: the day-range strategy. Port of predict() in metals/dayrange.py,
+//--- and the two must stay in step -- every figure in docs/PAPIER-LAUF.md
+//--- describes the Python side, so a divergence here would make those
+//--- numbers describe nothing that runs.
+//---
+//--- The rule: take the last 24 hours of bars, find their high and low. If
+//--- price sits in the outer InpDrEdgeFraction of that range AND the last
+//--- InpDrConfirmBars candles all point back into it, predict a move to the
+//--- far end. The range must be at least InpDrMinRangeAtr ATRs wide, since
+//--- a day that has not moved is not a range to lean on.
+//---
+//--- Where this deliberately differs from the Python: the stop it asks for
+//--- is a fraction of the predicted move, but SECTION 10 then applies M2
+//--- (buffer beyond the level), M1 (never tighter than 0.8 ATR) and the
+//--- broker minimum. Those can only widen it. The parity test therefore
+//--- checks that this stop is never TIGHTER than Python's, not that the two
+//--- are identical -- a hard risk rule outranks matching a backtest.
+Setup DetectDayRange(const double atr_value)
+{
+   Setup s; ZeroMemory(s);
+   if(atr_value <= 0.0) return s;
+
+   //--- 288 M5 bars is 24 hours. Bar 0 is forming, so the window starts at 1.
+   const int DAY_BARS = 288;
+   MqlRates r[];
+   ArraySetAsSeries(r, true);
+   const int got = CopyRates(_Symbol, PERIOD_M5, 1, DAY_BARS, r);
+   if(got < MIN_DR_BARS) return s;
+
+   double high = r[0].high;
+   double low  = r[0].low;
+   for(int i = 1; i < got; i++)
+   {
+      high = MathMax(high, r[i].high);
+      low  = MathMin(low,  r[i].low);
+   }
+
+   const double span = high - low;
+   if(span <= 0.0) return s;
+   if(span < atr_value * InpDrMinRangeAtr) return s;
+
+   const double price = r[0].close;
+   const double position = (price - low) / span;   // 0 at the low, 1 at the high
+
+   //--- "und die Kerzen": price being low is not a signal, price being low
+   //--- and turning is.
+   bool rising = true, falling = true;
+   for(int i = 0; i < InpDrConfirmBars && i < got; i++)
+   {
+      if(r[i].close < r[i].open) rising  = false;
+      if(r[i].close > r[i].open) falling = false;
+   }
+
+   const bool at_low  = (position <= InpDrEdgeFraction);
+   const bool at_high = (position >= 1.0 - InpDrEdgeFraction);
+   if(!((at_low && rising) || (at_high && falling))) return s;
+
+   const bool is_long = at_low && rising;
+   const double entry = is_long ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
+                                : SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   const double target = is_long ? high : low;
+   const double move = MathAbs(target - entry);
+   if(move <= 0.0) return s;
+
+   s.found            = true;
+   s.id               = "DR";
+   s.name             = "Day Range Prediction";
+   s.is_long          = is_long;
+   s.entry            = entry;
+   //--- SECTION 10 turns this into the stop, then may widen it.
+   s.structural_level = is_long ? (entry - move * InpDrStopFraction)
+                                : (entry + move * InpDrStopFraction);
+   s.evidence = StringFormat(
+      "price at %.0f%% of a %.2f range (%.2f-%.2f), %d candles turning %s, "
+      "predicted move %.2f to %.2f",
+      position * 100.0, span, low, high, InpDrConfirmBars,
+      (is_long ? "up" : "down"), move, target);
+   s.failure_mode =
+      "On a trend day the range breaks and the far end is never reached. "
+      "The time stop, not the prediction, is what ends those.";
+   return s;
 }
 
 //--- S2: EMA stack sets direction, 1-3 counter-trend candles form the

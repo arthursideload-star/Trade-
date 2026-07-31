@@ -219,7 +219,7 @@ stand nur in meinem Bericht, nicht in den Daten.
 
 ---
 
-## A10 · Der EA handelt eine andere Strategie als die, die gemessen wird — **offen, dokumentiert**
+## A10 · Der EA handelte eine andere Strategie als die, die gemessen wird — **portiert, Kompilierung offen**
 
 Das ist der schwerste Befund des Projekts, und er ist noch nicht behoben.
 
@@ -242,11 +242,32 @@ risk limits as the Python package"*. Für die Scalping-Setups stimmt das. Als Au
 „die Strategie" führt es in die Irre, und ein Leser nach 21 Sitzungen Tagesspanne-Ergebnissen
 liest es genau so. Der Kopf sagt jetzt ausdrücklich, was **nicht** drin ist.
 
-**Warum nicht sofort behoben:** Ein Port nach MQL5 lässt sich in dieser Umgebung nicht
-kompilieren. Die bestehende Lösung dafür — Logik nach Python transliterieren und per
-Paritätstest gegen die getestete Implementierung prüfen, wie bei der Zeitzonen-Arithmetik —
-ist der richtige Weg und der nächste große Arbeitsschritt. Eine blind geschriebene, nie
-kompilierte Strategiedatei ins Repo zu legen wäre schlechter als die ehrliche Lücke.
+**Portiert.** `DetectDayRange` steht jetzt im EA — als zusätzliches Setup „DR" im
+bestehenden EA, nicht als zweite Datei. Damit erbt es die geprüfte Infrastruktur:
+Risikoschicht, Journal, Positionsverwaltung, Sessionerkennung. Ein zweiter EA hätte all das
+dupliziert.
+
+Abgesichert wird der Port nach dem Muster, das im Projekt schon für die Zeitzonen-Arithmetik
+existiert (`tests/test_mt5_dayrange_parity.py`), mit drei verschiedenen Arten von Prüfung:
+
+1. **Die Konstanten sind dieselben Zahlen.** Aus der `.mq5`-Quelle gelesen, nicht hier
+   abgeschrieben — eine Änderung auf einer der beiden Seiten lässt den Test fehlschlagen
+   statt auseinanderdriften.
+2. **Die Logik feuert auf denselben Bars.** Eine bewusst wörtliche Transliteration des MQL5
+   läuft gegen `metals.dayrange.predict` über 12.000 Bars: jedes Signal, jede Richtung und
+   jedes vorhergesagte Ziel müssen übereinstimmen. Tun sie.
+3. **Der Stop ist nie enger als in Python** — und das ist eine *Ungleichung*, mit Absicht.
+   Der EA übergibt eine Stop-Ebene, und danach greifen M2 (Puffer jenseits des Levels), M1
+   (mindestens 0,8 ATR) und der Broker-Mindestabstand. Die können nur weiten. Eine harte
+   Risikoregel steht über der exakten Übereinstimmung mit einem Backtest.
+
+**Standardmäßig ausgeschaltet** (`InpUseDayRange = false`). Die Kante ist auf echtem Gold
+nicht nachgewiesen — 180 Trades auf dem Simulator ergeben ein Band, das die Null gerade
+eben verlässt, nach zwanzig Blicken auf eine wachsende Stichprobe. Einschalten für Demokonto
+und Strategietester, nicht weil eine Zahl gut aussah.
+
+**Was weiterhin offen ist:** Ob die Datei **kompiliert**, kann hier niemand prüfen. Das
+braucht MetaEditor. Alle Paritätstests der Welt ersetzen kein `F7`.
 
 ---
 

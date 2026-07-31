@@ -4,7 +4,7 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (629 Tests). Nächster Schritt: Backtest auf echter
+Journal-Modul implementiert und getestet (642 Tests). Nächster Schritt: Backtest auf echter
 Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
@@ -37,10 +37,11 @@ Expert Advisor. Was dort trotzdem geht:
 **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**. Und wenn der Bot laufen soll, *während der
 Rechner aus ist*, braucht es einen VPS: **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)**.
 
-**Er handelt die Scalping-Setups S2, S4 und S5** — *nicht* die Tagesspanne-Strategie aus
-`metals/dayrange.py`, über die [docs/PAPIER-LAUF.md](./docs/PAPIER-LAUF.md) und
-[docs/KONTOGROESSE.md](./docs/KONTOGROESSE.md) sprechen. Diese Strategie gibt es bisher nur
-in Python. Warum das so ist und was daraus folgt:
+**Er handelt die Scalping-Setups S2, S4 und S5.** Die Tagesspanne-Strategie aus
+`metals/dayrange.py` — über die [docs/PAPIER-LAUF.md](./docs/PAPIER-LAUF.md) und
+[docs/KONTOGROESSE.md](./docs/KONTOGROESSE.md) sprechen — ist als Setup **„DR" portiert**,
+aber **standardmäßig aus** (`InpUseDayRange`). Ihre Kante ist auf echtem Gold nicht
+nachgewiesen. Wie der Port abgesichert ist und was offen bleibt:
 [docs/REPO-AUDIT.md, A10](./docs/REPO-AUDIT.md).
 
 **Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
@@ -168,7 +169,7 @@ Hart im Code, nicht in Konfiguration — eine Änderung erfordert einen Commit:
 python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
-629 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
+642 Tests, vollständig offline — die HTTP-Schicht ist injizierbar, jede Quelle wird gegen
 aufgezeichnete Antwortformate geprüft, und der Backtest hat einen Regressionstest gegen
 Lookahead. Der MQL5-EA lässt sich hier nicht kompilieren — seine Zeitzonen-Arithmetik ist
 deshalb wörtlich nach Python portiert und wird stündlich über vier Jahre gegen die

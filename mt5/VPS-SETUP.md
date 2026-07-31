@@ -291,7 +291,7 @@ Risikolimit und rührt kein Konto an — du kannst es beliebig oft laufen lassen
 ```
 3. Downloading the expert advisor
 ------------------------------------------------------------
-  OK    1659 lines, complete
+  OK    1765 lines, complete
   OK    installed at /config/.wine/drive_c/.../MQL5/Experts/GoldScalpAssistant.mq5
 ```
 
@@ -365,9 +365,9 @@ wc -l GoldScalpAssistant.mq5
 
 `wc -l` zählt die Zeilen der Datei.
 
-**Es muss `1659 GoldScalpAssistant.mq5` dastehen.**
+**Es muss `1765 GoldScalpAssistant.mq5` dastehen.**
 
-- Steht dort `1659` → die Datei ist vollständig angekommen. Weiter bei A5.
+- Steht dort `1765` → die Datei ist vollständig angekommen. Weiter bei A5.
 - Steht dort eine **andere Zahl** oder eine Fehlermeldung → nicht weitermachen.
   Datei löschen (`rm GoldScalpAssistant.mq5`) und Schritt 4 wiederholen. Bleibt es dabei:
   Ausgabe abfotografieren und mir schicken.
@@ -436,7 +436,7 @@ Alles erledigt, wenn du jedes Häkchen setzen kannst:
 - [ ] MT5 öffnet sich über *Zugriff → Öffnen* im Browser
 - [ ] Demokonto verbunden, unten rechts steht eine Verbindung, oben steht **Demo**
 - [ ] Kontostand rund **1.000 USD**
-- [ ] `wc -l` hat **1659** ausgegeben
+- [ ] `wc -l` hat **1765** ausgegeben
 - [ ] MetaEditor meldet **0 errors, 0 warnings**
 - [ ] XAUUSD-Chart auf **M5**, EA drauf, 🙂 oben rechts
 - [ ] Knopf **Algo-Trading** ist grün
@@ -535,7 +535,7 @@ https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/claude/t
 Rechtsklick → **Seite speichern unter**. Wohin? In MT5: **Datei → Datenverzeichnis öffnen** →
 Ordner `MQL5/Experts`.
 
-Es ist **eine einzige Datei**, sonst nichts. 1659 Zeilen.
+Es ist **eine einzige Datei**, sonst nichts. 1765 Zeilen.
 
 ### D2. Kompilieren
 
@@ -717,7 +717,7 @@ du behalten willst, vorher sichern:
 | Terminal antwortet `No such file or directory` bei `ls -d /config/.wine` | Du bist im **VPS-Terminal** statt im Container. Tab zu, den Terminal-Knopf **bei „Zugriff"** nehmen, nicht den oben auf der Seite |
 | `wget: command not found` | Seltener Fall, anderes Image. Stattdessen `curl -L -o GoldScalpAssistant.mq5 <dieselbe Adresse>` |
 | `wget` schreibt „Permission denied" | Falscher Ordner oder falsches Terminal. `pwd` eingeben — muss auf `…/MQL5/Experts` enden |
-| `wc -l` zeigt nicht 1659 | Datei unvollständig. `rm GoldScalpAssistant.mq5`, dann Schritt 4 wiederholen |
+| `wc -l` zeigt nicht 1765 | Datei unvollständig. `rm GoldScalpAssistant.mq5`, dann Schritt 4 wiederholen |
 | Datei ist da, MetaEditor zeigt sie nicht | Falscher `Experts`-Ordner erwischt. In MT5 **Datei → Datenverzeichnis öffnen**, den Pfad von dort nehmen |
 | F4 öffnet nichts | Über den Browser fängt Safari die Taste ab — den **IDE-Knopf** in der Symbolleiste nutzen |
 | Kein XAUUSD in der Marktübersicht | Rechtsklick → *Alle anzeigen*. Heißt bei manchen Brokern `GOLD`, `XAUUSD.r` oder `XAUUSDm` |

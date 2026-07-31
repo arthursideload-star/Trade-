@@ -19,10 +19,11 @@ unbemerkt bleibt. Genau das war Auditbefund A7.
 
 Das Journal liegt in `training/paper-ledger.jsonl`, eine Zeile je Sitzung.
 
-> **Wichtig, bevor du eine dieser Zahlen auf den EA überträgst:** Der Expert Advisor in
-> `mt5/` handelt **eine andere Strategie**. Er implementiert drei Scalping-Setups (S2, S4,
-> S5); die Tagesspanne-Strategie, um die es hier geht, existiert nur in Python. Keine Zahl
-> auf dieser Seite beschreibt, was der EA tun würde. Siehe
+> **Wichtig, bevor du eine dieser Zahlen auf den EA überträgst:** Die Tagesspanne-Strategie
+> ist inzwischen als Setup „DR" in den EA portiert und per Paritätstest gegen diese Python-
+> Implementierung geprüft — aber **standardmäßig ausgeschaltet**, und **ob die Datei
+> kompiliert, konnte hier niemand prüfen**. Ohne `InpUseDayRange = true` handelt der EA die
+> Scalping-Setups S2, S4 und S5, über die keine Zahl auf dieser Seite etwas sagt. Siehe
 > [REPO-AUDIT.md, A10](./REPO-AUDIT.md).
 
 ## Was hier echt ist und was nicht
