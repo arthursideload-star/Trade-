@@ -325,6 +325,10 @@ class Result:
     skipped_no_margin: int = 0
     skipped_stop_too_wide: int = 0
     partials_taken: int = 0
+    # Trades where the position could not be split and the EA
+    # therefore closed in full at the first target. On a
+    # minimum-lot account this is every trade.
+    unsplittable_closes: int = 0
     # Positive means financing cost the account money over the run. Tracked
     # separately from trade P&L because it is not a trading result -- it is
     # rent, and it accrues whether the position is right or wrong.
@@ -424,6 +428,15 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                             t.entry + r_unit * cfg.runner_target_r if t.long
                             else t.entry - r_unit * cfg.runner_target_r)
                         res.partials_taken += 1
+                    else:
+                        # Neither side of the split reaches the broker
+                        # minimum, so the EA closes the position in full at
+                        # the first target instead. This is not an edge
+                        # case on a small account -- it is the *only* case:
+                        # at 0.01 lot nothing can be split, so every trade
+                        # caps at first_target_r and no runner ever exists.
+                        t.take_profit = first
+                        res.unsplittable_closes += 1
                     t.partial_taken = True
 
             if cfg.ea_exit and t.partial_taken and t.lots > 0:

@@ -176,6 +176,48 @@ verdient weniger. Eine Warnung im Log hätte niemand gelesen.
 Wächter ist als Quelltextprüfung getestet, nicht als Programmlauf.
 
 
+---
+
+## A13 · Auf einem kleinen Konto gibt es den Teilschluss gar nicht — **modelliert, und eine Empfehlung zurückgezogen**
+
+Beim Nachbau des EA-Ausstiegs (A12) fiel auf, dass mein Python-Modell einen Fall falsch
+behandelte, der auf **deinem** Konto der Normalfall ist.
+
+60 % von 0,01 Lot sind 0,006 — unter dem Broker-Minimum. Der Rest wäre es auch. Der EA hat
+dafür eine Rückfalllinie, und sie ist nicht „lass laufen":
+
+```
+first target reached but a partial is not possible: 0.00/0.01 lots
+against a 0.01 minimum. Closing in full.
+```
+
+**Er schließt komplett bei 0,5 R.** Auf einem Mindestlot-Konto existiert der Runner also
+nie, und jeder Trade ist bei 0,5 R gedeckelt. Mein Modell ließ die Position stattdessen
+weiterlaufen — das war eine andere Strategie als die, die der EA handelt. Korrigiert.
+
+### Und dann das Ergebnis, das eine Empfehlung verhindert hat
+
+| Ausstieg | Trades | Erwartung | 95 %-Band |
+|---|---:|---:|---|
+| EA 60/40-Teilung (0,10 Lot) | 1.245 | +0,0599 R | +0,031 … +0,089 |
+| EA voll bei 0,5 R (0,01 Lot) | 1.254 | +0,0690 R | +0,039 … +0,099 |
+| ein Ziel bei 1,0 R (0,01 Lot) | 1.058 | +0,0926 R | +0,051 … +0,135 |
+
+Der Reihenfolge nach sieht es aus, als wäre der Runner ein Verlustgeschäft und ein einzelnes
+Ziel bei 1,0 R am besten. **Die Bänder überlappen aber alle drei.** Bei rund 1.200 Trades je
+Variante ist keiner dieser Unterschiede belegt.
+
+Ich hatte an dieser Stelle schon „der Runner verliert Geld" formuliert. Das gibt die Messung
+nicht her, und die Zeile ist wieder raus. Als Test steht jetzt fest, dass die Bänder
+überlappen — sollten sie sich je trennen, muss der Test umgeschrieben werden, und dann
+*ist* es ein Befund.
+
+**Warum der Zeitstop-Wächter aus A12 trotzdem bleibt:** Dessen Effekt war mit +0,128 → +0,024 R
+mehrfach so groß und auf derselben Stichprobenbasis gemessen. Große Effekte überstehen
+Unsicherheitsbänder, kleine nicht — und das ist genau die Grenze, an der eine Messung aufhört,
+eine Empfehlung zu sein.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

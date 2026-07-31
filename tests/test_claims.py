@@ -828,3 +828,67 @@ class TestTheEaExitScheme(unittest.TestCase):
         self.assertIn("DR_MIN_TIME_STOP_MINUTES 240", src)
         self.assertIn("INIT_PARAMETERS_INCORRECT", src)
         self.assertIn("InpUseDayRange && InpTimeStopMinutes", src)
+
+
+class TestTheUnsplittablePosition(unittest.TestCase):
+    """A minimum-lot account cannot take a partial at all.
+
+    60% of 0.01 lot is 0.006, which rounds down to nothing, and the
+    remainder would be under the broker minimum too. The EA's fallback is to
+    close the position in full at the first target -- so on a small account
+    the runner never exists and every trade caps at first_target_r. This is
+    not an edge case there; it is the only case.
+    """
+
+    def test_a_minimum_lot_position_is_never_split(self):
+        cfg = replace(DayRangeConfig(), ea_exit=True, lot=0.01,
+                      start_equity=1_928.0)
+        r = run(cfg, seed=91, bars=15_000)
+        self.assertEqual(r.partials_taken, 0)
+        self.assertGreater(r.unsplittable_closes, 0)
+
+    def test_a_larger_position_is_split(self):
+        cfg = replace(DayRangeConfig(), ea_exit=True, lot=0.10,
+                      start_equity=20_000.0)
+        r = run(cfg, seed=91, bars=15_000)
+        self.assertGreater(r.partials_taken, 0)
+        self.assertEqual(r.unsplittable_closes, 0)
+
+    def test_the_python_model_follows_the_ea_and_closes_in_full(self):
+        """The EA closes the whole position at the first target when it
+        cannot be split. An engine that instead let it run would model a
+        strategy the expert does not trade."""
+        import pathlib
+        src = pathlib.Path("mt5/Experts/GoldScalpAssistant.mq5").read_text(
+            encoding="utf-8")
+        self.assertIn("a partial is not possible", src)
+        self.assertIn("Closing in full", src)
+
+    def test_no_exit_scheme_is_distinguishable_at_this_sample(self):
+        """The result that stops a recommendation being made.
+
+        Measured over ~1,200 trades each, the three schemes come out at
+        +0.060R, +0.069R and +0.093R -- and every 95% band overlaps every
+        other. The ranking is suggestive and nothing more, which is why the
+        EA guard addresses the time stop (a several-times-larger effect on
+        the same footing) and leaves the exit structure alone.
+        """
+        from metals.journal import mean_interval
+        base = DayRangeConfig()
+        variants = {
+            "split": replace(base, ea_exit=True, lot=0.10,
+                             start_equity=20_000.0),
+            "full_at_half": replace(base, ea_exit=True, lot=0.01,
+                                    start_equity=1_928.0),
+            "single_target": replace(base, lot=0.01, start_equity=1_928.0),
+        }
+        bands = {}
+        for name, cfg in variants.items():
+            s = sweep(cfg, markets=12, bars=15_000, seed_base=960_000)
+            rs = [x for r in s.runs for x in r.r_multiples]
+            bands[name] = mean_interval(rs)
+        lo_best, hi_best = bands["single_target"]
+        lo_worst, hi_worst = bands["split"]
+        self.assertLess(lo_best, hi_worst,
+                        "if the bands ever separate, the ranking becomes a "
+                        "finding and this test should be rewritten to say so")
