@@ -802,8 +802,7 @@ def render(s: Session) -> str:
         lines.append("  Vorzeichen — das geht nur, wenn die Einsaetze")
         lines.append("  unterschiedlich gross waren.")
     if s.risk_spread_ratio >= 3.0:
-        lines.append("  ACHTUNG, ungleiche Einsaetze: sie liegen weit")
-        lines.append("  auseinander. Bei")
+        lines.append("  ACHTUNG, ungleiche Einsaetze: bei")
         lines.append("  fester Losgroesse riskiert jeder Trade so viel, wie die")
         lines.append("  vorhergesagte Bewegung gross war — unkontrolliert.")
         lines.append("  Das Ergebnis der Sitzung haengt dann daran, WELCHE")
@@ -977,8 +976,17 @@ def summarise() -> str:
             if e["trades"] and (e["expectancy_r"] > 0)
             != (e["end_equity_eur"] > e["start_equity_eur"]))
         if disagreed:
-            lines.append(f"  Ergebnis gegen Erwartungswert  {disagreed:>6} von "
-                         f"{len(traded)}")
+            # The unequal-stakes problem, counted across the whole chain
+            # rather than noted session by session. A bare label was not
+            # enough: this is the number that says how often the account
+            # moved the opposite way to the quality of the trading.
+            lines.append(f"  Konto lief gegen die Regelguete  "
+                         f"{disagreed:>4} von {len(traded)} "
+                         f"({disagreed / len(traded) * 100:.0f} %)")
+            lines.append("    In diesen Sitzungen hatten Erwartungswert und")
+            lines.append("    Kontostand verschiedene Vorzeichen. Das geht nur")
+            lines.append("    bei ungleichen Einsaetzen — es entschied, WELCHE")
+            lines.append("    Trades gewannen, nicht wie viele.")
     idle = [e for e in ledger if e["could_not_trade"]]
     if idle:
         lines.append(f"  Sitzungen ohne Trade           {len(idle):>6}")

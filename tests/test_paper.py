@@ -403,7 +403,9 @@ class TestWhenTheResultContradictsTheRules(LedgerFixture):
     def test_the_summary_counts_them(self):
         paper.append(self._session(0.05, 390.0))
         paper.append(self._session(0.05, 460.0))
-        self.assertIn("Ergebnis gegen Erwartungswert", paper.summarise())
+        text = paper.summarise()
+        self.assertIn("Konto lief gegen die Regelguete", text)
+        self.assertIn("1 von 2", text)
 
 
 class TestTheVolatilityWarning(LedgerFixture):
@@ -814,6 +816,43 @@ class TestTheDistribution(LedgerFixture):
     def test_doubling_time_is_the_actual_compounding_answer(self):
         d = paper.Distribution(returns_pct=[100.0], equity_eur=400)
         self.assertAlmostEqual(d.implied_days_to_double, 1.0)
+
+
+class TestTheOutputReadsAsSentences(LedgerFixture):
+    """Prose defects in the most-read output.
+
+    These are not cosmetic in the way a stray space is cosmetic: this text
+    is the only thing anyone reads before deciding what a session meant, and
+    a warning that arrives as a broken sentence gets skipped.
+    """
+
+    def test_the_unequal_stakes_warning_is_one_sentence(self):
+        s = run_session(**TODAY)
+        if s.risk_spread_ratio < 3.0:
+            self.skipTest("this session did not trigger the warning")
+        text = paper.render(s)
+        start = text.index("ACHTUNG, ungleiche Einsaetze")
+        warning = " ".join(text[start:].split("\n")[0:5]).split()
+        warning = " ".join(warning)
+        self.assertNotIn("auseinander. Bei fester", warning)
+        self.assertIn("bei fester Losgroesse riskiert jeder Trade", warning)
+
+    def test_the_disagreement_count_explains_itself(self):
+        """A bare '8 von 37' told the reader nothing about what it counted."""
+        for i, (start, end, exp) in enumerate([(400.0, 380.0, 0.5),
+                                               (380.0, 400.0, -0.5),
+                                               (400.0, 420.0, 0.5)]):
+            paper.append(Session(index=i, timestamp=0.0, date_utc="x",
+                                 gold_price=4_100.0, day_high=4_150.0,
+                                 day_low=4_050.0, price_source="t",
+                                 start_equity_eur=start, end_equity_eur=end,
+                                 lot=MIN_LOT, forced_risk_pct=5.0,
+                                 trades=4, wins=2, losses=2,
+                                 expectancy_r=exp))
+        text = paper.summarise()
+        self.assertIn("Regelguete", text)
+        self.assertIn("2 von 3", text)
+        self.assertIn("Vorzeichen", text)
 
 
 class TestTheBlockTable(LedgerFixture):
