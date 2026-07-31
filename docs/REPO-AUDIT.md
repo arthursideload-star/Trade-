@@ -397,3 +397,59 @@ Erwartungswert, sobald der Filter greift — +0,154 R bei 2 (wirkungslos), +0,11
 +0,071 R bei 35. Der Filter schadet, sobald er etwas tut. Er bleibt als Regler erhalten,
 weil er eine sinnvolle Absicht ausdrückt, aber er wird nicht scharf gestellt.
 
+---
+
+## A13 · Der Misch-Test entschied auf einer Zahl, die von 0 % bis 205 % schwankt — **behoben**
+
+Der Misch-Test ist die wichtigste Diagnose dieses Projekts: Er zerstört die Reihenfolge der
+Kerzen und lässt alles andere gleich. Überlebt die Kante das, kommt sie nicht aus dem Chart.
+Er hat hier schon einmal einen echten Fehlbefund gefangen.
+
+In Trainingsdurchgang 6 schlug er an — 52 % überlebten bei `time_stop_bars = 480`. Bevor
+daraus eine Konsequenz wurde, die Gegenprobe: **dieselbe Konfiguration auf zwölf Blöcken zu
+je acht Seeds.**
+
+| | |
+|---|---|
+| Spanne der Überlebensquote | **0 % bis 70 %** |
+| Median | 12 % |
+| Blöcke über der 50-%-Warnschwelle | **2 von 12** |
+
+Die Quote ist also kein Urteil, sondern ein Münzwurf mit Nachkommastellen. Der Grund ist
+mathematisch: Sie teilt durch einen verrauschten Nenner. Bei 16 Seeds kam sogar ein Block
+mit **205 %** heraus — eine Prozentangabe über 100, die als Größe gar nicht interpretierbar
+ist.
+
+**Behoben.** Der Test rechnet jetzt die **gepaarte Differenz** original minus gemischt, Markt
+für Markt, mit Standardfehler. Kein Nenner, ein Fehlerbalken, und derselbe Block liest sich
+statt „205 %" als −0,034 R ± 0,046 — also klar: nichts gemessen. Dazu 16 statt 8 Märkte.
+
+**Was das nicht gebracht hat, und das gehört dazu:** Die Fehlalarmquote sinkt **nicht** —
+2 von 12 bei beiden Regeln, bei denselben Blöcken. Die Streuung sitzt *zwischen* den
+Marktblöcken, nicht innerhalb. Mehr Seeds pro Durchgang lösen das nicht.
+
+**Die eigentliche Konsequenz** ist deshalb: Ein einzelner Durchgang kann diese Frage gar
+nicht entscheiden. Das Urteil wandert in die Gesamtbilanz, wo alle Durchgänge
+inversvarianz-gewichtet zusammengefasst werden.
+
+### Was dabei über die Trainingsergebnisse herauskam
+
+Mit dem zweiten neuen Maß — dem Vorsprung des Siegers auf den Zweitplatzierten, gepaart
+gemessen — steht in der Bilanz jetzt:
+
+| Stellschraube | bester Wert | Vorsprung über dem Rauschen? |
+|---|---:|---|
+| `confirm_bars` | 2 | **nein** |
+| `edge_fraction` | 0,15 | **nein** |
+| `min_range_atr` | 10 | **nein** |
+| `stop_fraction` | 0,25 | **nein** |
+| `take_fraction` | 1,0 | **nein** |
+| `time_stop_bars` | 480 | ja (+0,0507 R ± 0,0123) |
+
+**Fünf von sechs „besten Werten" im Trainingslog waren der größte von vier Stichproben.**
+Und der eine mit echtem Vorsprung — `time_stop_bars = 480` — fällt durch den Misch-Test
+(+0,0817 R ± 0,0601, also 1,4 Standardfehler). Das passt zum Mechanismus: Wer länger hält,
+erntet Drift und Volatilität, und die liefert ein gemischter Chart genauso.
+
+**`time_stop_bars` bleibt deshalb bei 240.** Der Wert, der am besten aussah, ist der einzige,
+der die Prüfung nicht besteht.

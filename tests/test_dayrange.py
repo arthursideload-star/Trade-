@@ -221,6 +221,53 @@ class TestTheTrainingLogStaysHonest(unittest.TestCase):
                 f"{dial}: sweeping {values[0]} to {values[-1]} changes "
                 f"nothing, so picking a winner among them records noise")
 
+    def test_a_winner_needs_a_margin_larger_than_its_own_error(self):
+        """Run 5 recorded min_range_atr=10 beating 2 when both printed
+        +0.126R. Picking the largest of four samples is what happens every
+        time, whether or not the dial does anything."""
+        from metals.train import Iteration
+        noisy = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1,
+                          best_margin_r=0.004, best_margin_se=0.010)
+        solid = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1,
+                          best_margin_r=0.051, best_margin_se=0.012)
+        self.assertFalse(noisy.margin_clears_the_noise)
+        self.assertTrue(solid.margin_clears_the_noise)
+
+    def test_a_margin_without_an_error_bar_is_not_a_margin(self):
+        from metals.train import Iteration
+        it = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1,
+                       best_margin_r=99.0, best_margin_se=0.0)
+        self.assertFalse(it.margin_clears_the_noise)
+
+    def test_the_shuffle_verdict_uses_the_paired_difference(self):
+        """The ratio is kept for intuition and must not decide anything.
+
+        Measuring one unchanged configuration on twelve blocks returned
+        survival ratios from 0% to 205% -- a percentage above 100 is not
+        even interpretable, while the paired difference for that same block
+        reads -0.034R +/- 0.046, which says plainly that nothing was
+        measured.
+        """
+        from metals.train import Iteration
+        it = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1,
+                       shuffle_real_r=0.10, shuffle_random_r=0.02,
+                       shuffle_margin_r=0.08, shuffle_margin_se=0.060)
+        # Ratio says 20% survives, which reads like a pass.
+        self.assertLess(it.edge_survives_shuffling, 0.5)
+        # The paired difference is 1.3 standard errors, which is not one.
+        self.assertFalse(it.edge_beats_shuffling)
+
+    def test_the_shuffle_diagnostic_runs_on_more_than_eight_markets(self):
+        from metals.train import SHUFFLE_SEEDS
+        self.assertGreaterEqual(SHUFFLE_SEEDS, 16)
+
+    def test_the_summary_pools_the_shuffle_check_across_runs(self):
+        """One run's verdict is too noisy either way, so the accumulated log
+        carries the verdict."""
+        from metals.train import load_log, summarise
+        if any(e.get("shuffle_margin_se", 0) > 0 for e in load_log()):
+            self.assertIn("Gepaart ueber alle Durchgaenge", summarise())
+
     def test_the_summary_warns_when_the_log_mixes_cost_models(self):
         """Runs 1-3 charged spread alone and run 4 charges spread x 1.5, so
         the per-dial table compares two different worlds. It still compares

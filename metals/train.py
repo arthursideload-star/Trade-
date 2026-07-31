@@ -26,6 +26,7 @@ three has still only been seen three times.
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import statistics
@@ -37,6 +38,11 @@ from .dayrange import DayRangeConfig, run, sweep
 
 LOG_DIR = "training"
 LOG_PATH = os.path.join(LOG_DIR, "log.jsonl")
+
+# Markets the shuffle diagnostic runs on. Was 8, which was demonstrably too
+# few: the same configuration measured on twelve blocks of eight returned a
+# survival ratio anywhere between 0% and 70%.
+SHUFFLE_SEEDS = 16
 
 # Which dial to sweep, rotated by iteration so each gets fresh markets in
 # turn rather than one being over-measured and the rest never revisited.
@@ -98,11 +104,56 @@ class Iteration:
     shuffle_real_r: float = 0.0
     shuffle_random_r: float = 0.0
     timestamp: float = 0.0
+
+    # How much better the winner was than the second-best value, measured on
+    # the same markets, and the standard error of that difference. Without
+    # these two numbers a "best value" is just the largest of four samples --
+    # run 5 recorded min_range_atr=10 beating min_range_atr=2 when both
+    # printed +0.126R, a winner decided entirely by noise.
+    runner_up_value: float = 0.0
+    best_margin_r: float = 0.0
+    best_margin_se: float = 0.0
+
+    # The shuffle diagnostic as a paired difference rather than a ratio.
+    # The ratio divides by a noisy denominator, and measuring the same
+    # configuration on twelve blocks of eight seeds returned anywhere from
+    # 0% to 70%, crossing the 50% warning line 2 times in 12 -- a one in six
+    # false alarm on the project's most important check. The difference
+    # real minus shuffled, paired market by market, has no such denominator.
+    shuffle_margin_r: float = 0.0
+    shuffle_margin_se: float = 0.0
+    shuffle_seeds: int = 0
     # Which cost model produced this iteration. Recorded because it changed
     # mid-log: runs 1-3 charged spread alone, run 4 onward charges
     # spread x 1.5 (docs/REPO-AUDIT.md, A8). Comparing a dial's best value
     # across that boundary compares two different worlds.
     slippage_fraction: float = 0.0
+
+    @property
+    def edge_beats_shuffling(self) -> bool:
+        """The gate that replaces the ratio.
+
+        Real minus shuffled, paired by market, more than two standard errors
+        above zero. This is the claim the diagnostic was always trying to
+        make -- that destroying the order of the bars destroys the edge --
+        stated so that a quiet block cannot fake a failure.
+        """
+        if self.shuffle_margin_se <= 0:
+            return False
+        return self.shuffle_margin_r > 2 * self.shuffle_margin_se
+
+    @property
+    def margin_clears_the_noise(self) -> bool:
+        """Whether the winner beat the runner-up by more than measurement error.
+
+        Two standard errors, so roughly the 95% level. Below it the sweep
+        has not found a better value -- it has found the largest of four
+        samples drawn from the same distribution, which is what happens
+        every time regardless of whether the dial does anything.
+        """
+        if self.best_margin_se <= 0:
+            return False
+        return self.best_margin_r > 2 * self.best_margin_se
 
     @property
     def edge_survives_shuffling(self) -> float:
@@ -129,9 +180,15 @@ def one_iteration(markets: int = 20, bars: int = 12_000,
                    slippage_fraction=base.slippage_fraction)
 
     best_r, best_val = float("-inf"), values[0]
+    # Per-market expectancies, kept so the winner can be compared with the
+    # runner-up on the *same* markets. An unpaired comparison would drown a
+    # real difference in between-market variance, which is far larger than
+    # the difference any dial makes.
+    by_value: dict[float, list[float]] = {}
     for value in values:
         cfg = DayRangeConfig(**{**asdict(base), dial: value})
         s = sweep(cfg, markets=markets, bars=bars, seed_base=seed_base)
+        by_value[value] = [r.expectancy_r for r in s.runs]
         it.results.append({
             "value": value,
             "expectancy_r": round(s.mean_expectancy_r, 4),
@@ -144,16 +201,32 @@ def one_iteration(markets: int = 20, bars: int = 12_000,
             best_r, best_val = s.mean_expectancy_r, value
     it.best_value, it.best_expectancy_r = best_val, round(best_r, 4)
 
+    runner_up = max((v for v in values if v != best_val),
+                    key=lambda v: statistics.fmean(by_value[v]), default=None)
+    if runner_up is not None:
+        it.runner_up_value = runner_up
+        diffs = [a - b for a, b in zip(by_value[best_val], by_value[runner_up])]
+        it.best_margin_r = round(statistics.fmean(diffs), 5)
+        if len(diffs) > 1:
+            se = statistics.stdev(diffs) / math.sqrt(len(diffs))
+            it.best_margin_se = round(se, 5)
+
     # The diagnostic that already caught one false positive in this project.
     best_cfg = DayRangeConfig(**{**asdict(base), dial: best_val})
     from . import simulate
     real, shuf = [], []
-    for i in range(8):
+    for i in range(SHUFFLE_SEEDS):
         seed = seed_base + 5_000 + i
         s = simulate.generate(bars=bars, timeframe="1m", seed=seed)
         real.append(run(best_cfg, series=s, seed=seed).expectancy_r)
         shuf.append(run(best_cfg, series=_shuffled(s, seed), seed=seed)
                     .expectancy_r)
+    diffs = [a - b for a, b in zip(real, shuf)]
+    it.shuffle_seeds = len(diffs)
+    it.shuffle_margin_r = round(statistics.fmean(diffs), 5)
+    if len(diffs) > 1:
+        it.shuffle_margin_se = round(
+            statistics.stdev(diffs) / math.sqrt(len(diffs)), 5)
     it.shuffle_real_r = round(statistics.fmean(real), 4)
     it.shuffle_random_r = round(statistics.fmean(shuf), 4)
     return it
@@ -197,12 +270,35 @@ def render(it: Iteration) -> str:
     lines.append("")
     lines.append(f"  Bester Wert: {it.dial} = {it.best_value:g} "
                  f"({it.best_expectancy_r:+.3f}R)")
+    if it.best_margin_se > 0:
+        lines.append(f"    Vorsprung auf {it.dial} = {it.runner_up_value:g}: "
+                     f"{it.best_margin_r:+.4f}R "
+                     f"(± {it.best_margin_se:.4f} Standardfehler)")
+        if not it.margin_clears_the_noise:
+            lines.append("    DER VORSPRUNG IST KLEINER ALS DAS RAUSCHEN.")
+            lines.append("    Dieser 'beste Wert' ist der groesste von vier")
+            lines.append("    Stichproben, kein Befund. Nicht uebernehmen.")
     lines.append("")
-    lines.append("  MISCH-TEST auf der besten Konfiguration")
+    lines.append(f"  MISCH-TEST auf der besten Konfiguration "
+                 f"({it.shuffle_seeds or 8} Maerkte)")
     lines.append(f"    original {it.shuffle_real_r:+.3f}R · "
                  f"gemischt {it.shuffle_random_r:+.3f}R · "
                  f"uebrig {it.edge_survives_shuffling * 100:.0f}%")
-    if it.edge_survives_shuffling > 0.5:
+    if it.shuffle_margin_se > 0:
+        # The verdict comes from the paired difference, not the ratio above.
+        # The ratio stays visible because it is the intuitive form, but it
+        # swings from 0% to 70% on identical configurations and must not be
+        # what decides anything.
+        lines.append(f"    Vorsprung gepaart: {it.shuffle_margin_r:+.4f}R "
+                     f"(± {it.shuffle_margin_se:.4f})")
+        if it.edge_beats_shuffling:
+            lines.append("    In Ordnung: die Kante haengt an der Reihenfolge,")
+            lines.append("    und der Abstand ist groesser als das Rauschen.")
+        else:
+            lines.append("    WARNUNG: das Mischen kostet die Kante nicht")
+            lines.append("    nachweislich. Sie kaeme dann nicht aus dem")
+            lines.append("    Chartmuster. Nichts uebernehmen.")
+    elif it.edge_survives_shuffling > 0.5:
         lines.append("    WARNUNG: mehr als die Haelfte ueberlebt das Mischen.")
         lines.append("    Die Kante kaeme dann nicht aus dem Chartmuster.")
     else:
@@ -236,8 +332,13 @@ def summarise() -> str:
             votes.setdefault(e["best_value"], []).append(e["best_expectancy_r"])
         winner = max(votes.items(), key=lambda kv: (len(kv[1]),
                                                     statistics.fmean(kv[1])))
+        # A winner whose margin never cleared the noise is not a winner.
+        solid = sum(1 for e in entries
+                    if e.get("best_margin_se", 0) > 0
+                    and e.get("best_margin_r", 0) > 2 * e["best_margin_se"])
+        mark = "" if solid else "  (kein Vorsprung ueber dem Rauschen)"
         lines.append(f"  {dial:>16} {winner[0]:>8g} {len(entries):>12} "
-                     f"{statistics.fmean(winner[1]):>+10.3f}R")
+                     f"{statistics.fmean(winner[1]):>+10.3f}R{mark}")
 
     # Clamped the same way Iteration.edge_survives_shuffling clamps it. A
     # shuffled run that loses money gives a negative ratio, which printed as
@@ -252,6 +353,35 @@ def summarise() -> str:
                      f"ueberlebt")
         worst = max(survives)
         lines.append(f"  Schlechtester Durchgang: {worst * 100:.0f}%")
+
+    # Pooled verdict. A single run's shuffle check is too noisy to decide
+    # anything: measuring one unchanged configuration on twelve blocks
+    # failed the check twice, at eight seeds and again at sixteen. Raising
+    # the seed count did not fix that -- the variance is between market
+    # blocks, not within them -- so the verdict belongs to the accumulated
+    # log rather than to any one iteration.
+    margins = [(e["shuffle_margin_r"], e["shuffle_margin_se"])
+               for e in log
+               if e.get("shuffle_margin_se", 0) > 0]
+    if margins:
+        # Inverse-variance weighting: a run measured on more markets, or on
+        # calmer ones, says more about the question.
+        weights = [1.0 / (se ** 2) for _, se in margins]
+        pooled = sum(m * w for (m, _), w in zip(margins, weights)) / sum(weights)
+        pooled_se = math.sqrt(1.0 / sum(weights))
+        lines.append("")
+        lines.append(f"  Gepaart ueber alle Durchgaenge: {pooled:+.4f}R "
+                     f"(± {pooled_se:.4f})")
+        if pooled > 2 * pooled_se:
+            lines.append("  Zusammengefasst haelt die Kante dem Mischen NICHT")
+            lines.append("  stand — das heisst hier: sie verschwindet beim")
+            lines.append("  Mischen, also liest die Strategie die Reihenfolge.")
+        else:
+            lines.append("  Zusammengefasst ist kein Unterschied zum gemischten")
+            lines.append("  Chart nachweisbar. Das waere der ernste Fall.")
+        if len(margins) < 5:
+            lines.append(f"  (erst {len(margins)} Durchgaenge mit dieser "
+                         f"Messung — noch duenn)")
 
     models = sorted({e.get("slippage_fraction", 0.0) for e in log})
     if len(models) > 1:
