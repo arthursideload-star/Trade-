@@ -27,7 +27,7 @@ RAW="https://raw.githubusercontent.com/arthursideload-star/Trade-/refs/heads/${B
 # which would block the install over a difference that does not matter. What
 # actually needs catching is a truncated download, and that is caught by
 # looking for markers from the start, middle and end of the file.
-MIN_LINES=1400
+MIN_LINES=1459
 
 say()  { printf '%s\n' "$*"; }
 rule() { say "------------------------------------------------------------"; }

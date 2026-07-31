@@ -5,11 +5,19 @@
 //| Gold scalping assistant for MetaTrader 5. ONE FILE -- copy it to  |
 //| MQL5/Experts and press F7. No include folder to create.           |
 //|                                                                  |
-//| Implements the same setups and the same hard risk limits as the   |
-//| Python package in metals/, so that what is measured there and     |
-//| what runs here are the same system rather than two similar ones.  |
+//| Implements THREE of the scalping setups -- S2 Pullback Window     |
+//| Break, S4 Round Number Fade, S5 Momentum Continuation -- with the |
+//| same hard risk limits as the Python package in metals/.           |
 //| tests/test_mt5_parity.py checks that the limits below still equal |
 //| their Python counterparts.                                        |
+//|                                                                  |
+//| WHAT IS *NOT* IN HERE: the day-range strategy in metals/          |
+//| dayrange.py -- predict a move, bank half of it, stop on the other |
+//| side. That is the strategy the paper chain in metals/paper.py     |
+//| measures, and it exists only in Python. Installing this EA trades |
+//| the three setups above, NOT that strategy, and none of the        |
+//| figures in docs/PAPIER-LAUF.md describe what this file does.      |
+//| See docs/REPO-AUDIT.md, finding A10.                              |
 //|                                                                  |
 //| MODES                                                             |
 //|   Advisor - draws the setup, sizes it, prints the plan, alerts.   |

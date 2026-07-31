@@ -37,6 +37,12 @@ Expert Advisor. Was dort trotzdem geht:
 **[mt5/MOBILE-SETUP.md](./mt5/MOBILE-SETUP.md)**. Und wenn der Bot laufen soll, *während der
 Rechner aus ist*, braucht es einen VPS: **[mt5/VPS-SETUP.md](./mt5/VPS-SETUP.md)**.
 
+**Er handelt die Scalping-Setups S2, S4 und S5** — *nicht* die Tagesspanne-Strategie aus
+`metals/dayrange.py`, über die [docs/PAPIER-LAUF.md](./docs/PAPIER-LAUF.md) und
+[docs/KONTOGROESSE.md](./docs/KONTOGROESSE.md) sprechen. Diese Strategie gibt es bisher nur
+in Python. Warum das so ist und was daraus folgt:
+[docs/REPO-AUDIT.md, A10](./docs/REPO-AUDIT.md).
+
 **Startet im Advisor-Modus:** Er zeichnet, rechnet und meldet, platziert aber keine Order.
 So kannst du seine Einschätzung mit deiner eigenen vergleichen, bevor er etwas ausgeben
 darf. Der Auto-Modus ist eine bewusste Umschaltung, kein Standard.

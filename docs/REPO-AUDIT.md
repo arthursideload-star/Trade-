@@ -219,6 +219,37 @@ stand nur in meinem Bericht, nicht in den Daten.
 
 ---
 
+## A10 · Der EA handelt eine andere Strategie als die, die gemessen wird — **offen, dokumentiert**
+
+Das ist der schwerste Befund des Projekts, und er ist noch nicht behoben.
+
+`mt5/Experts/GoldScalpAssistant.mq5` implementiert **drei Scalping-Setups**: S2 (Pullback
+Window Break), S4 (Round Number Fade), S5 (Momentum Continuation). Die Datei enthält
+**null** Vorkommen der Tagesspanne-Strategie.
+
+Die Tagesspanne-Strategie ist aber die, die der Nutzer vorgegeben hat („Bewegung
+vorhersagen, die Hälfte mitnehmen, Stop auf der Gegenseite"), die in `metals/dayrange.py`
+steht, und über die **jede Zahl** in [PAPIER-LAUF.md](./PAPIER-LAUF.md) und
+[KONTOGROESSE.md](./KONTOGROESSE.md) spricht — 21 Sitzungen, 180 Trades, Konfidenzbänder,
+Design-Effekt.
+
+**Konsequenz, unmissverständlich:** Wer den EA installiert, handelt die drei Setups oben —
+nicht die Strategie, um die es die ganze Zeit ging. Keine der gemessenen Zahlen beschreibt,
+was diese Datei tun würde.
+
+Der Modulkopf des EA behauptete bis eben: *„Implements the same setups and the same hard
+risk limits as the Python package"*. Für die Scalping-Setups stimmt das. Als Aussage über
+„die Strategie" führt es in die Irre, und ein Leser nach 21 Sitzungen Tagesspanne-Ergebnissen
+liest es genau so. Der Kopf sagt jetzt ausdrücklich, was **nicht** drin ist.
+
+**Warum nicht sofort behoben:** Ein Port nach MQL5 lässt sich in dieser Umgebung nicht
+kompilieren. Die bestehende Lösung dafür — Logik nach Python transliterieren und per
+Paritätstest gegen die getestete Implementierung prüfen, wie bei der Zeitzonen-Arithmetik —
+ist der richtige Weg und der nächste große Arbeitsschritt. Eine blind geschriebene, nie
+kompilierte Strategiedatei ins Repo zu legen wäre schlechter als die ehrliche Lücke.
+
+---
+
 ## Was geprüft wurde und in Ordnung war
 
 - **Keine Zugangsdaten im Repository.** Vor jedem Commit läuft eine Suche nach den
