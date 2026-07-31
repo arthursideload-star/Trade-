@@ -1061,3 +1061,53 @@ class TestTheTrainingLogKnowsItsOwnRegime(unittest.TestCase):
         log = load_log()
         if len({regime_of(e) for e in log}) > 1:
             self.assertIn("mischt Regelwerke", summarise())
+
+
+class TestTheSpreadCostsMoreInAOneDaySession(unittest.TestCase):
+    """C2 was measured on 12,000-bar runs. The paper chain runs 1,440-bar
+    sessions, and the spread bites harder there.
+
+    Not because of the bar count itself -- expectancy is flat across run
+    lengths -- but because a one-day window gives the day-range lookback
+    less to work with, so the predicted move and therefore the target come
+    out smaller. The same absolute spread is then a larger share of it.
+    """
+
+    def _cfg(self, **kw):
+        return replace(DayRangeConfig(), start_equity=2_033.0, lot=0.01,
+                       risk_pct=None, **kw)
+
+    def test_a_one_day_session_has_a_smaller_target(self):
+        short = sweep(self._cfg(), markets=12, bars=1_440, seed_base=610_000)
+        long = sweep(self._cfg(), markets=12, bars=12_000, seed_base=610_000)
+        self.assertLess(short.mean_target_usd, long.mean_target_usd,
+                        "if these ever match, the mechanism behind this "
+                        "finding has changed")
+
+    def test_expectancy_itself_does_not_depend_on_the_run_length(self):
+        """The control. Were expectancy drifting with bar count the target
+        explanation would be unnecessary -- and wrong."""
+        short = sweep(self._cfg(spread_usd_oz=0.34), markets=12, bars=1_440,
+                      seed_base=610_000)
+        long = sweep(self._cfg(spread_usd_oz=0.34), markets=12, bars=12_000,
+                     seed_base=610_000)
+        self.assertLess(
+            abs(short.mean_expectancy_r - long.mean_expectancy_r), 0.06)
+
+    def test_the_observed_wide_spread_turns_a_session_negative(self):
+        """0.34 and 1.04 USD/oz are both observed bid/ask quotes on this
+        instrument. The chain charged the lower one for 53 of 56 sessions."""
+        cheap = sweep(self._cfg(spread_usd_oz=0.34), markets=16, bars=1_440,
+                      seed_base=610_000)
+        dear = sweep(self._cfg(spread_usd_oz=1.04), markets=16, bars=1_440,
+                     seed_base=610_000)
+        self.assertGreater(cheap.mean_expectancy_r, 0)
+        self.assertLess(dear.mean_expectancy_r, 0)
+
+    def test_the_daily_loss_limit_is_not_what_causes_it(self):
+        """Checked and ruled out: R2 moves these numbers by hundredths."""
+        on = sweep(self._cfg(spread_usd_oz=1.04), markets=12, bars=1_440,
+                   seed_base=610_000)
+        off = sweep(self._cfg(spread_usd_oz=1.04, daily_loss_limit=False),
+                    markets=12, bars=1_440, seed_base=610_000)
+        self.assertLess(abs(on.mean_expectancy_r - off.mean_expectancy_r), 0.05)

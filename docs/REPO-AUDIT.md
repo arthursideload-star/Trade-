@@ -474,6 +474,52 @@ wann eine Zahl nichts bedeutet. Vorher hat er sechsmal einen Sieger gemeldet und
 wie wenig das heißt.
 
 
+---
+
+## A19 · Der beobachtete Spread ist dreimal so hoch wie der berechnete — und in einer Tagessitzung entscheidet er
+
+Beim Kursabruf stand heute **Bid 4.048,35 / Ask 4.049,39**, also ein Spread von **1,04 $/oz**.
+Die Kette hat in **53 von 56** Sitzungen mit **0,34 $** gerechnet — dem Wert aus einer
+früheren Abfrage. Das ist das Dreifache.
+
+Und in einer Ein-Tages-Sitzung ist das nicht egal:
+
+| Spread | Erwartung je Trade | 95 %-Band |
+|---:|---:|---|
+| 0,00 $ | +0,1841 R | +0,058 … +0,310 |
+| **0,34 $ (bisher berechnet)** | **+0,1141 R** | −0,014 … +0,242 |
+| 0,68 $ | +0,0139 R | −0,115 … +0,142 |
+| **1,04 $ (heute beobachtet)** | **−0,0647 R** | −0,191 … +0,062 |
+| 1,50 $ | −0,2104 R | −0,334 … −0,087 |
+
+**Beim tatsächlich beobachteten Spread ist der Erwartungswert negativ.** Und schon bei 0,34 $
+schneidet das Band die Null.
+
+### Warum C2 das Gegenteil sagt — und beide stimmen
+
+C2 misst „kein Nulldurchgang bis 1,20 $" und gilt weiter; neu gemessen unter dem aktuellen
+Kostenmodell steht dort +0,0675 R bei 1,20 $. Der Unterschied ist **nicht** das Kostenmodell
+und **nicht** R2 — beides geprüft und ausgeschlossen.
+
+Es ist die **Zielgröße**:
+
+| Bars | Trades | mittleres Ziel | Spread-Anteil am Ziel |
+|---:|---:|---:|---:|
+| 1.440 (eine Sitzung) | 7,8 | **19,44 $** | 2,6 % |
+| 12.000 (C2) | 42,4 | **30,24 $** | 1,7 % |
+
+Über einen einzelnen Handelstag hat die Tagesspanne-Rückschau weniger Material, die
+vorhergesagte Bewegung fällt kleiner aus, und derselbe absolute Spread ist ein größerer
+Anteil davon. Der Erwartungswert selbst hängt **nicht** von der Lauflänge ab — das ist
+geprüft und wäre sonst die naheliegendere Erklärung gewesen.
+
+**Konsequenz:** Die Zahlen aus dem Papier-Lauf sind mit dem günstigeren von zwei beobachteten
+Spreads gerechnet, und die Strategie ist in dieser Betriebsart empfindlicher gegen den Spread
+als C2 nahelegt. Zwei Beobachtungen sind keine Verteilung — was daraus folgt, ist nicht „der
+Spread ist 1,04", sondern **„der Spread gehört bei jeder Sitzung frisch abgelesen, nicht
+fortgeschrieben"**.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei
