@@ -90,6 +90,57 @@ def mql_in_rollover(utc: datetime) -> bool:
 
 # --- Tests ------------------------------------------------------------------
 
+
+def _balanced_call_body(text: str, start: int) -> str:
+    """Everything between an already-opened '(' and its match."""
+    depth, i, in_str, esc = 1, start, False, False
+    while i < len(text) and depth:
+        ch = text[i]
+        if esc:
+            esc = False
+        elif ch == "\\":
+            esc = True
+        elif ch == '"':
+            in_str = not in_str
+        elif not in_str:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+        i += 1
+    return text[start:i - 1]
+
+
+def _split_top_level_args(body: str) -> list[str]:
+    """Split on commas that are not inside brackets or a string."""
+    depth, out, cur, in_str, esc = 0, [], "", False, False
+    for ch in body:
+        if esc:
+            cur += ch
+            esc = False
+            continue
+        if ch == "\\":
+            cur += ch
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            cur += ch
+            continue
+        if not in_str:
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                out.append(cur)
+                cur = ""
+                continue
+        cur += ch
+    if cur.strip():
+        out.append(cur)
+    return out
+
 class TestSundayArithmetic(unittest.TestCase):
     def test_last_sunday_is_a_sunday_inside_the_month(self):
         for year in range(2024, 2031):
@@ -348,6 +399,34 @@ class TestTheEaIsStructurallyIntact(unittest.TestCase):
     def test_parentheses_balance(self):
         self.assertEqual(self.code.count("("), self.code.count(")"),
                          "unbalanced parentheses -- the file will not compile")
+
+    def test_every_string_format_has_the_arguments_it_asks_for(self):
+        """A count the MQL5 compiler does not check for you.
+
+        StringFormat with too few arguments produces garbage at runtime, in
+        a log line nobody reads until they are trying to work out why a
+        trade was refused. Cheap to verify, impossible to notice otherwise.
+
+        Note %% : it is a literal percent and not a placeholder, and this
+        file has eight format strings using it. A checker that misses that
+        reports every one of them as broken -- which is exactly what a first
+        version of this test did.
+        """
+        raw = self.raw
+        checked = 0
+        for m in re.finditer(r"StringFormat\s*\(", raw):
+            body = _balanced_call_body(raw, m.end())
+            args = _split_top_level_args(body)
+            fmt = "".join(re.findall(r'"((?:\\.|[^"\\])*)"', args[0]))
+            specs = len(re.findall(r"%[-+ #0-9.*]*[diouxXeEfgGscp]",
+                                   fmt.replace("%%", "")))
+            self.assertEqual(specs, len(args) - 1,
+                             f"StringFormat with {specs} placeholders and "
+                             f"{len(args) - 1} arguments: {fmt[:60]!r}")
+            checked += 1
+        self.assertGreater(checked, 15,
+                           "the scan found almost no StringFormat calls, "
+                           "which means the scan is broken, not the file")
 
     def test_every_function_called_is_also_defined(self):
         """Limited to the project's own helpers: the MQL5 standard library is
