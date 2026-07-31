@@ -267,6 +267,60 @@ sechs vergleichbare Ergebnisse und ist es nicht. Ein Test prüft jetzt, dass ein
 unterhalb von 1,0 R tatsächlich greift und eines darüber als entartet erkannt wird.
 
 
+---
+
+## A15 · Regel M5 galt für die Strategie nicht — **behoben, zum dritten Mal derselbe Fehler**
+
+`metals/dayrange.py` enthielt **kein einziges Vorkommen** von „weekend" oder „Friday". Regel
+M5 („flach bis Freitag 19:00 UTC, Stops schützen nicht gegen Wochenendlücken") steht in
+`metals/risk.py`, wird von `size_position` durchgesetzt — und der Code, der tatsächlich
+handelt, kannte sie nicht.
+
+**Das ist jetzt zum dritten Mal derselbe Fehlertyp:**
+
+| | Regel | Wo sie stand | Wo sie fehlte |
+|---|---|---|---|
+| A1 | R1, 1 % Risiko je Trade | `risk.py` | `dayrange.py` |
+| A7 | R4, Nachrichtensperre | `risk.py` | `dayrange.py` |
+| **A15** | **M5, flach vor dem Wochenende** | `risk.py` | `dayrange.py` |
+
+Dreimal dasselbe Muster ist kein Zufall mehr, sondern ein Konstruktionsproblem: Die
+Risikoschicht war als Bibliothek gebaut, die *aufgerufen werden muss*, und die
+Strategie-Engine rief sie nie auf. Jede Regel musste einzeln nachgetragen werden, und
+gefunden wurden sie einzeln — durch Nachlesen, nicht durch eine Prüfung.
+
+**Behoben.** `DayRangeConfig.weekend_flat` ist **standardmäßig an**, weil M5 eine harte
+Metallregel ist und keine Vorliebe. Ab Freitag 19:00 UTC werden offene Positionen geschlossen
+(Ausstiegsgrund `weekend_flat`) und keine neuen mehr eröffnet.
+
+### Was die Messung sagt: nichts — und das ist wieder die ehrliche Antwort
+
++0,1051 R mit Regel gegen +0,1071 R ohne. Die Bänder sind praktisch deckungsgleich, 30
+M5-Schlüsse über 20 Märkte.
+
+Der Simulator **kann** die Regel nicht bewerten: Er überspringt geschlossene Stunden, eine
+über das Wochenende gehaltene Position setzt am nächsten Bar einfach fort. Es gibt dort
+keine Lücke. Genau wie bei A7 prüft der Test deshalb, dass die Regel **eingehalten** wird,
+nicht dass sie nützt.
+
+### Wofür die Regel dann da ist — die Zahl, die der Simulator nicht liefert
+
+Dokumentierte Wochenendlücken bei Gold liegen bei größeren Ereignissen zwischen **30 und
+50 $ je Unze**, im Extremfall um 80 $. Ein Stop schützt dagegen nicht — er wird zu dem Kurs,
+den man *nach* der Lücke bekommt. Auf dem aktuellen Kontostand (rund 1.930 $) und dem
+typischen Stop dieser Strategie von 30,77 $:
+
+| Lücke | Verlust statt Stop | Anteil am Konto | = Vielfaches des Stops |
+|---:|---:|---:|---:|
+| 10 $ | 40,77 $ | 2,1 % | 1,3× |
+| 30 $ | 60,77 $ | 3,1 % | 2,0× |
+| 50 $ | 80,77 $ | 4,2 % | 2,6× |
+| 80 $ | 110,77 $ | 5,7 % | 3,6× |
+
+Bei 0,01 Lot ist das verkraftbar. Der Punkt ist nicht die Höhe, sondern dass **das Risiko
+nicht mehr das ist, das die Regeln kalkuliert haben** — und genau das soll R1 verhindern.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

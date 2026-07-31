@@ -988,3 +988,66 @@ class TestTheFirstTargetSweepStaysMeaningful(unittest.TestCase):
         self.assertLess(bands[0.75][0], bands[0.25][1],
                         "if these ever separate, the default deserves a "
                         "second look and this test should say so")
+
+
+class TestTheWeekendFlatRule(unittest.TestCase):
+    """M5: flat by Friday 19:00 UTC.
+
+    The third rule found living in metals/risk.py while the code that
+    actually trades knew nothing about it -- after R1 (position sizing, A1)
+    and R4 (news blackout, A7). Same shape every time.
+
+    As with R4, the simulator cannot argue for it: it skips closed hours, so
+    a position carried over a weekend simply resumes at the next bar with no
+    gap. These tests check the rule is obeyed, not that it pays.
+    """
+
+    def test_the_rule_is_on_by_default(self):
+        """M5 is a hard metal rule, not a preference. A default of off would
+        make it advice."""
+        self.assertTrue(DayRangeConfig().weekend_flat)
+
+    def test_friday_evening_is_inside_the_window(self):
+        from metals.dayrange import past_weekend_flat
+        from metals.risk import WEEKEND_FLAT_HOUR_UTC
+        friday = datetime(2026, 7, 31, WEEKEND_FLAT_HOUR_UTC, 0,
+                          tzinfo=timezone.utc)
+        self.assertEqual(friday.weekday(), 4)
+        self.assertTrue(past_weekend_flat(friday))
+        self.assertFalse(past_weekend_flat(friday - timedelta(hours=1)))
+
+    def test_other_weekdays_are_never_inside_it(self):
+        from metals.dayrange import past_weekend_flat
+        for day in range(27, 31):          # Mon-Thu of that week
+            ts = datetime(2026, 7, day, 23, 0, tzinfo=timezone.utc)
+            self.assertFalse(past_weekend_flat(ts), ts)
+
+    def test_positions_are_closed_and_the_exit_is_named(self):
+        r = run(DayRangeConfig(), seed=980_001, bars=20_000)
+        self.assertGreater(r.exits.get("weekend_flat", 0), 0)
+
+    def test_nothing_is_opened_after_the_cutoff(self):
+        """A closed position that is reopened ten minutes later has not been
+        made flat."""
+        from metals.dayrange import past_weekend_flat
+        cfg = DayRangeConfig()
+        r = run(cfg, seed=980_001, bars=20_000)
+        self.assertGreater(r.trades, 0)
+        # With the rule off the run must differ, or it is not being applied.
+        off = run(replace(cfg, weekend_flat=False), seed=980_001, bars=20_000)
+        self.assertNotEqual(r.end_equity, off.end_equity)
+        self.assertEqual(off.exits.get("weekend_flat", 0), 0)
+
+    def test_the_simulator_cannot_show_the_benefit_and_that_is_expected(self):
+        """Measured +0.1051R with the rule against +0.1071R without, bands
+        almost identical. The rule stands on documented gap behaviour, not
+        on this number, and the test records that the number is a wash so
+        nobody later reads it as an argument against M5."""
+        with_rule = sweep(DayRangeConfig(), markets=10, bars=20_000,
+                          seed_base=980_000)
+        without = sweep(replace(DayRangeConfig(), weekend_flat=False),
+                        markets=10, bars=20_000, seed_base=980_000)
+        self.assertLess(
+            abs(with_rule.mean_expectancy_r - without.mean_expectancy_r), 0.05,
+            "if the simulator ever showed a real difference here it would be "
+            "an artefact, because it has no weekend gaps at all")

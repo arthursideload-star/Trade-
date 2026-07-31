@@ -38,7 +38,8 @@ from datetime import date, datetime
 
 from .candles import Candle, CandleSeries
 from .microscalp import EU_RETAIL_LEVERAGE_GOLD, STOP_OUT_LEVEL
-from .risk import MAX_RISK_PER_TRADE_PCT, NEWS_BLACKOUT_MINUTES
+from .risk import (MAX_RISK_PER_TRADE_PCT, NEWS_BLACKOUT_MINUTES,
+                   WEEKEND_FLAT_HOUR_UTC)
 from .specs import get_spec
 
 # A day's range on gold is a real reference level -- the high and low that
@@ -132,6 +133,17 @@ class DayRangeConfig:
     # field deliberately does not duplicate its schedule.
     news_times_utc: tuple[tuple[int, int], ...] = ()
 
+    # Rule M5: flat by Friday WEEKEND_FLAT_HOUR_UTC. On by default, because
+    # M5 is one of the hard metal rules and not a preference -- a stop does
+    # not protect against a weekend gap, it just becomes the price you get
+    # after the gap.
+    #
+    # Found the same way as A1 and A7: the rule lived in metals/risk.py,
+    # size_position enforced it, and dayrange.py contained no occurrence of
+    # "weekend" at all. Three rules now, all with the same shape -- the code
+    # that actually trades was the last place the rules reached.
+    weekend_flat: bool = True
+
     # --- the prediction ---
     # How close to an end of the day's range price must sit before the bot
     # will trade against it. 0.30 means the lower or upper third.
@@ -203,6 +215,23 @@ def in_news_blackout(ts: datetime,
     minutes_now = ts.hour * 60 + ts.minute
     return any(abs(minutes_now - (h * 60 + m)) <= NEWS_BLACKOUT_MINUTES
                for h, m in news_times_utc)
+
+
+def past_weekend_flat(ts: datetime) -> bool:
+    """Rule M5: Friday from WEEKEND_FLAT_HOUR_UTC onward, be flat.
+
+    Like the news blackout, this is not a filter a backtest chose. The
+    simulator cannot argue for or against it: it skips the closed hours
+    entirely, so a position carried across a weekend simply resumes at the
+    next bar with no gap at all. Real gold gaps at the Sunday open, and a
+    stop does not protect against a gap -- it becomes the price you get
+    *after* it.
+
+    So the measurement here will say "no difference", and that is the
+    expected answer rather than evidence the rule is pointless. What the
+    test checks is that the rule is obeyed, not that it pays.
+    """
+    return ts.weekday() == 4 and ts.hour >= WEEKEND_FLAT_HOUR_UTC
 
 
 def lots_for(cfg: DayRangeConfig, equity: float, stop_distance_usd: float,
@@ -463,12 +492,17 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
             hit_stop = bar.low <= t.stop_loss if t.long else bar.high >= t.stop_loss
             hit_tp = bar.high >= t.take_profit if t.long else bar.low <= t.take_profit
             timed_out = i - t.opened_at >= cfg.time_stop_bars
+            weekend = cfg.weekend_flat and past_weekend_flat(bar.ts)
 
             exit_price, why = None, ""
             if hit_stop:
                 exit_price, why = t.stop_loss, "stop"
             elif hit_tp:
                 exit_price, why = t.take_profit, "target"
+            elif weekend:
+                # Ahead of the time stop: a position that would otherwise be
+                # held into Friday's close is exactly what M5 forbids.
+                exit_price, why = bar.close, "weekend_flat"
             elif timed_out:
                 exit_price, why = bar.close, "time_stop"
 
@@ -522,7 +556,8 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                 equity = 0.0
                 break
 
-        if len(open_trades) < cfg.max_positions and i < len(candles) - 1:
+        if (len(open_trades) < cfg.max_positions and i < len(candles) - 1
+                and not (cfg.weekend_flat and past_weekend_flat(bar.ts))):
             p = predict(candles, i, cfg)
             if p.direction != "none":
                 res.signals += 1
