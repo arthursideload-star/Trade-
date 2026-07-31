@@ -38,10 +38,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import statistics
 import time
 from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from . import simulate
 from .dayrange import DayRangeConfig, run
@@ -756,12 +757,74 @@ class VerifyResult:
     chain_breaks: list[str] = field(default_factory=list)
     equity_mismatches: list[str] = field(default_factory=list)
     trade_mismatches: list[str] = field(default_factory=list)
+    date_mismatches: list[str] = field(default_factory=list)
     final_equity_eur: float = 0.0
 
     @property
     def ok(self) -> bool:
         return not (self.chain_breaks or self.equity_mismatches
-                    or self.trade_mismatches)
+                    or self.trade_mismatches or self.date_mismatches)
+
+
+# A date written into the free-text source field, e.g. "31.07.2026" or
+# "2026-07-31". The source line is the audit trail for where a price came
+# from, and a wrong date there points the trail at the wrong day.
+_SOURCE_DATE = re.compile(
+    r"\b(?:(\d{2})[.](\d{2})[.](\d{4})|(\d{4})-(\d{2})-(\d{2}))\b")
+
+
+# How close to the UTC day boundary a session may run and still legitimately
+# carry a provider date one day off. At 23:30 UTC it is already the next day
+# across Europe and Asia, and providers date quotes in their own timezone.
+_MIDNIGHT_GRACE_HOURS = 2
+
+
+def source_date_conflict(price_source: str, date_utc: str) -> str | None:
+    """Does the source line name a date the session cannot have used?
+
+    Added after writing "01.08.2026" onto a session the clock recorded as
+    31.07. Nothing downstream reads the source text, so the error was
+    invisible and would have survived into the record permanently -- which
+    is precisely the kind of defect a verification pass exists to catch.
+
+    **The first version of this check was wrong**, and its own first run
+    proved it: it flagged sessions 16-19, which ran at 23:30-23:54 UTC and
+    carried provider dates of the following day. Those are correct -- at
+    that hour it is already tomorrow in Europe and Asia, and a provider
+    dates its quote in its own timezone. So a one-day difference is only a
+    conflict when the session ran nowhere near the boundary.
+
+    A source line with no date in it is fine: not every provider quote
+    carries one, and demanding one would turn provenance into paperwork.
+    """
+    if not date_utc:
+        return None
+    try:
+        stamp = datetime.strptime(date_utc.strip(), "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    session_day = stamp.date()
+
+    near_boundary = (stamp.hour >= 24 - _MIDNIGHT_GRACE_HOURS
+                     or stamp.hour < _MIDNIGHT_GRACE_HOURS)
+
+    for m in _SOURCE_DATE.finditer(price_source or ""):
+        if m.group(1):
+            parts = (int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        else:
+            parts = (int(m.group(4)), int(m.group(5)), int(m.group(6)))
+        try:
+            named = date(*parts)
+        except ValueError:
+            continue
+        off_by = abs((named - session_day).days)
+        if off_by == 0:
+            continue
+        if off_by == 1 and near_boundary:
+            continue
+        return (f"Quelle nennt {named.isoformat()}, Sitzung lief am "
+                f"{session_day.isoformat()} um {stamp.strftime('%H:%M')} UTC")
+    return None
 
 
 def verify(start_equity_eur: float = 400.0,
@@ -796,6 +859,11 @@ def verify(start_equity_eur: float = 400.0,
             result.chain_breaks.append(
                 f"Sitzung {n}: startet bei {row['start_equity_eur']:.2f} €, "
                 f"die vorige endete bei {oz_equity:.2f} €")
+
+        clash = source_date_conflict(row.get("price_source", ""),
+                                     row.get("date_utc", ""))
+        if clash:
+            result.date_mismatches.append(f"Sitzung {n}: {clash}")
 
         params = simulate.MarketParams(
             start_price=row["gold_price"],
@@ -839,7 +907,8 @@ def render_verify(v: VerifyResult) -> str:
     lines.append("")
     for label, items in (("Kette unterbrochen", v.chain_breaks),
                          ("Kontostand weicht ab", v.equity_mismatches),
-                         ("Tradezahl weicht ab", v.trade_mismatches)):
+                         ("Tradezahl weicht ab", v.trade_mismatches),
+                         ("Quellendatum widerspricht", v.date_mismatches)):
         if items:
             lines.append(f"  {label}: {len(items)}")
             for item in items[:5]:

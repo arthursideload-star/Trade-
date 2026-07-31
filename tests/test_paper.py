@@ -1280,3 +1280,82 @@ class TestTheVerdictDocumentStaysTrue(unittest.TestCase):
 
     def test_it_states_the_intraday_drawdown_rather_than_the_flattering_one(self):
         self.assertIn("23,1", self.text)
+
+
+class TestTheSourceDateIsChecked(LedgerFixture):
+    """The audit trail has to point at the right day.
+
+    Added after a session was recorded with "01.08.2026" in its source line
+    while the clock recorded 31.07. Nothing downstream reads that text, so
+    the mistake was invisible -- and an invisible error in the field whose
+    only job is provenance would have outlived every number derived from it.
+    """
+
+    def test_a_contradicting_date_is_reported(self):
+        self.assertIsNotNone(
+            paper.source_date_conflict("investing.com 01.08.2026",
+                                       "2026-07-31 15:43"))
+
+    def test_the_matching_date_passes_in_both_notations(self):
+        for text in ("investing.com 31.07.2026", "tradingeconomics 2026-07-31"):
+            self.assertIsNone(
+                paper.source_date_conflict(text, "2026-07-31 15:43"), text)
+
+    def test_a_provider_date_one_day_ahead_near_midnight_is_legitimate(self):
+        """The false positive the check's own first run produced.
+
+        Sessions 16-19 ran at 23:30-23:54 UTC carrying provider dates of the
+        following day, and were flagged. They were correct: at that hour it
+        is already tomorrow across Europe and Asia, and a provider dates its
+        quote in its own timezone. A check that cries wolf on the ordinary
+        case gets switched off, so the grace window is part of the rule.
+        """
+        self.assertIsNone(
+            paper.source_date_conflict("tradersunion 31.07.2026 Spot 4105.62",
+                                       "2026-07-30 23:30"))
+        self.assertIsNone(
+            paper.source_date_conflict("IFCM 30.07.2026",
+                                       "2026-07-31 00:45"))
+
+    def test_the_grace_does_not_extend_to_the_middle_of_the_day(self):
+        self.assertIsNotNone(
+            paper.source_date_conflict("investing.com 01.08.2026",
+                                       "2026-07-31 12:00"))
+
+    def test_two_days_off_is_a_conflict_whatever_the_hour(self):
+        self.assertIsNotNone(
+            paper.source_date_conflict("investing.com 29.07.2026",
+                                       "2026-07-31 23:45"))
+
+    def test_an_unparseable_timestamp_does_not_raise(self):
+        self.assertIsNone(paper.source_date_conflict("x 01.08.2026", "x"))
+        self.assertIsNone(paper.source_date_conflict("x 01.08.2026", ""))
+
+    def test_an_impossible_date_in_the_text_is_skipped(self):
+        self.assertIsNone(
+            paper.source_date_conflict("Charge 32.13.2026", "2026-07-31 12:00"))
+
+    def test_a_source_without_a_date_is_not_an_error(self):
+        """Not every provider quote carries one, and demanding it would
+        turn a provenance note into a form to be filled in."""
+        self.assertIsNone(
+            paper.source_date_conflict("myfxbook, Mitte aus Bid/Ask",
+                                       "2026-07-31 15:43"))
+
+    def test_prices_in_the_source_are_not_mistaken_for_dates(self):
+        self.assertIsNone(
+            paper.source_date_conflict("Preis 4110.14, Spanne 4069.83–4111.19",
+                                       "2026-07-31 15:43"))
+
+    def test_verify_fails_the_whole_pass_on_a_wrong_date(self):
+        paper.append(Session(index=0, timestamp=0.0,
+                             date_utc="2026-07-31 15:43",
+                             gold_price=4_100.0, day_high=4_150.0,
+                             day_low=4_050.0,
+                             price_source="investing.com 05.08.2026",
+                             start_equity_eur=400.0, end_equity_eur=400.0,
+                             lot=MIN_LOT, forced_risk_pct=5.0))
+        v = paper.verify()
+        self.assertTrue(v.date_mismatches)
+        self.assertFalse(v.ok)
+        self.assertIn("Quellendatum widerspricht", paper.render_verify(v))
