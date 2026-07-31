@@ -1430,3 +1430,91 @@ class TestProvenance(LedgerFixture):
 
     def test_it_says_so_when_there_is_nothing_yet(self):
         self.assertIn("Noch keine", paper.render_provenance())
+
+
+class TestOversamplingGuard(LedgerFixture):
+    """Stop the chain piling more sessions onto a day it already has.
+
+    The chain reached 53 sessions off three observed days because nothing
+    said stop. Repetition of one day grows the session count while the
+    sample size stays where it was, which is the most flattering possible
+    way to be wrong.
+    """
+
+    def _fill(self, n, high=4_150.0, low=4_050.0):
+        for i in range(n):
+            paper.append(Session(index=i, timestamp=0.0,
+                                 date_utc="2026-07-31 12:00",
+                                 gold_price=4_100.0, day_high=high,
+                                 day_low=low, price_source="t",
+                                 start_equity_eur=400.0, end_equity_eur=400.0,
+                                 lot=MIN_LOT, forced_risk_pct=1.0, trades=3))
+
+    def test_a_fresh_day_picture_is_not_warned_about(self):
+        self._fill(3)
+        self.assertIsNone(
+            paper.oversampled_warning(4_100.0, 4_200.0, 4_000.0))
+
+    def test_a_day_already_carrying_many_sessions_is_warned_about(self):
+        self._fill(paper.OVERSAMPLED_AT)
+        warn = paper.oversampled_warning(4_100.0, 4_150.0, 4_050.0)
+        self.assertIsNotNone(warn)
+        self.assertIn(str(paper.OVERSAMPLED_AT), warn)
+
+    def test_the_threshold_is_not_crossed_one_session_early(self):
+        self._fill(paper.OVERSAMPLED_AT - 1)
+        self.assertIsNone(
+            paper.oversampled_warning(4_100.0, 4_150.0, 4_050.0))
+
+    def test_a_zero_price_does_not_divide_by_zero(self):
+        self.assertIsNone(paper.oversampled_warning(0.0, 1.0, 0.0))
+
+
+class TestTheObservedOnlyChain(LedgerFixture):
+    """The honest companion to the headline: the same chain without the
+    days whose range was assumed rather than looked up."""
+
+    def _row(self, index, high, low, start, end):
+        return Session(index=index, timestamp=0.0, date_utc="2026-07-31 12:00",
+                       gold_price=4_100.0, day_high=high, day_low=low,
+                       price_source="t", start_equity_eur=start,
+                       end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=1.0,
+                       trades=3)
+
+    def _assumed_bounds(self):
+        half = 4_100.0 * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
+        return 4_100.0 + half, 4_100.0 - half
+
+    def test_assumed_sessions_are_skipped_and_counted(self):
+        hi, lo = self._assumed_bounds()
+        paper.append(self._row(0, hi, lo, 400.0, 800.0))
+        paper.append(self._row(1, 4_150.0, 4_050.0, 800.0, 880.0))
+        oc = paper.observed_chain()
+        self.assertEqual(oc.sessions, 1)
+        self.assertEqual(oc.skipped, 1)
+
+    def test_it_compounds_only_the_observed_returns(self):
+        """400 -> 800 on an assumed day is dropped; the +10% observed day
+        is kept, so the chain ends at 440 and not at 880."""
+        hi, lo = self._assumed_bounds()
+        paper.append(self._row(0, hi, lo, 400.0, 800.0))
+        paper.append(self._row(1, 4_150.0, 4_050.0, 800.0, 880.0))
+        oc = paper.observed_chain()
+        self.assertAlmostEqual(oc.end_equity_eur, 440.0)
+        self.assertAlmostEqual(oc.return_pct, 10.0)
+
+    def test_an_all_assumed_chain_stays_at_the_start(self):
+        hi, lo = self._assumed_bounds()
+        paper.append(self._row(0, hi, lo, 400.0, 900.0))
+        oc = paper.observed_chain()
+        self.assertEqual(oc.sessions, 0)
+        self.assertAlmostEqual(oc.end_equity_eur, 400.0)
+
+    def test_losses_are_kept_as_faithfully_as_gains(self):
+        paper.append(self._row(0, 4_150.0, 4_050.0, 400.0, 360.0))
+        self.assertAlmostEqual(paper.observed_chain().end_equity_eur, 360.0)
+
+    def test_the_provenance_report_shows_it(self):
+        paper.append(self._row(0, 4_150.0, 4_050.0, 400.0, 440.0))
+        text = paper.render_provenance()
+        self.assertIn("NUR BEOBACHTETE TAGE", text)

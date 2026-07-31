@@ -65,6 +65,36 @@ bewegten Tag. Das deckt sich mit dem bereits gemessenen Zusammenhang, dass der E
 Diese Aufschlüsselung ist als Kommando eingebaut und durch Tests festgehalten, damit sie
 nicht stillschweigend aus dem Bericht verschwindet.
 
+### Dieselbe Kette ohne die Tage, die nie jemand gesehen hat
+
+Die 21 Sitzungen mit angesetzter Spanne herausgenommen — gleiche Sitzungen, gleiche
+Reihenfolge, gleiche Renditen:
+
+| | |
+|---|---:|
+| Sitzungen behalten | 32 von 53 |
+| Konto | 400 € → **919,23 €** (+129,8 %) |
+| *zum Vergleich: volle Kette* | *1.785,13 € (+346 %)* |
+
+**Rund zwei Fünftel des Zuwachses verschwinden**, sobald man nur zählt, was tatsächlich
+beobachtet wurde. Und die restlichen +130 % ruhen immer noch auf drei Handelstagen.
+
+### Konsequenz im Code, nicht nur im Text
+
+Ein Bericht, der eine Schieflage beschreibt und sie weiter wachsen lässt, ist Dekoration.
+`python -m metals paper` **lehnt eine Sitzung jetzt ab**, wenn dasselbe Tagesbild bereits
+zehn oder mehr Sitzungen trägt:
+
+```
+UEBERSAMPELT: Dieses Tagesbild (2.22 % Spanne) traegt schon 13 Sitzungen.
+Eine weitere vergroessert die Schieflage, statt etwas zu messen.
+```
+
+Überschreibbar mit `--force`, aber dann bewusst. Der Grund für die Schranke ist genau die
+Entstehungsgeschichte dieser Kette: Sie kam auf 53 Sitzungen aus drei beobachteten Tagen,
+**weil nichts Halt gesagt hat.** Wiederholung eines Tages lässt die Sitzungszahl wachsen
+und die Stichprobe nicht.
+
 ## Was das heißt — und was nicht
 
 **Es heißt:** Die Maschinerie funktioniert. Die Regeln lesen tatsächlich Struktur aus dem

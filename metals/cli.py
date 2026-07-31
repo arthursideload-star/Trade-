@@ -687,7 +687,18 @@ def cmd_paper(args: argparse.Namespace) -> int:
               "wertlos.")
         return 2
 
-    from .paper import PriceInputError
+    # Checked before the session runs, not after: once it is in the ledger
+    # the imbalance is already there. The chain reached fifty-three sessions
+    # off three observed days precisely because nothing said stop.
+    from .paper import PriceInputError, oversampled_warning
+
+    warn = oversampled_warning(args.price, args.high, args.low)
+    if warn and not args.force:
+        print(f"UEBERSAMPELT: {warn}")
+        print("Warte auf ein anderes Tagesbild, oder erzwinge mit --force.")
+        print("Aufschluesselung: python -m metals paper --provenance")
+        return 3
+
     try:
         s = run_session(gold_price=args.price, day_high=args.high,
                         day_low=args.low, price_source=args.source,
@@ -958,6 +969,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "beobachteter Tagessorte")
     pa.add_argument("--volatility", action="store_true",
                     help="wie stark das Ergebnis an der Tagesspanne haengt")
+    pa.add_argument("--force", action="store_true",
+                    help="Sitzung auch auf einem bereits ueberrepraesentierten "
+                         "Tagesbild laufen lassen")
     pa.add_argument("--provenance", action="store_true",
                     help="woher das Ergebnis kommt: welche Tagesbilder es "
                          "getragen haben und welche davon beobachtet waren")

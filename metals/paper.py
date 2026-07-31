@@ -838,6 +838,80 @@ def provenance() -> Provenance:
                       sessions=sum(b.sessions for b in buckets))
 
 
+@dataclass
+class ObservedChain:
+    """The chain rebuilt from only those sessions that saw a real range.
+
+    Not a projection: the same sessions, in the same order, with the same
+    per-session returns, simply skipping the ones calibrated to an assumed
+    range. It answers "what does the account look like if the days that were
+    never observed are not counted", which is the honest companion to the
+    headline number.
+    """
+
+    sessions: int
+    skipped: int
+    end_equity_eur: float
+    start_equity_eur: float
+
+    @property
+    def return_pct(self) -> float:
+        if self.start_equity_eur <= 0:
+            return 0.0
+        return (self.end_equity_eur / self.start_equity_eur - 1) * 100.0
+
+
+def observed_chain(start_eur: float = 400.0) -> ObservedChain:
+    ledger = load_ledger()
+    equity = start_eur
+    used = skipped = 0
+    for row in ledger:
+        price = row["gold_price"]
+        pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
+        if abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02:
+            skipped += 1
+            continue
+        if row["start_equity_eur"] > 0:
+            equity *= row["end_equity_eur"] / row["start_equity_eur"]
+        used += 1
+    return ObservedChain(sessions=used, skipped=skipped,
+                         end_equity_eur=equity, start_equity_eur=start_eur)
+
+
+def day_picture_counts() -> dict[str, int]:
+    """How many sessions each distinct picture of a day has carried.
+
+    Used to refuse piling more sessions onto a day the chain already has
+    plenty of. Repetition of one day looks like a growing sample and is not
+    one -- which is exactly how this chain came to rest on three observed
+    days across fifty-three sessions.
+    """
+    counts: dict[str, int] = {}
+    for row in load_ledger():
+        price = row["gold_price"]
+        pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
+        counts[f"{pct:.2f}"] = counts.get(f"{pct:.2f}", 0) + 1
+    return counts
+
+
+# Above this many sessions on one picture of a day, another one adds
+# repetition rather than information.
+OVERSAMPLED_AT = 10
+
+
+def oversampled_warning(gold_price: float, day_high: float,
+                        day_low: float) -> str | None:
+    if gold_price <= 0:
+        return None
+    pct = (day_high - day_low) / gold_price * 100
+    n = day_picture_counts().get(f"{pct:.2f}", 0)
+    if n < OVERSAMPLED_AT:
+        return None
+    return (f"Dieses Tagesbild ({pct:.2f} % Spanne) traegt schon {n} "
+            f"Sitzungen. Eine weitere vergroessert die Schieflage, statt "
+            f"etwas zu messen.")
+
+
 def render_provenance() -> str:
     p = provenance()
     if not p.sessions:
@@ -875,6 +949,26 @@ def render_provenance() -> str:
     lines.append("  EINER Wochenspanne durch Wurzel 5 abgeleitet. Ein Ergebnis,")
     lines.append("  das ueberwiegend darauf steht, steht auf einer Herleitung")
     lines.append("  und nicht auf dem Markt.")
+    lines.append("")
+
+    oc = observed_chain()
+    lines.append("  DIESELBE KETTE, NUR BEOBACHTETE TAGE")
+    lines.append(f"    {oc.sessions} Sitzungen behalten, {oc.skipped} "
+                 f"uebersprungen")
+    lines.append(f"    {oc.start_equity_eur:,.2f} € -> "
+                 f"{oc.end_equity_eur:,.2f} €  ({oc.return_pct:+.1f} %)")
+    lines.append("    Gleiche Sitzungen, gleiche Reihenfolge, gleiche")
+    lines.append("    Renditen — nur ohne die Tage, die nie jemand gesehen hat.")
+
+    counts = day_picture_counts()
+    heavy = {k: v for k, v in counts.items() if v >= OVERSAMPLED_AT}
+    if heavy:
+        lines.append("")
+        lines.append("  Ueberrepraesentierte Tagesbilder:")
+        for pct, n in sorted(heavy.items(), key=lambda kv: -kv[1]):
+            lines.append(f"    {float(pct):.2f} % Spanne: {n} Sitzungen")
+        lines.append("    Weitere Sitzungen darauf zaehlen als Wiederholung,")
+        lines.append("    nicht als Stichprobe.")
     return "\n".join(lines)
 
 
