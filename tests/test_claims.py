@@ -892,3 +892,40 @@ class TestTheUnsplittablePosition(unittest.TestCase):
         self.assertLess(lo_best, hi_worst,
                         "if the bands ever separate, the ranking becomes a "
                         "finding and this test should be rewritten to say so")
+
+
+class TestTheUnsplittableCloseIsNotTrailed(unittest.TestCase):
+    """A position the EA closes outright must not also be trailed.
+
+    The first version of the model let the trail run on it, so the engine
+    sometimes exited at a *better* trailed stop than the first target -- a
+    path the expert never takes. It inflated the measured expectancy from
+    +0.093R down to a wrong +0.069R in the published table before it was
+    caught.
+    """
+
+    CFG = replace(DayRangeConfig(), ea_exit=True, lot=0.01,
+                  start_equity=1_928.0)
+
+    def test_no_trade_exceeds_the_first_target(self):
+        r = run(self.CFG, seed=91, bars=15_000)
+        self.assertGreater(r.unsplittable_closes, 0)
+        self.assertLessEqual(max(r.r_multiples),
+                             self.CFG.first_target_r + 1e-6,
+                             "an R above the first target means the trail ran "
+                             "on a position the EA had already closed")
+
+    def test_it_holds_across_several_markets(self):
+        for seed in (91, 92, 93, 94):
+            r = run(self.CFG, seed=seed, bars=12_000)
+            if r.r_multiples:
+                self.assertLessEqual(max(r.r_multiples),
+                                     self.CFG.first_target_r + 1e-6, seed)
+
+    def test_a_splittable_position_may_exceed_it(self):
+        """The runner is supposed to reach further -- that is its purpose."""
+        cfg = replace(DayRangeConfig(), ea_exit=True, lot=0.10,
+                      start_equity=20_000.0)
+        r = run(cfg, seed=91, bars=15_000)
+        self.assertGreater(r.partials_taken, 0)
+        self.assertGreater(max(r.r_multiples), cfg.first_target_r)

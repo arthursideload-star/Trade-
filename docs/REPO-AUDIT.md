@@ -197,20 +197,31 @@ weiterlaufen — das war eine andere Strategie als die, die der EA handelt. Korr
 
 ### Und dann das Ergebnis, das eine Empfehlung verhindert hat
 
-| Ausstieg | Trades | Erwartung | 95 %-Band |
-|---|---:|---:|---|
-| EA 60/40-Teilung (0,10 Lot) | 1.245 | +0,0599 R | +0,031 … +0,089 |
-| EA voll bei 0,5 R (0,01 Lot) | 1.254 | +0,0690 R | +0,039 … +0,099 |
-| ein Ziel bei 1,0 R (0,01 Lot) | 1.058 | +0,0926 R | +0,051 … +0,135 |
+| Ausstieg | Trades | Treffer | Erwartung | 95 %-Band |
+|---|---:|---:|---:|---|
+| EA 60/40-Teilung (0,10 Lot) | 1.245 | 65,1 % | +0,0599 R | +0,031 … +0,089 |
+| EA voll bei 0,5 R (0,01 Lot) | 1.254 | 65,2 % | +0,0929 R | +0,063 … +0,123 |
+| ein Ziel bei 1,0 R (0,01 Lot) | 1.058 | 54,5 % | +0,0926 R | +0,051 … +0,135 |
 
-Der Reihenfolge nach sieht es aus, als wäre der Runner ein Verlustgeschäft und ein einzelnes
-Ziel bei 1,0 R am besten. **Die Bänder überlappen aber alle drei.** Bei rund 1.200 Trades je
-Variante ist keiner dieser Unterschiede belegt.
+Der Reihenfolge nach sieht es aus, als wäre die 60/40-Teilung die schlechteste Variante.
+**Die Bänder überlappen aber immer noch** (+0,063 gegen +0,089). Bei rund 1.200 Trades je
+Variante ist der Unterschied nicht belegt.
 
 Ich hatte an dieser Stelle schon „der Runner verliert Geld" formuliert. Das gibt die Messung
 nicht her, und die Zeile ist wieder raus. Als Test steht jetzt fest, dass die Bänder
 überlappen — sollten sie sich je trennen, muss der Test umgeschrieben werden, und dann
 *ist* es ein Befund.
+
+**Eine Zahl in dieser Tabelle war schon einmal falsch.** In der ersten Fassung stand für
+„voll bei 0,5 R" **+0,0690 R**. Ursache war ein Fehler in meinem Modell: Der ATR-Trail lief
+auch auf der Position weiter, die der EA bereits komplett schließt. Dadurch stieg das Modell
+gelegentlich zu einem *besseren* nachgezogenen Stop aus als beim ersten Ziel — ein Pfad, den
+der EA gar nicht geht. Behoben; das höchste R liegt jetzt exakt bei +0,500, wie es der
+Deckel verlangt. Der korrigierte Wert ist **+0,0929 R**.
+
+Nebenbei ein Befund, der stehen bleibt: Voll bei 0,5 R erreicht denselben Erwartungswert wie
+ein Ziel bei 1,0 R, aber mit **65,2 % statt 54,5 % Trefferquote und einem engeren Band**.
+Gleicher Ertrag bei weniger Streuung — das ist kein großer, aber ein echter Unterschied.
 
 **Warum der Zeitstop-Wächter aus A12 trotzdem bleibt:** Dessen Effekt war mit +0,128 → +0,024 R
 mehrfach so groß und auf derselben Stichprobenbasis gemessen. Große Effekte überstehen

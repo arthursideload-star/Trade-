@@ -298,6 +298,7 @@ class Trade:
     original_risk_per_unit: float = 0.0
     partial_taken: bool = False
     banked_pnl: float = 0.0
+    closing_in_full: bool = False
 
     def __post_init__(self) -> None:
         if not self.original_lots:
@@ -436,10 +437,16 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                         # at 0.01 lot nothing can be split, so every trade
                         # caps at first_target_r and no runner ever exists.
                         t.take_profit = first
+                        t.closing_in_full = True
                         res.unsplittable_closes += 1
                     t.partial_taken = True
 
-            if cfg.ea_exit and t.partial_taken and t.lots > 0:
+            # No trail on a position the EA is closing outright. Letting it
+            # run here would sometimes exit at a *better* trailed stop than
+            # the first target, which flatters a path the expert does not
+            # take.
+            if (cfg.ea_exit and t.partial_taken and t.lots > 0
+                    and not t.closing_in_full):
                 # ATR trail on the remainder, never loosening.
                 atr_now = _atr(candles, i)
                 if atr_now > 0:
