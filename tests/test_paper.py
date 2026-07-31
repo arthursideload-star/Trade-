@@ -1388,19 +1388,27 @@ class TestProvenance(LedgerFixture):
     report that can show that must not be able to quietly stop showing it.
     """
 
-    def _session(self, index, price, high, low, start, end, trades=5):
+    def _session(self, index, price, high, low, start, end, trades=5,
+                 range_observed=True):
         return Session(index=index, timestamp=0.0, date_utc="2026-07-31 12:00",
                        gold_price=price, day_high=high, day_low=low,
                        price_source="t", start_equity_eur=start,
                        end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=1.0,
-                       trades=trades, wins=3, losses=2, expectancy_r=0.1)
+                       trades=trades, wins=3, losses=2, expectancy_r=0.1,
+                       range_observed=range_observed)
 
     def _assumed(self, index, start, end):
-        """A day whose range is exactly the assumed typical figure."""
+        """A session that says its range was derived.
+
+        This used to express "assumed" by giving the row a range equal to
+        the typical figure and letting provenance infer it. The inference is
+        no longer the primary signal -- the session records the fact -- and
+        saying it outright is what the test meant all along.
+        """
         price = 4_100.0
         half = price * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
         return self._session(index, price, price + half, price - half,
-                             start, end)
+                             start, end, range_observed=False)
 
     def test_an_assumed_range_is_not_counted_as_observed(self):
         paper.append(self._assumed(0, 400.0, 440.0))
@@ -1492,20 +1500,20 @@ class TestTheObservedOnlyChain(LedgerFixture):
     """The honest companion to the headline: the same chain without the
     days whose range was assumed rather than looked up."""
 
-    def _row(self, index, high, low, start, end):
+    def _row(self, index, high, low, start, end, range_observed=True):
         return Session(index=index, timestamp=0.0, date_utc="2026-07-31 12:00",
                        gold_price=4_100.0, day_high=high, day_low=low,
                        price_source="t", start_equity_eur=start,
                        end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=1.0,
-                       trades=3)
+                       trades=3, range_observed=range_observed)
 
-    def _assumed_bounds(self):
+    def _assumed_row(self, index, start, end):
         half = 4_100.0 * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
-        return 4_100.0 + half, 4_100.0 - half
+        return self._row(index, 4_100.0 + half, 4_100.0 - half, start, end,
+                         range_observed=False)
 
     def test_assumed_sessions_are_skipped_and_counted(self):
-        hi, lo = self._assumed_bounds()
-        paper.append(self._row(0, hi, lo, 400.0, 800.0))
+        paper.append(self._assumed_row(0, 400.0, 800.0))
         paper.append(self._row(1, 4_150.0, 4_050.0, 800.0, 880.0))
         oc = paper.observed_chain()
         self.assertEqual(oc.sessions, 1)
@@ -1514,16 +1522,14 @@ class TestTheObservedOnlyChain(LedgerFixture):
     def test_it_compounds_only_the_observed_returns(self):
         """400 -> 800 on an assumed day is dropped; the +10% observed day
         is kept, so the chain ends at 440 and not at 880."""
-        hi, lo = self._assumed_bounds()
-        paper.append(self._row(0, hi, lo, 400.0, 800.0))
+        paper.append(self._assumed_row(0, 400.0, 800.0))
         paper.append(self._row(1, 4_150.0, 4_050.0, 800.0, 880.0))
         oc = paper.observed_chain()
         self.assertAlmostEqual(oc.end_equity_eur, 440.0)
         self.assertAlmostEqual(oc.return_pct, 10.0)
 
     def test_an_all_assumed_chain_stays_at_the_start(self):
-        hi, lo = self._assumed_bounds()
-        paper.append(self._row(0, hi, lo, 400.0, 900.0))
+        paper.append(self._assumed_row(0, 400.0, 900.0))
         oc = paper.observed_chain()
         self.assertEqual(oc.sessions, 0)
         self.assertAlmostEqual(oc.end_equity_eur, 400.0)
@@ -1645,3 +1651,79 @@ class TestTheDayKeyIdentifiesTheObservation(LedgerFixture):
         paper.append(self._row(0, 4_100.0, 4_120.164, 4_028.771))
         paper.append(self._row(1, 4_100.0, 4_120.161, 4_028.774))
         self.assertEqual(len(paper.day_picture_counts()), 1)
+
+
+class TestAnAssumedRangeIsRecordedAndRefused(LedgerFixture):
+    """An assumed range is not an observation, and 56% of this chain's gain
+    rests on rows that were one.
+
+    Two changes, both following from that. The fact is recorded rather than
+    inferred -- provenance used to guess from `abs(pct - 1.57) < 0.02`,
+    which mislabels a real day that happens to be typical and would relabel
+    every historical row if the typical figure were revised. And a session
+    on an assumed range is refused by default, the same treatment a repeated
+    day already gets.
+    """
+
+    def test_a_session_records_whether_the_range_was_looked_up(self):
+        observed = run_session(**TODAY, start_equity_eur=400.0)
+        self.assertTrue(observed.range_observed)
+        derived = run_session(**TODAY, start_equity_eur=400.0,
+                              range_observed=False)
+        self.assertFalse(derived.range_observed)
+
+    def test_provenance_believes_the_record_over_the_percentage(self):
+        """A real day whose range happens to equal the typical figure must
+        not be filed as assumed."""
+        price = 4_100.0
+        half = price * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
+        paper.append(Session(index=0, timestamp=0.0, date_utc="2026-07-31 12:00",
+                             gold_price=price, day_high=price + half,
+                             day_low=price - half, price_source="t",
+                             start_equity_eur=400.0, end_equity_eur=440.0,
+                             lot=MIN_LOT, forced_risk_pct=1.0, trades=3,
+                             range_observed=True))
+        p = paper.provenance()
+        self.assertEqual(p.distinct_observed_days, 1)
+        self.assertAlmostEqual(p.share_from_assumed_ranges, 0.0)
+
+    def test_a_recorded_assumption_is_filed_as_assumed_whatever_the_range(self):
+        paper.append(Session(index=0, timestamp=0.0, date_utc="2026-07-31 12:00",
+                             gold_price=4_100.0, day_high=4_200.0,
+                             day_low=4_000.0, price_source="t",
+                             start_equity_eur=400.0, end_equity_eur=440.0,
+                             lot=MIN_LOT, forced_risk_pct=1.0, trades=3,
+                             range_observed=False))
+        p = paper.provenance()
+        self.assertEqual(p.distinct_observed_days, 0)
+        self.assertAlmostEqual(p.share_from_assumed_ranges, 1.0)
+
+    def test_the_observed_only_chain_uses_the_record_too(self):
+        paper.append(Session(index=0, timestamp=0.0, date_utc="2026-07-31 12:00",
+                             gold_price=4_100.0, day_high=4_200.0,
+                             day_low=4_000.0, price_source="t",
+                             start_equity_eur=400.0, end_equity_eur=800.0,
+                             lot=MIN_LOT, forced_risk_pct=1.0, trades=3,
+                             range_observed=False))
+        oc = paper.observed_chain()
+        self.assertEqual(oc.skipped, 1)
+        self.assertEqual(oc.sessions, 0)
+        self.assertAlmostEqual(oc.end_equity_eur, 400.0)
+
+    def test_rows_without_the_field_fall_back_to_the_old_heuristic(self):
+        """The 54 sessions already written predate the field. Reading them
+        as observed would erase the finding they produced."""
+        price = 4_100.0
+        half = price * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
+        import json
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "index": 0, "timestamp": 0.0, "date_utc": "2026-07-31 12:00",
+                "gold_price": price, "day_high": price + half,
+                "day_low": price - half, "price_source": "t",
+                "start_equity_eur": 400.0, "end_equity_eur": 440.0,
+                "lot": 0.01, "forced_risk_pct": 1.0, "trades": 3,
+                "wins": 2, "losses": 1, "expectancy_r": 0.1,
+                "could_not_trade": "", "exits": {}, "signals": 3,
+            }) + "\n")
+        self.assertEqual(paper.provenance().distinct_observed_days, 0)

@@ -164,6 +164,16 @@ class Session:
     # after one or two losers. A ledger that does not say which rule set
     # produced a row cannot be compared across the change.
     daily_loss_limit: bool = False
+    # Whether the day's high and low were looked up or derived. Recorded as
+    # a fact rather than inferred from the percentage: provenance used to
+    # guess with `abs(pct - 1.57) < 0.02`, which would mislabel a real day
+    # that happened to be typical, and quietly relabel every assumed row if
+    # the typical figure were ever revised.
+    #
+    # Defaults True so old rows, written before the field existed, are not
+    # silently promoted -- load_ledger falls back to the old heuristic for
+    # rows that lack it.
+    range_observed: bool = True
     risk_pct_min: float = 0.0
     risk_pct_max: float = 0.0
 
@@ -321,7 +331,8 @@ def run_session(gold_price: float, day_high: float, day_low: float,
                 cfg: DayRangeConfig | None = None,
                 seed: int | None = None,
                 spread_usd_oz: float | None = None,
-                news_times_utc: tuple[tuple[int, int], ...] = ()) -> Session:
+                news_times_utc: tuple[tuple[int, int], ...] = (),
+                range_observed: bool = True) -> Session:
     """One trading day on an account carried forward from the last one.
 
     Raises PriceInputError when the three price figures contradict each
@@ -390,6 +401,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         price_source=price_source, spread_usd_oz=base.spread_usd_oz,
         slippage_fraction=base.slippage_fraction,
         daily_loss_limit=session_cfg.daily_loss_limit,
+        range_observed=range_observed,
         start_equity_eur=round(equity_eur, 2),
         end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
         lot=MIN_LOT,
@@ -899,7 +911,12 @@ def provenance() -> Provenance:
     for row in ledger:
         price = row["gold_price"]
         pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
-        assumed = abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02
+        # The recorded fact when the row has one; the old heuristic only for
+        # rows written before the field existed.
+        if "range_observed" in row:
+            assumed = not row["range_observed"]
+        else:
+            assumed = abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02
         # Grouped by the observed high/low, not by the derived percentage --
         # see day_key. The percentage split one real day into two rows and
         # merged three assumed ones into a single row, so distinct_observed_days
@@ -966,7 +983,9 @@ def observed_chain(start_eur: float = 400.0) -> ObservedChain:
     for row in ledger:
         price = row["gold_price"]
         pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
-        if abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02:
+        assumed = (not row["range_observed"] if "range_observed" in row
+                   else abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02)
+        if assumed:
             skipped += 1
             continue
         if row["start_equity_eur"] > 0:

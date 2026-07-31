@@ -518,6 +518,45 @@ jemand die Strategie durchhält.
 
 Jede Sitzung meldet ihren Wert jetzt einzeln, die Bilanz beide nebeneinander mit Etikett.
 
+## Der Lauf lehnt jetzt zwei Arten von Sitzung ab
+
+Aus der Herkunftsrechnung folgten zwei Schranken, und beide sind im Kommando, nicht nur im
+Text.
+
+**1. Ein Handelstag, der schon zehn oder mehr Sitzungen trägt**
+
+```
+UEBERSAMPELT: Dieser Handelstag (4,028.77-4,120.16, 2.22 % Spanne) traegt
+schon 20 Sitzungen. Eine weitere vergroessert die Schieflage, statt etwas
+zu messen.
+```
+
+Der Schlüssel ist das **Hoch/Tief-Paar**, nicht die Spanne in Prozent. Das war ein Fehler:
+Derselbe Tag, bei einem anderen Spotkurs abgefragt, ergab einen anderen Prozentwert und wäre
+durchgerutscht. Genauso wurden drei verschiedene angesetzte Bilder zu einem verschmolzen.
+
+**2. Eine Sitzung auf einer hergeleiteten Tagesspanne**
+
+```
+ANGESETZTE SPANNE: Diese Sitzung wuerde auf einer hergeleiteten Tagesspanne
+laufen, nicht auf einer beobachteten. 56 % des bisherigen Kettengewinns
+stehen bereits auf solchen Zeilen.
+```
+
+Beides mit `--force` überschreibbar, aber dann bewusst.
+
+### Und der Status wird protokolliert, nicht geraten
+
+`range_observed` steht jetzt in jeder Zeile. Vorher wurde „angesetzt" aus der Zahl
+**erschlossen** (`|Spanne − 1,57 %| < 0,02`). Das ist in zwei Fällen falsch:
+
+- Ein echter Handelstag, dessen Spanne zufällig typisch ist, würde als angesetzt geführt.
+- Würde die typische Spanne je neu berechnet, änderten **alle** historischen Zeilen
+  rückwirkend ihre Bedeutung.
+
+Die 54 Sitzungen von vorher haben das Feld nicht und werden weiter über die alte Heuristik
+gelesen — sie als beobachtet zu zählen, würde genau den Befund löschen, den sie erzeugt haben.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |

@@ -692,6 +692,14 @@ def cmd_paper(args: argparse.Namespace) -> int:
     # off three observed days precisely because nothing said stop.
     from .paper import PriceInputError, oversampled_warning
 
+    if args.assumed_range and not args.force:
+        print("ANGESETZTE SPANNE: Diese Sitzung wuerde auf einer hergeleiteten "
+              "Tagesspanne laufen,\nnicht auf einer beobachteten. 56 % des "
+              "bisherigen Kettengewinns stehen bereits\nauf solchen Zeilen "
+              "(python -m metals paper --provenance).")
+        print("Warte auf eine echte Hoch/Tief-Angabe, oder erzwinge mit --force.")
+        return 4
+
     warn = oversampled_warning(args.price, args.high, args.low)
     if warn and not args.force:
         print(f"UEBERSAMPELT: {warn}")
@@ -704,7 +712,8 @@ def cmd_paper(args: argparse.Namespace) -> int:
                         day_low=args.low, price_source=args.source,
                         start_equity_eur=args.equity,
                         spread_usd_oz=args.spread,
-                        news_times_utc=_parse_news_times(args.news))
+                        news_times_utc=_parse_news_times(args.news),
+                    range_observed=not args.assumed_range)
     except PriceInputError as exc:
         print(f"Kursangaben passen nicht zusammen: {exc}", file=sys.stderr)
         return 2
@@ -969,6 +978,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "beobachteter Tagessorte")
     pa.add_argument("--volatility", action="store_true",
                     help="wie stark das Ergebnis an der Tagesspanne haengt")
+    pa.add_argument("--assumed-range", action="store_true",
+                    help="die Tagesspanne ist hergeleitet, nicht nachgeschlagen "
+                         "— wird protokolliert und ohne --force abgelehnt")
     pa.add_argument("--force", action="store_true",
                     help="Sitzung auch auf einem bereits ueberrepraesentierten "
                          "Tagesbild laufen lassen")
