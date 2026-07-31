@@ -123,6 +123,28 @@ class Iteration:
     shuffle_margin_r: float = 0.0
     shuffle_margin_se: float = 0.0
     shuffle_seeds: int = 0
+
+    # Which rule set produced this iteration. slippage_fraction was already
+    # here; R2 and M5 were added to the engine later, and an iteration run
+    # before them is not comparable with one run after -- exactly the reason
+    # the paper ledger records the same thing per session.
+    daily_loss_limit: bool = False
+    weekend_flat: bool = False
+
+    @property
+    def winner_is_on_the_grid_edge(self) -> bool:
+        """Did the sweep bracket an optimum, or just run out of range?
+
+        A winner at the lowest or highest value tested means the search
+        stopped at the edge of the grid rather than at a peak. Five of the
+        first six iterations did this -- take_fraction picked its maximum,
+        stop_fraction, edge_fraction and confirm_bars their minimums,
+        time_stop_bars its maximum. Reporting those as "best" without
+        saying so invites a dial being moved to a boundary that was never
+        shown to be better than what lies past it.
+        """
+        values = [r["value"] for r in self.results]
+        return bool(values) and self.best_value in (min(values), max(values))
     # Which cost model produced this iteration. Recorded because it changed
     # mid-log: runs 1-3 charged spread alone, run 4 onward charges
     # spread x 1.5 (docs/REPO-AUDIT.md, A8). Comparing a dial's best value
@@ -177,7 +199,9 @@ def one_iteration(markets: int = 20, bars: int = 12_000,
 
     it = Iteration(index=index, dial=dial, seed_base=seed_base,
                    markets=markets, bars=bars, timestamp=time.time(),
-                   slippage_fraction=base.slippage_fraction)
+                   slippage_fraction=base.slippage_fraction,
+                   daily_loss_limit=base.daily_loss_limit,
+                   weekend_flat=base.weekend_flat)
 
     best_r, best_val = float("-inf"), values[0]
     # Per-market expectancies, kept so the winner can be compared with the
@@ -278,6 +302,11 @@ def render(it: Iteration) -> str:
             lines.append("    DER VORSPRUNG IST KLEINER ALS DAS RAUSCHEN.")
             lines.append("    Dieser 'beste Wert' ist der groesste von vier")
             lines.append("    Stichproben, kein Befund. Nicht uebernehmen.")
+    if it.winner_is_on_the_grid_edge:
+        lines.append("    RANDTREFFER: der Sieger liegt am Ende des")
+        lines.append("    getesteten Rasters. Das Raster hat kein Optimum")
+        lines.append("    eingeschlossen — es ist ausgegangen. Was jenseits")
+        lines.append("    davon liegt, wurde nicht gemessen.")
     lines.append("")
     lines.append(f"  MISCH-TEST auf der besten Konfiguration "
                  f"({it.shuffle_seeds or 8} Maerkte)")
@@ -306,6 +335,18 @@ def render(it: Iteration) -> str:
     return "\n".join(lines)
 
 
+def regime_of(entry: dict) -> str:
+    """A short label for the rule set an iteration ran under.
+
+    Iterations from before a field existed read as its old value, which is
+    correct: they really did run without that rule.
+    """
+    parts = [f"Slippage {entry.get('slippage_fraction', 0.0):g}"]
+    parts.append("R2 an" if entry.get("daily_loss_limit") else "R2 aus")
+    parts.append("M5 an" if entry.get("weekend_flat") else "M5 aus")
+    return ", ".join(parts)
+
+
 def summarise() -> str:
     """What has held up across every iteration so far."""
     log = load_log()
@@ -317,6 +358,20 @@ def summarise() -> str:
     lines.append(f"  {markets:,} Marktlaeufe gesehen, "
                  f"alle mit unterschiedlichen Seeds")
     lines.append("")
+
+    # Which rule set each iteration ran under. Pooling across a change to
+    # the rules compares numbers that were never comparable -- the same
+    # reason the paper ledger records it per session. slippage_fraction was
+    # already tracked; R2 and M5 arrived later and split the log in two.
+    regimes = {regime_of(e) for e in log}
+    if len(regimes) > 1:
+        lines.append("  ACHTUNG: dieses Log mischt Regelwerke.")
+        for r in sorted(regimes):
+            n = sum(1 for e in log if regime_of(e) == r)
+            lines.append(f"    {n:>3} Durchgaenge mit {r}")
+        lines.append("  Zahlen ueber alle Durchgaenge vergleichen damit")
+        lines.append("  Laeufe, die nie vergleichbar waren.")
+        lines.append("")
 
     by_dial: dict[str, list[dict]] = {}
     for e in log:

@@ -428,6 +428,52 @@ schlechtesten Fall. Das ist weniger, als ich damals geschrieben habe, und es ist
 Daten hergeben.
 
 
+---
+
+## A18 · Das Trainingslog mischt Regelwerke, und fünf von sechs Siegern lagen am Rand
+
+Der Trainingsloop sammelt Durchgänge über Tage. Die Engine hat sich in derselben Zeit
+mehrfach geändert — Slippage (A8), R2 und M5 (A15/A16). Das Log hielt nur `slippage_fraction`
+fest. `summarise()` poolte trotzdem über alles.
+
+**Die Warnung deckt sofort einen bestehenden Bruch auf:**
+
+```
+ACHTUNG: dieses Log mischt Regelwerke.
+    3 Durchgaenge mit Slippage 0, R2 aus, M5 aus
+    3 Durchgaenge mit Slippage 0.5, R2 aus, M5 aus
+```
+
+Die Hälfte der Durchgänge wurde also zu einem Drittel zu billig gerechnet, und die
+Gesamtbilanz verglich sie trotzdem miteinander. `regime_of()` liest fehlende Felder als „aus"
+— ein Durchgang von vor der Regel lief tatsächlich ohne sie, alles andere wäre eine
+rückwirkende Umdeutung.
+
+### Und ein Muster, das vorher niemand gezählt hat
+
+| Durchgang | Stellschraube | Sieger | getestetes Raster | |
+|---:|---|---:|---|---|
+| #0 | take_fraction | **1,0** | 0,3 … 1,0 | **Rand** |
+| #1 | stop_fraction | **0,25** | 0,25 … 1,0 | **Rand** |
+| #2 | edge_fraction | **0,15** | 0,15 … 0,45 | **Rand** |
+| #3 | confirm_bars | **2** | 2 … 5 | **Rand** |
+| #4 | min_range_atr | 10,0 | 2,0 … 35,0 | innen |
+| #5 | time_stop_bars | **480** | 60 … 480 | **Rand** |
+
+**Fünf von sechs Siegern liegen am Ende ihres Rasters.** Ein Sieger am Rand heißt nicht
+„dieser Wert ist optimal", sondern „das Raster ist ausgegangen" — was jenseits davon liegt,
+wurde nie gemessen. Wer solche Werte übernimmt, verschiebt eine Stellschraube an eine Grenze,
+die nie gegen ihr Jenseits geprüft wurde.
+
+Der Bericht sagt das jetzt (`RANDTREFFER`). Zusammen mit dem bereits vorhandenen Vermerk
+„kein Vorsprung über dem Rauschen", den **fünf von sechs** Durchgängen tragen, bleibt von
+sechs gekürten Siegern kein einziger übrig, den man guten Gewissens übernehmen würde.
+
+Das ist kein Argument gegen den Trainingsloop. Es ist genau das, was er leisten soll: sagen,
+wann eine Zahl nichts bedeutet. Vorher hat er sechsmal einen Sieger gemeldet und nie dazu,
+wie wenig das heißt.
+
+
 ## A7 · Die Nachrichtensperre R4 galt für die Strategie nicht — **behoben**
 
 Aufgefallen an Sitzung 6 des Papier-Laufs: Es war **FOMC-Tag**, die Fed hielt bei

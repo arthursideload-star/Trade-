@@ -1001,3 +1001,63 @@ class TestR2DailyLossLimit(unittest.TestCase):
                         markets=10, bars=20_000, seed_base=990_000)
         self.assertLessEqual(with_rule.mean_expectancy_r,
                              without.mean_expectancy_r + 1e-9)
+
+
+class TestTheTrainingLogKnowsItsOwnRegime(unittest.TestCase):
+    """The training log accumulates across engine changes.
+
+    slippage_fraction was already recorded per iteration. R2 and M5 were
+    added to the engine later, so an iteration run before them is not
+    comparable with one run after -- and summarise() pools everything. The
+    log turned out to be split already: three iterations at slippage 0 and
+    three at 0.5, invisible until asked.
+    """
+
+    def test_the_regime_label_names_every_rule_that_can_differ(self):
+        from metals.train import regime_of
+        label = regime_of({"slippage_fraction": 0.5,
+                           "daily_loss_limit": True, "weekend_flat": True})
+        self.assertIn("Slippage 0.5", label)
+        self.assertIn("R2 an", label)
+        self.assertIn("M5 an", label)
+
+    def test_an_old_entry_reads_as_the_rules_it_actually_ran_without(self):
+        """An iteration from before the field existed really did run with
+        the rule off. Defaulting it to on would rewrite history."""
+        from metals.train import regime_of
+        self.assertIn("R2 aus", regime_of({"slippage_fraction": 0.5}))
+        self.assertIn("M5 aus", regime_of({"slippage_fraction": 0.5}))
+
+    def test_two_regimes_produce_different_labels(self):
+        from metals.train import regime_of
+        a = regime_of({"slippage_fraction": 0.0, "daily_loss_limit": False,
+                       "weekend_flat": False})
+        b = regime_of({"slippage_fraction": 0.5, "daily_loss_limit": True,
+                       "weekend_flat": True})
+        self.assertNotEqual(a, b)
+
+    def test_a_boundary_winner_is_recognised(self):
+        """Five of the first six iterations picked the lowest or highest
+        value on their grid. That means the sweep ran out of range rather
+        than finding a peak, and the report has to say so."""
+        from metals.train import Iteration
+        edge = Iteration(index=0, dial="take_fraction", seed_base=0,
+                         markets=4, bars=100, best_value=1.0,
+                         results=[{"value": v} for v in (0.3, 0.5, 0.75, 1.0)])
+        self.assertTrue(edge.winner_is_on_the_grid_edge)
+        inner = Iteration(index=0, dial="take_fraction", seed_base=0,
+                          markets=4, bars=100, best_value=0.5,
+                          results=[{"value": v} for v in (0.3, 0.5, 0.75, 1.0)])
+        self.assertFalse(inner.winner_is_on_the_grid_edge)
+
+    def test_an_iteration_without_results_is_not_called_a_boundary_hit(self):
+        from metals.train import Iteration
+        empty = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1)
+        self.assertFalse(empty.winner_is_on_the_grid_edge)
+
+    def test_the_real_log_is_flagged_as_mixed(self):
+        """Not a hypothetical: the log on disk spans two cost models."""
+        from metals.train import load_log, regime_of, summarise
+        log = load_log()
+        if len({regime_of(e) for e in log}) > 1:
+            self.assertIn("mischt Regelwerke", summarise())
