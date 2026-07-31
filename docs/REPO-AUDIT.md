@@ -356,3 +356,44 @@ aber die drei Stellen, an denen dieses Projekt bisher tatsächlich etwas widerle
 einen Messfehler in der eigenen Strategie, ein Ertragsversprechen und eine
 Kontogrößenbehauptung. Ein Repository, das nur noch das enthält, was funktioniert, kann
 nicht mehr zeigen, warum das andere nicht funktioniert.
+
+---
+
+## A12 · Vier Trainingsläufe optimierten einen wirkungslosen Regler — **behoben**
+
+Aufgefallen beim Walk-Forward-Test (C13), der den Optimierer gegen frische Märkte prüft:
+`min_range_atr` wurde als „ROT" gemeldet, weil die getunte Einstellung out-of-sample
+**exakt** denselben Erwartungswert lieferte wie der Standard. Exakte Gleichheit auf drei
+Nachkommastellen ist kein Messrauschen, sondern ein Hinweis.
+
+Nachgemessen, ein Markt, 12.000 Bars:
+
+| `min_range_atr` | Signale | Trades | Erwartung |
+|---:|---:|---:|---:|
+| 0,5 | 43 | 43 | +0,1694 R |
+| 1,0 | 43 | 43 | +0,1694 R |
+| 2,0 | 43 | 43 | +0,1694 R |
+| 3,5 | 43 | 43 | +0,1694 R |
+| 5,0 | 43 | 43 | +0,1694 R |
+| 20 | 26 | 26 | +0,2275 R |
+
+**Der Regler tut zwischen 0,5 und 5 nichts.** Der Grund ist eine Größenordnung: Die
+Tagesspanne von Gold ist auf M1 das **20- bis 100-fache** von ATR(14). Eine Untergrenze von
+„2 × ATR" ist damit immer erfüllt. `train.py` hat vier Läufe lang genau (1,0 / 2,0 / 3,5 /
+5,0) gesweept — vier identische Ergebnisse — und daraus einen „besten Wert" ins Log
+geschrieben. Das ist Rauschen, protokolliert als Befund.
+
+Der Test, der das hätte fangen sollen, benutzt `min_range_atr=1_000.0` und ging deshalb
+durch: er prüft, *dass* die Grenze wirken **kann**, nicht dass die verwendeten Werte wirken.
+
+**Behoben** — der Sweep läuft jetzt über (2,0 / 10 / 20 / 35), also über Werte, die
+tatsächlich binden. Und weil das eine allgemeine Fehlerklasse ist, prüft ein neuer Test
+**jeden** Regler in `DIALS`: Wenn der erste und der letzte Wert eines Sweeps dieselben
+Trades und denselben Erwartungswert produzieren, ist die Optimierung darüber keine
+Optimierung.
+
+**Der Standard bleibt bei 2,0**, und zwar mit Messung: über 20 Märkte fällt der
+Erwartungswert, sobald der Filter greift — +0,154 R bei 2 (wirkungslos), +0,118 R bei 20,
++0,071 R bei 35. Der Filter schadet, sobald er etwas tut. Er bleibt als Regler erhalten,
+weil er eine sinnvolle Absicht ausdrückt, aber er wird nicht scharf gestellt.
+

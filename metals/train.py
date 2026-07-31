@@ -45,7 +45,12 @@ DIALS: tuple[tuple[str, tuple[float, ...]], ...] = (
     ("stop_fraction", (0.25, 0.50, 0.75, 1.00)),
     ("edge_fraction", (0.15, 0.25, 0.35, 0.45)),
     ("confirm_bars", (2, 3, 4, 5)),
-    ("min_range_atr", (1.0, 2.0, 3.5, 5.0)),
+    # These values are far higher than they look like they should be, and
+    # that is the point. A day's range on M1 gold is 20 to 100 times ATR(14),
+    # so anything from 1 to 5 never binds -- the sweep that used to sit here
+    # compared four settings that produced identical trades, and reported a
+    # "best" among them for four training runs. See REPO-AUDIT.md, A12.
+    ("min_range_atr", (2.0, 10.0, 20.0, 35.0)),
     ("time_stop_bars", (60, 120, 240, 480)),
 )
 

@@ -129,6 +129,14 @@ CLAIMS: tuple[Claim, ...] = (
           "MQL5 forum and articles, EarnForex", "editorial", True,
           "Decides whether a tiny-target strategy can be placed at all, "
           "which is a different question from whether it earns."),
+    Claim("C13", "An EA that shines in a backtest fails forward because the "
+                 "optimisation fitted noise; a drop of more than 40% out of "
+                 "sample is the red flag",
+          "MQL5 blogs and forum, Forex Factory walk-forward threads, "
+          "broker education", "editorial", True,
+          "Turned on our own optimiser rather than on somebody else's EA — "
+          "metals/train.py picks a best dial every run, so this is the one "
+          "claim in the catalogue that audits this project's own tooling."),
 )
 
 # Points, where one point is 0.01 USD on a two-decimal XAUUSD quote. The
@@ -136,6 +144,9 @@ CLAIMS: tuple[Claim, ...] = (
 # live from the spread, which is not the same as no minimum.
 TYPICAL_STOPS_LEVEL_POINTS = 50
 POINT_USD_OZ = 0.01
+
+
+WALK_FORWARD_RED_FLAG = 0.40   # C13: the threshold the trade press names
 
 
 def find(claim_id: str) -> Claim:
@@ -571,6 +582,89 @@ def swap_on_one_position(lot: float, nights: int, long: bool = True,
                          rate_short: float = 30.0) -> float:
     """The arithmetic a holder needs, with no simulation in the way."""
     return (rate_long if long else rate_short) * lot * nights
+
+
+# --------------------------------------------------------------------------
+# C13 -- does our own optimiser survive walk-forward?
+# --------------------------------------------------------------------------
+
+@dataclass
+class WalkForwardFinding:
+    dial: str
+    chosen_value: float
+    in_sample_r: float
+    out_of_sample_r: float
+    default_out_of_sample_r: float
+    default_value: float = 0.0
+
+    @property
+    def tuning_changed_anything(self) -> bool:
+        """Whether the optimiser actually moved the dial.
+
+        When it picks the value the dial already had, there is nothing to
+        walk forward: the tuned and untuned runs are the same run. Treating
+        that as "failed to beat the default" would report a red flag for the
+        one outcome that cannot possibly be overfitting.
+        """
+        return self.chosen_value != self.default_value
+
+    @property
+    def degradation(self) -> float:
+        """Share of the in-sample edge lost out of sample."""
+        if self.in_sample_r <= 0:
+            return 1.0
+        return max(0.0, 1.0 - self.out_of_sample_r / self.in_sample_r)
+
+    @property
+    def beats_the_untuned_default(self) -> bool:
+        """The control the usual version of this test leaves out.
+
+        A drop out of sample proves little on its own -- different markets
+        give different numbers whether or not anything was fitted. The
+        question that matters is whether the tuned dial still beats the dial
+        nobody tuned, measured on the *same* fresh markets.
+        """
+        return self.out_of_sample_r > self.default_out_of_sample_r
+
+    @property
+    def is_a_red_flag(self) -> bool:
+        if not self.tuning_changed_anything:
+            return False
+        return (self.degradation > WALK_FORWARD_RED_FLAG
+                or not self.beats_the_untuned_default)
+
+
+def measure_walk_forward(dial: str = "edge_fraction",
+                         values: tuple[float, ...] = (0.15, 0.25, 0.35, 0.45),
+                         markets: int = 12, bars: int = 12_000,
+                         seed_in: int = 20_000,
+                         seed_out: int = 40_000) -> WalkForwardFinding:
+    """Tune on one set of markets, then measure on markets never seen.
+
+    This is pointed at `metals/train.py`, which picks a winning dial on every
+    run and writes it to a log that later analysis reads. If the winner does
+    not transfer, that log records preferences rather than findings, and
+    saying so is worth more than another training iteration.
+    """
+    base = DayRangeConfig()
+
+    best_value, best_r = values[0], float("-inf")
+    for value in values:
+        s = sweep(replace(base, **{dial: value}), markets=markets, bars=bars,
+                  seed_base=seed_in)
+        if s.mean_expectancy_r > best_r:
+            best_value, best_r = value, s.mean_expectancy_r
+
+    tuned_out = sweep(replace(base, **{dial: best_value}), markets=markets,
+                      bars=bars, seed_base=seed_out)
+    default_out = sweep(base, markets=markets, bars=bars, seed_base=seed_out)
+
+    return WalkForwardFinding(
+        dial=dial, chosen_value=best_value,
+        in_sample_r=best_r,
+        out_of_sample_r=tuned_out.mean_expectancy_r,
+        default_out_of_sample_r=default_out.mean_expectancy_r,
+        default_value=getattr(base, dial))
 
 
 # --------------------------------------------------------------------------

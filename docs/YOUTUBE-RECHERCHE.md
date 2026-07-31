@@ -33,7 +33,7 @@ Drei Quellenarten, bewusst getrennt gehalten:
 | **Fachpresse** | Broker-Blogs, Trading-Schulen, Forenbeiträge | Bei Mechanik (Spread, Sessions, Ausführung) meist richtig, bei Ergebnissen unbelegt |
 | **Aufsicht / Wissenschaft** | Zahlen, für die jemand geradestehen musste | Als Fakt zitiert — aber als Basisrate über eine Population, nicht als Prognose für ein Konto |
 
-## Die zwölf Behauptungen
+## Die dreizehn Behauptungen
 
 ### C1 — „90 % Trefferquote" · Anbieter · **messbar, und das Ergebnis ist der wichtigste Fund**
 
@@ -208,6 +208,36 @@ Die Taktik wird dadurch also nicht unmöglich, sondern **teurer** — bei einem 
 und einem Spread von 0,34 $ zahlt man mehr als das Dreifache des Ziels an Kosten. Das ist
 dieselbe Rechnung wie in C2, nur diesmal von der Plattformseite bestätigt.
 
+### C13 — „Ein EA, der im Backtest glänzt, versagt vorwärts" · Fachpresse · **messbar, und es hat unseren eigenen Optimierer erwischt**
+
+Die Fachpresse nennt eine konkrete Schwelle: **über 40 % Einbruch gegenüber In-Sample**
+gilt als Kurvenanpassung. Statt das an fremden EAs zu prüfen, habe ich es auf unser
+eigenes `train.py` gerichtet — das wählt bei jedem Durchgang einen „besten Wert" und
+schreibt ihn ins Log.
+
+Verfahren: auf einem Satz Märkte tunen, dann auf **nie gesehenen** Märkten messen. Dazu
+eine Kontrollgruppe, die in der üblichen Fassung dieses Tests fehlt: derselbe ungetunte
+Standard auf **denselben** frischen Märkten. Ohne die Kontrolle beweist ein Einbruch
+nichts — andere Märkte liefern andere Zahlen, ob gefittet wurde oder nicht.
+
+| Regler | gewählt | Standard | In-Sample | Out-of-Sample | Standard out | Urteil |
+|---|---:|---:|---:|---:|---:|---|
+| `edge_fraction` | 0,25 | 0,30 | +0,175 R | **+0,185 R** | +0,156 R | hält |
+| `take_fraction` | 0,50 | 0,50 | +0,142 R | +0,156 R | +0,156 R | Standard gewählt |
+| `stop_fraction` | 0,50 | 0,50 | +0,142 R | +0,156 R | +0,156 R | Standard gewählt |
+| `min_range_atr` | 5 | 2 | +0,150 R | +0,156 R | +0,156 R | **ROT** |
+
+`edge_fraction` überträgt sich sauber und schlägt out-of-sample den ungetunten Standard.
+Die beiden mittleren Zeilen sind keine Warnung, sondern das Gegenteil: Der Optimierer hat
+den Wert gewählt, der ohnehin eingestellt war — da gibt es nichts zu übertragen. (Dass
+meine erste Fassung genau das als „ROT" meldete, war ein Fehler im Messcode und ist
+behoben.)
+
+Die letzte Zeile war der eigentliche Fund und führte zu **Auditbefund
+[A12](./REPO-AUDIT.md)**: `min_range_atr` ist zwischen 0,5 und 5 vollständig wirkungslos —
+`train.py` hat vier Läufe lang vier identische Ergebnisse verglichen und daraus einen
+Sieger gekürt.
+
 ## Was daraus in den Bot eingebaut wurde
 
 Nicht die Behauptungen. Die Konsequenzen:
@@ -245,6 +275,9 @@ Nicht die Behauptungen. Die Konsequenzen:
 - [VaultQuant — Why Your Trading Bot Fails on Gold](https://medium.com/@chemosellesceince/why-your-trading-bot-fails-on-gold-and-what-actually-works-in-2026-84bea84849e7)
 - [MQL5 Blogs — How to Choose a Safe Forex/Gold EA (Avoid Grid, Martingale & Over-Optimization)](https://www.mql5.com/en/blogs/post/766446)
 - [Forex Robot Lab — ABS GoldGrid EA Review](https://forexrobotlab.com/abs-goldgrid-ea-review/)
+- [MQL5 Blogs — Spot Curve-Fitted EAs Fast: 3 Tests to Avoid Over-Optimisation](https://www.mql5.com/en/blogs/post/763144)
+- [Forex Factory — Walk Forward Analysis, the logical successor to backtest](https://www.forexfactory.com/thread/459242-walk-forward-analysis-the-only-logical-successor)
+- [Forex EA Store — Walk-Forward Analysis: the robustness test](https://forexeastore.com/research/walk-forward-analysis-wfa-the-robustness-test/)
 - [MQL5 Blogs — Not All 99% Backtests Are Equal](https://www.mql5.com/en/blogs/post/762517)
 - [MQL5 Forum — Which XAUUSD broker has the minimal Stops Level?](https://www.mql5.com/en/forum/428176)
 - [MQL5 Articles — Broker Reality Check: Why Your EA Works on a Demo and Breaks on a Client's Broker](https://www.mql5.com/en/articles/23327)

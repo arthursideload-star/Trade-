@@ -192,6 +192,35 @@ class TestTheTrainingLogStaysHonest(unittest.TestCase):
                                           markets=1, bars=1),
                                 "slippage_fraction"))
 
+    def test_every_dial_the_optimiser_sweeps_can_actually_change_something(self):
+        """The meta-test, added after A12.
+
+        `min_range_atr` was swept over (1.0, 2.0, 3.5, 5.0) for four training
+        runs, and every one of those values produced the identical set of
+        trades: a day's range on M1 gold is 20 to 100 times ATR(14), so a
+        floor of five never binds. The log therefore recorded a "best value"
+        chosen between four identical outcomes -- noise written down as a
+        finding.
+
+        This checks the general property rather than that one dial: if a
+        sweep cannot distinguish its own endpoints, optimising over it is
+        not optimisation.
+        """
+        from dataclasses import replace
+
+        from metals.dayrange import DayRangeConfig, run
+        from metals.train import DIALS
+
+        base = DayRangeConfig()
+        for dial, values in DIALS:
+            lo = run(replace(base, **{dial: values[0]}), seed=11, bars=8_000)
+            hi = run(replace(base, **{dial: values[-1]}), seed=11, bars=8_000)
+            self.assertNotEqual(
+                (lo.trades, round(lo.expectancy_r, 6)),
+                (hi.trades, round(hi.expectancy_r, 6)),
+                f"{dial}: sweeping {values[0]} to {values[-1]} changes "
+                f"nothing, so picking a winner among them records noise")
+
     def test_the_summary_warns_when_the_log_mixes_cost_models(self):
         """Runs 1-3 charged spread alone and run 4 charges spread x 1.5, so
         the per-dial table compares two different worlds. It still compares
