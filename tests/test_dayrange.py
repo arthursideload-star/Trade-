@@ -166,3 +166,38 @@ class TestDeterminism(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheTrainingLogStaysHonest(unittest.TestCase):
+    """The accumulating log is the deliverable, so its bookkeeping matters.
+
+    Two defects surfaced when the fourth iteration ran after the cost model
+    changed: the log had no record of which model produced a row, and the
+    shuffle ratio was clamped in one place and not the other, so the same
+    quantity printed as "26%" in an iteration and "-0%" in the summary.
+    """
+
+    def test_the_summary_clamps_the_shuffle_ratio_like_the_iteration_does(self):
+        from metals.train import Iteration, summarise
+        it = Iteration(index=0, dial="x", seed_base=0, markets=1, bars=1,
+                       shuffle_real_r=0.09, shuffle_random_r=-0.017)
+        # A shuffled run that lost money leaves nothing of the edge, not a
+        # negative share of it.
+        self.assertEqual(it.edge_survives_shuffling, 0.0)
+        self.assertNotIn("-0%", summarise())
+
+    def test_an_iteration_records_which_cost_model_produced_it(self):
+        from metals.train import Iteration
+        self.assertTrue(hasattr(Iteration(index=0, dial="x", seed_base=0,
+                                          markets=1, bars=1),
+                                "slippage_fraction"))
+
+    def test_the_summary_warns_when_the_log_mixes_cost_models(self):
+        """Runs 1-3 charged spread alone and run 4 charges spread x 1.5, so
+        the per-dial table compares two different worlds. It still compares
+        them -- discarding three iterations would be worse -- but it says
+        so."""
+        from metals.train import load_log, summarise
+        models = {e.get("slippage_fraction", 0.0) for e in load_log()}
+        if len(models) > 1:
+            self.assertIn("Kostenmodelle", summarise())

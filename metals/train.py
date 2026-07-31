@@ -93,6 +93,11 @@ class Iteration:
     shuffle_real_r: float = 0.0
     shuffle_random_r: float = 0.0
     timestamp: float = 0.0
+    # Which cost model produced this iteration. Recorded because it changed
+    # mid-log: runs 1-3 charged spread alone, run 4 onward charges
+    # spread x 1.5 (docs/REPO-AUDIT.md, A8). Comparing a dial's best value
+    # across that boundary compares two different worlds.
+    slippage_fraction: float = 0.0
 
     @property
     def edge_survives_shuffling(self) -> float:
@@ -115,7 +120,8 @@ def one_iteration(markets: int = 20, bars: int = 12_000,
     seed_base = next_seed_base()
 
     it = Iteration(index=index, dial=dial, seed_base=seed_base,
-                   markets=markets, bars=bars, timestamp=time.time())
+                   markets=markets, bars=bars, timestamp=time.time(),
+                   slippage_fraction=base.slippage_fraction)
 
     best_r, best_val = float("-inf"), values[0]
     for value in values:
@@ -228,7 +234,11 @@ def summarise() -> str:
         lines.append(f"  {dial:>16} {winner[0]:>8g} {len(entries):>12} "
                      f"{statistics.fmean(winner[1]):>+10.3f}R")
 
-    survives = [e["shuffle_random_r"] / e["shuffle_real_r"]
+    # Clamped the same way Iteration.edge_survives_shuffling clamps it. A
+    # shuffled run that loses money gives a negative ratio, which printed as
+    # "-0% of the edge survives" -- true but absurd-looking, and two
+    # different numbers for the same quantity in one module.
+    survives = [max(0.0, e["shuffle_random_r"] / e["shuffle_real_r"])
                 for e in log if e["shuffle_real_r"] > 0]
     if survives:
         lines.append("")
@@ -237,6 +247,15 @@ def summarise() -> str:
                      f"ueberlebt")
         worst = max(survives)
         lines.append(f"  Schlechtester Durchgang: {worst * 100:.0f}%")
+
+    models = sorted({e.get("slippage_fraction", 0.0) for e in log})
+    if len(models) > 1:
+        lines.append("")
+        lines.append(f"  ACHTUNG: {len(models)} Kostenmodelle im Log "
+                     f"({', '.join(f'{m:.0%}' for m in models)}).")
+        lines.append("  Ein Wert, der vor und nach der Umstellung gewonnen hat,")
+        lines.append("  hat in zwei verschiedenen Welten gewonnen. Die Tabelle")
+        lines.append("  oben vergleicht sie trotzdem.")
 
     lines.append("")
     if len(log) < 10:
