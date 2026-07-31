@@ -24,7 +24,8 @@ from metals.candles import resample
 from metals.claims import (ASSUMED_EUR_USD, CLAIMS, ASIA_HOURS_UTC,
                            OVERLAP_HOURS_UTC, find, margin_required,
                            measure_account_sizes,
-                           POINT_USD_OZ, measure_walk_forward,
+                           POINT_USD_OZ, measure_reversion_dependence,
+                           measure_walk_forward,
                            measure_win_rate_is_not_an_edge,
                            stops_level_usd, swap_on_one_position,
                            target_is_placeable, WALK_FORWARD_RED_FLAG,
@@ -543,6 +544,45 @@ class TestC11Swap(unittest.TestCase):
         """The backtest already assumes GMT+3 server time; a different
         rollover hour here would silently model a different broker."""
         self.assertEqual(ROLLOVER_HOUR_UTC, 21)
+
+
+class TestC14WhatTheEdgeStandsOn(unittest.TestCase):
+    """The sharpest caveat this project has produced.
+
+    "The simulator is too easy" is vague. This names the parameter: turn
+    `MarketParams.reversion` off and most of the measured edge goes with
+    it, because the strategy buys the edge of the range and sells toward
+    the middle, and that dial is what pulls price back to the middle.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.finding = measure_reversion_dependence(markets=10, bars=10_000)
+
+    def test_most_of_the_edge_lives_on_the_reversion_dial(self):
+        self.assertGreater(self.finding.share_of_edge_from_reversion, 0.5,
+                           "if the edge survived the dial being switched "
+                           "off, it would be coming from the chart rather "
+                           "than from the generator's design")
+
+    def test_a_trending_market_costs_more_than_a_flat_one(self):
+        """The claim as the trade press states it: these systems work until
+        the market runs one way."""
+        for reversion in (self.finding.default_reversion, 0.0):
+            with self.subTest(reversion=reversion):
+                self.assertGreater(self.finding.at(reversion, 0.0),
+                                   self.finding.at(reversion, 0.00001))
+
+    def test_the_worst_case_is_reversion_off_and_a_trend_on(self):
+        worst = self.finding.at(0.0, 0.00001)
+        best = self.finding.at(self.finding.default_reversion, 0.0)
+        self.assertLess(worst, best)
+        self.assertLess(worst, 0.0)
+
+    def test_the_default_is_read_from_the_simulator_not_hardcoded(self):
+        from metals import simulate
+        self.assertEqual(self.finding.default_reversion,
+                         simulate.MarketParams().reversion)
 
 
 class TestDocumentsDoNotFreezeEachOthersNumbers(unittest.TestCase):

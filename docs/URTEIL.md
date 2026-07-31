@@ -133,3 +133,44 @@ unverändert. Der Mehrfachvergleichs-Einwand wird sogar **schlimmer**: Bei inzwi
 Auswertungen liegt die Chance, dass ein 95-%-Band irgendwann zufällig über der Null steht,
 bei bis zu **90 %**. Die Vorfestlegung bei 300 Trades bleibt das einzige, was diesen Einwand
 mildert — und sie war, wie oben gesagt, keine saubere Vorregistrierung.
+
+---
+
+## Nachtrag: Auf welchem Parameter die Kante tatsächlich steht
+
+Grund 1 oben sagt, der Simulator enthalte die Struktur, die die Strategie sucht. Das ist
+richtig, aber vage. Inzwischen ist es **genau benannt**.
+
+`metals/simulate.py` hat einen Parameter `MarketParams.reversion = 0.002` — eine eingebaute
+Rückkehr des Kurses zu einem langsamen Anker. Die Strategie kauft am Rand der Tagesspanne
+und verkauft Richtung Mitte. Das ist exakt die Bewegung, die dieser Parameter erzeugt.
+
+Also die naheliegende Frage: Was bleibt, wenn man ihn abdreht?
+
+| Rückkehr zur Mitte | Drift | Trefferquote | Erwartungswert | Rendite (Median) |
+|---:|---:|---:|---:|---:|
+| **0,0020** (Standard) | 0 | 57,9 % | **+0,144 R** | +9,06 % |
+| 0,0020 | leichter Trend | 55,0 % | +0,077 R | +7,40 % |
+| 0,0005 | 0 | 51,0 % | +0,048 R | +1,41 % |
+| 0,0005 | leichter Trend | 48,2 % | −0,001 R | +0,59 % |
+| **0,0000** | **0** | 48,3 % | **+0,021 R** | +0,30 % |
+| 0,0000 | leichter Trend | 44,5 % | **−0,054 R** | −2,91 % |
+
+**Ohne diesen einen Parameter fallen rund 85 % der gemessenen Kante weg** — bei völlig
+unverändertem Drift. Mit leichtem Trend dazu wird sie negativ.
+
+Das ist keine Nebenbemerkung, sondern der Kern:
+
+> Der Erwartungswert von +0,19 R, den der Papier-Lauf ausweist, steht fast vollständig auf
+> **einer Zeile im Marktgenerator**. Nicht auf einer Eigenschaft von Gold — auf einer
+> Annahme über Gold, die jemand hineingeschrieben hat, weil Gold sie *vermutlich* hat.
+
+Ob echtes Gold innerhalb des Tages in dieser Stärke zur Mitte zurückkehrt, ist eine
+empirische Frage, und sie ist hier nicht beantwortet. **Genau das entscheidet der Backtest
+auf echter Historie** — und damit ist jetzt auch klar, worauf man dort schauen muss: nicht
+auf die Trefferquote, sondern darauf, ob die Kante überhaupt existiert, wenn niemand sie in
+den Datengenerator gelegt hat.
+
+Der Befund bestätigt nebenbei die Fachpresse-Behauptung C13/C14: „Gold-EAs funktionieren,
+bis der Markt trendet." Die Zeile mit Trend und ohne Rückkehr zur Mitte ist genau dieser
+Fall — und sie ist die einzige mit negativem Erwartungswert.

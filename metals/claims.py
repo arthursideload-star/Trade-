@@ -137,6 +137,13 @@ CLAIMS: tuple[Claim, ...] = (
           "Turned on our own optimiser rather than on somebody else's EA — "
           "metals/train.py picks a best dial every run, so this is the one "
           "claim in the catalogue that audits this project's own tooling."),
+    Claim("C14", "Gold EAs work until the market trends: a range strategy "
+                 "cannot recover in a market that runs one way for weeks",
+          "MQL5 blogs on why gold EAs stop working, EA-failure write-ups",
+          "editorial", True,
+          "Confirmed, and the test then asked the harder question -- how "
+          "much of our own measured edge rests on the simulator's "
+          "mean-reversion parameter. Answer in docs/URTEIL.md."),
 )
 
 # Points, where one point is 0.01 USD on a two-decimal XAUUSD quote. The
@@ -665,6 +672,75 @@ def measure_walk_forward(dial: str = "edge_fraction",
         out_of_sample_r=tuned_out.mean_expectancy_r,
         default_out_of_sample_r=default_out.mean_expectancy_r,
         default_value=getattr(base, dial))
+
+
+# --------------------------------------------------------------------------
+# C14 -- which simulator parameter is the edge actually standing on?
+# --------------------------------------------------------------------------
+
+@dataclass
+class ReversionFinding:
+    rows: list[tuple[float, float, float, float]]
+    # reversion strength, drift, expectancy R, median return %
+    default_reversion: float
+
+    def at(self, reversion: float, drift: float) -> float:
+        for rev, dr, exp, _ in self.rows:
+            if abs(rev - reversion) < 1e-9 and abs(dr - drift) < 1e-12:
+                return exp
+        raise KeyError((reversion, drift))
+
+    @property
+    def share_of_edge_from_reversion(self) -> float:
+        """How much of the measured edge disappears with the dial at zero.
+
+        This is the sharpest available statement about what the paper
+        chain's numbers rest on. Not "the simulator is too easy" -- that is
+        vague. This names the single parameter.
+        """
+        full = self.at(self.default_reversion, 0.0)
+        none = self.at(0.0, 0.0)
+        if full <= 0:
+            return 0.0
+        return max(0.0, 1.0 - none / full)
+
+
+def measure_reversion_dependence(markets: int = 12, bars: int = 12_000,
+                                 seed_base: int = 780_000
+                                 ) -> ReversionFinding:
+    """Vary the simulator's mean reversion and its drift, measure the edge.
+
+    The strategy buys at the edge of the day's range and sells toward the
+    middle. `metals/simulate.py` contains an explicit pull back toward a
+    slow anchor -- `MarketParams.reversion` -- which is exactly the
+    behaviour that trade profitable. So the question is not academic: how
+    much of the edge is the chart being read, and how much is that one line
+    of the generator?
+    """
+    from . import simulate
+
+    base = DayRangeConfig()
+    default = simulate.MarketParams().reversion
+    rows: list[tuple[float, float, float, float]] = []
+
+    for reversion in (default, default / 4, 0.0):
+        for drift in (0.0, 0.00001):
+            exps, rets = [], []
+            for i in range(markets):
+                params = simulate.MarketParams(start_price=4_100.0,
+                                               drift=drift,
+                                               reversion=reversion)
+                series = simulate.generate(bars=bars, timeframe="1m",
+                                           seed=seed_base + i, params=params)
+                r = run(base, series=series, seed=seed_base + i)
+                if r.trades:
+                    exps.append(r.expectancy_r)
+                rets.append(r.return_pct)
+            rows.append((reversion, drift,
+                         statistics.fmean(exps) if exps else 0.0,
+                         statistics.median(rets)))
+
+    return ReversionFinding(rows=rows, default_reversion=default)
 
 
 # --------------------------------------------------------------------------
