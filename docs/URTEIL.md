@@ -18,6 +18,53 @@ aussieht", sondern eine Zahl, die vorher feststand.
 
 Das Band liegt **vollständig über der Null**. Auf diesen Daten ist der Vorteil messbar.
 
+## Nachtrag nach 53 Sitzungen: die Kette steht auf drei Tagen
+
+```bash
+python -m metals paper --provenance
+```
+
+| Tagesbild | Sitzungen | Trades | Gewinn | Anteil | Ø Rendite/Sitzung |
+|---|---:|---:|---:|---:|---:|
+| **ANGESETZT 1,57 %** | 21 | 168 | +779,33 € | **56,3 %** | +3,26 % |
+| beobachtet 2,22 % | 13 | 110 | +273,24 € | 19,7 % | +3,11 % |
+| beobachtet 2,23 % | 7 | 64 | +240,79 € | 17,4 % | +6,05 % |
+| beobachtet 1,01 % | 12 | 93 | +91,77 € | 6,6 % | +0,48 % |
+
+Zwei Dinge stehen da, und beide sind unangenehm.
+
+**Erstens: 56 % des gesamten Gewinns stammen aus Sitzungen, deren Tagesspanne
+*angesetzt* war, nicht nachgeschlagen.** Die 1,57 % sind keine Messung. Sie sind aus
+*einer* Wochenspanne durch Wurzel 5 abgeleitet, weil an dem Tag keine Ist-Spanne
+verfügbar war. Ein Ergebnis, das überwiegend darauf steht, steht auf einer Herleitung.
+
+**Zweitens: es gab nur drei tatsächlich beobachtete Handelstage** — 2,22 %, 2,23 % und
+1,01 %. Die ersten beiden sind derselbe Tag (30. Juli, FOMC) aus zwei Kursabfragen. Eine
+Kette von 53 Sitzungen aus drei beobachteten Tagen ist ein langer Lauf **eines**
+Experiments, nicht ein langer Lauf von Experimenten.
+
+### Was das für die Kurve heißt
+
+Hätte jede der 53 Sitzungen so ausgesehen wie:
+
+| | Endstand nach 53 Sitzungen |
+|---|---:|
+| der FOMC-Tag (2,23 %) | 9.019 € |
+| die angesetzte Spanne (1,57 %) | 2.192 € |
+| **der ruhige Tag (1,01 %)** | **515 €** |
+| *tatsächliche Kette* | *1.785 €* |
+
+**Der einzige beobachtete ruhige Tag hätte aus 400 € nach 53 Sitzungen 515 € gemacht** —
+nicht 1.785 €. Das sind +0,48 % je Sitzung statt +3,26 %.
+
+Die spektakuläre Kurve ist damit zum größten Teil erklärt, und zwar nicht durch die
+Strategie: Sie kommt aus einer angesetzten Volatilität und einem außergewöhnlich
+bewegten Tag. Das deckt sich mit dem bereits gemessenen Zusammenhang, dass der Ertrag
+**schneller** wächst als die Tagesspanne.
+
+Diese Aufschlüsselung ist als Kommando eingebaut und durch Tests festgehalten, damit sie
+nicht stillschweigend aus dem Bericht verschwindet.
+
 ## Was das heißt — und was nicht
 
 **Es heißt:** Die Maschinerie funktioniert. Die Regeln lesen tatsächlich Struktur aus dem

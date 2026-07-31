@@ -651,6 +651,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
             gold_price=args.price, equity_eur=args.equity or 400.0,
             days=args.days)))
         return 0
+    if args.provenance:
+        from .paper import render_provenance
+        print(render_provenance())
+        return 0
     if args.table:
         from .paper import render_blocks
         print(render_blocks(size=args.block))
@@ -954,6 +958,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "beobachteter Tagessorte")
     pa.add_argument("--volatility", action="store_true",
                     help="wie stark das Ergebnis an der Tagesspanne haengt")
+    pa.add_argument("--provenance", action="store_true",
+                    help="woher das Ergebnis kommt: welche Tagesbilder es "
+                         "getragen haben und welche davon beobachtet waren")
     pa.add_argument("--table", action="store_true",
                     help="Ueberblick der Kette in Bloecken")
     pa.add_argument("--block", type=int, default=5,

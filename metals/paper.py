@@ -752,6 +752,133 @@ def render_distribution(d: Distribution) -> str:
 
 
 @dataclass
+class DayBucket:
+    """Every session that ran on one distinct picture of a trading day."""
+
+    range_pct: float
+    observed: bool          # False when the range was assumed, not looked up
+    sessions: int
+    trades: int
+    pnl_eur: float
+    mean_return_pct: float
+    expectancy_r: float
+    sources: list[str] = field(default_factory=list)
+
+    def projected_over(self, sessions: int, start_eur: float = 400.0) -> float:
+        """What the chain would stand at if every session had looked like
+        this one. The comparison that says how much of the result is the
+        strategy and how much is which day it kept repeating."""
+        return start_eur * (1 + self.mean_return_pct / 100.0) ** sessions
+
+
+@dataclass
+class Provenance:
+    buckets: list[DayBucket]
+    total_pnl_eur: float
+    sessions: int
+
+    @property
+    def distinct_observed_days(self) -> int:
+        """Distinct real market observations behind the whole chain.
+
+        The number that sets what the chain can possibly be evidence of. A
+        long run of sessions built from two observed days is a long run of
+        one experiment, not a long run of experiments.
+        """
+        return sum(1 for b in self.buckets if b.observed)
+
+    @property
+    def share_from_assumed_ranges(self) -> float:
+        assumed = sum(b.pnl_eur for b in self.buckets if not b.observed)
+        return assumed / self.total_pnl_eur if self.total_pnl_eur else 0.0
+
+
+def provenance() -> Provenance:
+    """Where the chain's result actually came from.
+
+    Sessions are grouped by the picture of the day they were calibrated to,
+    and split by whether that day's range was **looked up** or **assumed**.
+    The second kind is not an observation, and a result resting on it is
+    resting on a derivation, not on the market.
+    """
+    ledger = load_ledger()
+    groups: dict[tuple, dict] = {}
+    for row in ledger:
+        price = row["gold_price"]
+        pct = (row["day_high"] - row["day_low"]) / price * 100 if price else 0.0
+        assumed = abs(pct - TYPICAL_DAY_RANGE_PCT) < 0.02
+        key = ("assumed",) if assumed else ("observed", round(pct, 2))
+        g = groups.setdefault(key, {"pct": [], "sessions": 0, "trades": 0,
+                                    "pnl": 0.0, "r": [], "ret": [],
+                                    "sources": set()})
+        g["pct"].append(pct)
+        g["sessions"] += 1
+        g["trades"] += row["trades"]
+        g["pnl"] += row["end_equity_eur"] - row["start_equity_eur"]
+        g["r"].extend(row.get("r_multiples", []))
+        if row["start_equity_eur"] > 0:
+            g["ret"].append((row["end_equity_eur"] - row["start_equity_eur"])
+                            / row["start_equity_eur"] * 100)
+        g["sources"].add(row.get("price_source", "")[:60])
+
+    buckets = [
+        DayBucket(range_pct=statistics.fmean(g["pct"]),
+                  observed=key[0] == "observed",
+                  sessions=g["sessions"], trades=g["trades"],
+                  pnl_eur=g["pnl"],
+                  mean_return_pct=(statistics.fmean(g["ret"])
+                                   if g["ret"] else 0.0),
+                  expectancy_r=statistics.fmean(g["r"]) if g["r"] else 0.0,
+                  sources=sorted(g["sources"]))
+        for key, g in groups.items()
+    ]
+    buckets.sort(key=lambda b: -b.pnl_eur)
+    return Provenance(buckets=buckets,
+                      total_pnl_eur=sum(b.pnl_eur for b in buckets),
+                      sessions=sum(b.sessions for b in buckets))
+
+
+def render_provenance() -> str:
+    p = provenance()
+    if not p.sessions:
+        return "Noch keine Papier-Sitzungen."
+
+    lines = [f"HERKUNFT DES ERGEBNISSES — {p.sessions} SITZUNGEN", "=" * 78]
+    lines.append(f"  {'Tagesbild':>20} {'Sitz.':>6} {'Trades':>7} "
+                 f"{'Gewinn €':>10} {'Anteil':>8} {'Ø Rend.':>9} {'Erwart.':>9}")
+    lines.append("  " + "-" * 74)
+    for b in p.buckets:
+        label = (f"beobachtet {b.range_pct:.2f}%" if b.observed
+                 else f"ANGESETZT {b.range_pct:.2f}%")
+        share = b.pnl_eur / p.total_pnl_eur * 100 if p.total_pnl_eur else 0.0
+        lines.append(f"  {label:>20} {b.sessions:>6} {b.trades:>7} "
+                     f"{b.pnl_eur:>+10.2f} {share:>7.1f}% "
+                     f"{b.mean_return_pct:>+8.2f}% {b.expectancy_r:>+8.3f}R")
+    lines.append("  " + "-" * 74)
+    lines.append(f"  {'gesamt':>20} {p.sessions:>6} "
+                 f"{sum(b.trades for b in p.buckets):>7} "
+                 f"{p.total_pnl_eur:>+10.2f}")
+    lines.append("")
+    lines.append(f"  Tatsaechlich beobachtete Handelstage: "
+                 f"{p.distinct_observed_days}")
+    lines.append(f"  Anteil des Gewinns aus ANGESETZTEN Spannen: "
+                 f"{p.share_from_assumed_ranges * 100:.0f} %")
+    lines.append("")
+    lines.append(f"  Haette jede der {p.sessions} Sitzungen so ausgesehen:")
+    for b in sorted(p.buckets, key=lambda x: -x.mean_return_pct):
+        label = (f"beobachtet {b.range_pct:.2f}%" if b.observed
+                 else f"ANGESETZT {b.range_pct:.2f}%")
+        lines.append(f"  {label:>20} -> "
+                     f"{b.projected_over(p.sessions):>12,.0f} €")
+    lines.append("")
+    lines.append("  Eine angesetzte Spanne ist keine Beobachtung. Sie ist aus")
+    lines.append("  EINER Wochenspanne durch Wurzel 5 abgeleitet. Ein Ergebnis,")
+    lines.append("  das ueberwiegend darauf steht, steht auf einer Herleitung")
+    lines.append("  und nicht auf dem Markt.")
+    return "\n".join(lines)
+
+
+@dataclass
 class VerifyResult:
     sessions: int
     chain_breaks: list[str] = field(default_factory=list)

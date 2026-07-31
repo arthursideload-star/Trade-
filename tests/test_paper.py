@@ -1359,3 +1359,74 @@ class TestTheSourceDateIsChecked(LedgerFixture):
         self.assertTrue(v.date_mismatches)
         self.assertFalse(v.ok)
         self.assertIn("Quellendatum widerspricht", paper.render_verify(v))
+
+
+class TestProvenance(LedgerFixture):
+    """Where the chain's result came from, split by whether the day it was
+    calibrated to was looked up or assumed.
+
+    This exists because the answer turned out to be uncomfortable: most of
+    the chain's gain rests on a range that was derived, not observed. A
+    report that can show that must not be able to quietly stop showing it.
+    """
+
+    def _session(self, index, price, high, low, start, end, trades=5):
+        return Session(index=index, timestamp=0.0, date_utc="2026-07-31 12:00",
+                       gold_price=price, day_high=high, day_low=low,
+                       price_source="t", start_equity_eur=start,
+                       end_equity_eur=end, lot=MIN_LOT, forced_risk_pct=1.0,
+                       trades=trades, wins=3, losses=2, expectancy_r=0.1)
+
+    def _assumed(self, index, start, end):
+        """A day whose range is exactly the assumed typical figure."""
+        price = 4_100.0
+        half = price * paper.TYPICAL_DAY_RANGE_PCT / 100 / 2
+        return self._session(index, price, price + half, price - half,
+                             start, end)
+
+    def test_an_assumed_range_is_not_counted_as_observed(self):
+        paper.append(self._assumed(0, 400.0, 440.0))
+        p = paper.provenance()
+        self.assertEqual(p.distinct_observed_days, 0)
+        self.assertAlmostEqual(p.share_from_assumed_ranges, 1.0)
+
+    def test_a_looked_up_range_is_counted_as_observed(self):
+        paper.append(self._session(0, 4_100.0, 4_150.0, 4_050.0, 400.0, 440.0))
+        p = paper.provenance()
+        self.assertEqual(p.distinct_observed_days, 1)
+        self.assertAlmostEqual(p.share_from_assumed_ranges, 0.0)
+
+    def test_days_with_different_ranges_are_separate_buckets(self):
+        paper.append(self._session(0, 4_100.0, 4_150.0, 4_050.0, 400.0, 440.0))
+        paper.append(self._session(1, 4_100.0, 4_200.0, 4_000.0, 440.0, 500.0))
+        self.assertEqual(paper.provenance().distinct_observed_days, 2)
+
+    def test_the_shares_add_up_to_the_whole_gain(self):
+        paper.append(self._assumed(0, 400.0, 440.0))
+        paper.append(self._session(1, 4_100.0, 4_150.0, 4_050.0, 440.0, 470.0))
+        p = paper.provenance()
+        self.assertAlmostEqual(sum(b.pnl_eur for b in p.buckets), 70.0)
+        self.assertAlmostEqual(p.total_pnl_eur, 70.0)
+
+    def test_a_losing_bucket_does_not_vanish(self):
+        paper.append(self._session(0, 4_100.0, 4_150.0, 4_050.0, 400.0, 350.0))
+        p = paper.provenance()
+        self.assertEqual(len(p.buckets), 1)
+        self.assertAlmostEqual(p.buckets[0].pnl_eur, -50.0)
+
+    def test_the_projection_compounds_the_bucket_rate(self):
+        paper.append(self._session(0, 4_100.0, 4_150.0, 4_050.0, 400.0, 440.0))
+        b = paper.provenance().buckets[0]
+        self.assertAlmostEqual(b.mean_return_pct, 10.0)
+        self.assertAlmostEqual(b.projected_over(3, 400.0), 400 * 1.1 ** 3)
+
+    def test_the_report_marks_assumed_ranges_in_capitals(self):
+        """The distinction the whole report exists to make has to survive a
+        glance, not only a careful read."""
+        paper.append(self._assumed(0, 400.0, 440.0))
+        text = paper.render_provenance()
+        self.assertIn("ANGESETZT", text)
+        self.assertIn("keine Beobachtung", text)
+
+    def test_it_says_so_when_there_is_nothing_yet(self):
+        self.assertIn("Noch keine", paper.render_provenance())
