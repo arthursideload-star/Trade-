@@ -271,6 +271,47 @@ braucht MetaEditor. Alle Paritätstests der Welt ersetzen kein `F7`.
 
 ---
 
+## A11 · Der Port hat Parität beim Einstieg, nicht beim Ausstieg — **gemessen, dokumentiert**
+
+Der Paritätstest aus A10 prüft das **Signal**: Auf 12.000 Bars feuern MQL5-Port und Python
+auf denselben Kerzen, in derselben Richtung, mit demselben vorhergesagten Ziel. Das ist
+notwendig — und es ist nicht alles.
+
+**Die Ausstiege sind verschieden:**
+
+| | Python (`dayrange.py`) | EA (SECTION 10) |
+|---|---|---|
+| Ziel | **ein** Ziel bei 50 % der Vorhersage (= 1,0 R) | 60 % der Position bei **0,5 R**, Rest bis **2,5 R** |
+| Rest | — | ATR-Trail (1,2 × ATR) |
+| Zeitstop | 240 Bars (4 h) | 45 Minuten |
+
+Wie viel das ausmacht, gemessen über 20 Märkte à 15.000 Bars:
+
+| Ziel | in R | Trefferquote | Erwartungswert |
+|---:|---:|---:|---:|
+| 0,25 der Vorhersage | 0,5 R | 66,2 % | +0,099 R |
+| **0,50 (Python-Standard)** | **1,0 R** | 57,0 % | **+0,110 R** |
+| 1,00 | 2,0 R | 53,1 % | +0,085 R |
+| 1,25 | 2,5 R | 52,5 % | +0,072 R |
+
+Die EA-Struktur ist eine Mischung aus der 0,5-R- und der 2,5-R-Zeile, also grob
+**+0,088 R gegen +0,110 R** — rund **20 % weniger**, wobei der Trail das in beide
+Richtungen verschieben kann.
+
+**Konsequenz, klar gesagt:** Die +0,176 R aus [PAPIER-LAUF.md](./PAPIER-LAUF.md) beschreiben
+den **Python-Ausstieg**. Der EA mit `InpUseDayRange = true` würde auf denselben Signalen ein
+etwas niedrigeres Ergebnis liefern. Der Unterschied ist nicht dramatisch, aber er ist da, und
+„portiert" heißt nicht „identisch".
+
+**Warum nicht angeglichen:** Beide Ausstiege haben ein Argument. Der EA-Ausstieg (Teilgewinn
+früh, Rest laufen lassen) ist in `docs/BACKTEST-ERGEBNISSE.md` für die Scalping-Setups
+gemessen worden und dort besser als ein einzelnes Ziel. Der Python-Ausstieg ist der, den der
+Nutzer beschrieben hat („bei der Hälfte schließen"). Einen davon dem anderen anzupassen wäre
+eine Strategieentscheidung, keine Aufräumarbeit — und sie gehört auf echte Daten, nicht auf
+den Simulator.
+
+---
+
 ## Was geprüft wurde und in Ordnung war
 
 - **Keine Zugangsdaten im Repository.** Vor jedem Commit läuft eine Suche nach den

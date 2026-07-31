@@ -21,7 +21,9 @@ Das Journal liegt in `training/paper-ledger.jsonl`, eine Zeile je Sitzung.
 
 > **Wichtig, bevor du eine dieser Zahlen auf den EA überträgst:** Die Tagesspanne-Strategie
 > ist inzwischen als Setup „DR" in den EA portiert und per Paritätstest gegen diese Python-
-> Implementierung geprüft — aber **standardmäßig ausgeschaltet**, und **ob die Datei
+> Implementierung geprüft — aber nur beim **Einstieg**: Der EA steigt anders aus (60 % bei
+> 0,5 R, Rest bis 2,5 R statt einem Ziel bei 1,0 R), was rund 20 % des Erwartungswerts
+> kostet ([A11](./REPO-AUDIT.md)). Er ist **standardmäßig ausgeschaltet**, und **ob die Datei
 > kompiliert, konnte hier niemand prüfen**. Ohne `InpUseDayRange = true` handelt der EA die
 > Scalping-Setups S2, S4 und S5, über die keine Zahl auf dieser Seite etwas sagt. Siehe
 > [REPO-AUDIT.md, A10](./REPO-AUDIT.md).

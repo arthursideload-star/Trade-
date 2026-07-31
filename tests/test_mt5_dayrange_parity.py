@@ -211,6 +211,50 @@ class TestTheStopIsNeverTighter(unittest.TestCase):
         self.assertGreater(checked, 20)
 
 
+class TestTheExitsAreKnownToDiffer(unittest.TestCase):
+    """A11. Signal parity is necessary and not sufficient.
+
+    Python closes the whole position at one target; the EA closes 60% at
+    0.5R and runs the rest to 2.5R behind a trail. So the same entries
+    produce different results, and the figures published from the Python
+    side do not describe the EA.
+
+    These tests pin the difference rather than hide it. If someone ever
+    aligns the two, they fail and the documentation gets revisited -- which
+    is the point: the gap must stay deliberate, not become forgotten.
+    """
+
+    def test_the_ea_takes_a_partial_where_python_takes_all(self):
+        pct = ea_input("InpFirstTargetPct")
+        self.assertGreater(pct, 0.0)
+        self.assertLess(pct, 100.0,
+                        "the EA no longer takes a partial -- if the exits "
+                        "were aligned, A11 needs rewriting")
+
+    def test_the_eas_first_target_is_nearer_than_pythons(self):
+        cfg = DayRangeConfig()
+        python_r = cfg.take_fraction / cfg.stop_fraction
+        self.assertLess(ea_input("InpFirstTargetR"), python_r)
+
+    def test_the_eas_runner_goes_further_than_pythons_target(self):
+        cfg = DayRangeConfig()
+        python_r = cfg.take_fraction / cfg.stop_fraction
+        self.assertGreater(ea_input("InpRunnerTargetR"), python_r)
+
+    def test_the_time_stops_differ_and_the_ea_is_shorter(self):
+        cfg = DayRangeConfig()
+        python_minutes = cfg.time_stop_bars      # M1 bars are minutes
+        self.assertLess(ea_input("InpTimeStopMinutes"), python_minutes)
+
+    def test_the_difference_is_written_down_where_the_numbers_are(self):
+        audit = pathlib.Path("docs/REPO-AUDIT.md").read_text(encoding="utf-8")
+        self.assertIn("A11", audit)
+        paper_doc = pathlib.Path("docs/PAPIER-LAUF.md").read_text(encoding="utf-8")
+        self.assertIn("A11", paper_doc,
+                      "the exit difference has to be stated where someone "
+                      "reads the expectancy, not only where it is filed")
+
+
 class TestItIsWiredIn(unittest.TestCase):
     def test_the_detector_is_reachable_from_the_dispatch(self):
         self.assertIn("if(InpUseDayRange && !s.found) s = DetectDayRange(", EA)
