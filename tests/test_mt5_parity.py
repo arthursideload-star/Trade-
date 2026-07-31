@@ -707,6 +707,30 @@ class TestThePcGuideStaysTrue(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertIn(match.group(1), self.text)
 
+    def test_it_teaches_both_backtests_not_just_one(self):
+        """The likeliest mistake at the decisive moment.
+
+        `backtest --source file` tests the scalping setups S1-S6, which is
+        what the EA trades by default. `dayrange --file` tests the day-range
+        strategy, which is what PAPIER-LAUF.md and URTEIL.md are about and
+        which is switched *off* in the EA. Running the first and reading it
+        as evidence about the second is the natural error, and the guide
+        used to name only the first.
+        """
+        from metals.cli import build_parser
+        parser = build_parser()
+
+        self.assertIn("python -m metals backtest --source file", self.text)
+        parser.parse_args(["backtest", "--source", "file", "--file",
+                           "XAU_5m_data.csv", "--tz", "broker_gmt3"])
+
+        self.assertIn("python -m metals dayrange --file", self.text)
+        parser.parse_args(["dayrange", "--file", "XAU_5m_data.csv",
+                           "--tz", "broker_gmt3", "--equity", "1000",
+                           "--risk", "1"])
+
+        self.assertIn("Verwechsle die beiden nicht", self.text)
+
     def test_it_does_not_send_a_pc_user_to_rent_a_vps(self):
         """The whole point of this file is that renting a server is not a
         prerequisite. If that ever inverts, the guide has lost its reason to

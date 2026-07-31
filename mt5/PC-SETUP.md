@@ -27,11 +27,29 @@ Kaggle → *„XAU/USD Gold Price Historical Data"* von `novandraanugrah` → `X
 Enthält 5-Minuten-Kerzen ab 2004. Alternativen und die Zeitzonenfallen:
 [DATENQUELLEN.md](../docs/DATENQUELLEN.md).
 
-**Laufen lassen:**
+**Laufen lassen — und zwar beides, das sind zwei verschiedene Strategien:**
 
 ```bash
+# 1. Die Scalping-Setups S1-S6 (das, was der EA standardmaessig handelt)
 python -m metals backtest --source file --file XAU_5m_data.csv --tz broker_gmt3
+
+# 2. Die Tagesspanne-Strategie (das, was der Papier-Lauf misst)
+python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 \
+    --equity 1000 --risk 1
 ```
+
+**Verwechsle die beiden nicht.** Der erste Befehl testet die Setups, die der EA ohne weitere
+Einstellung handelt. Der zweite testet die Strategie, über die
+[PAPIER-LAUF.md](../docs/PAPIER-LAUF.md) und [URTEIL.md](../docs/URTEIL.md) sprechen — Bewegung
+vorhersagen, bei der Hälfte schließen. Das ist die, die du beschrieben hast, und im EA ist sie
+als Setup „DR" **standardmäßig ausgeschaltet**.
+
+Nur Befehl 1 laufen zu lassen und das Ergebnis auf den Papier-Lauf zu beziehen, wäre der
+naheliegendste Fehler an dieser Stelle.
+
+Beim zweiten Befehl wird dir auffallen, dass er auf 1.000 € die allermeisten Signale ablehnt
+(in einem Testlauf: 886 von 924). Das ist kein Fehler, sondern die 1-%-Regel — die Rechnung
+dazu steht in [KONTOGROESSE.md](../docs/KONTOGROESSE.md).
 
 Der Lader erkennt das Format selbst und **prüft die Zeitzone gegen Golds bekanntes
 Volatilitätsprofil**. Kommt eine Warnung wie *„die volatilsten Stunden sind [0,1,4,6] UTC,
