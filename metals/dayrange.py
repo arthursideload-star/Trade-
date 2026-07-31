@@ -298,6 +298,14 @@ class Result:
     # rent, and it accrues whether the position is right or wrong.
     swap_paid_usd: float = 0.0
     nights_held: int = 0
+    # Equity marked to market every bar, not just at the close. The floating
+    # value was already being computed for the stop-out check and thrown
+    # away, so a run reported only what the account looked like once the
+    # positions had resolved -- which is not what living through it felt
+    # like, and not what a margin call responds to.
+    peak_equity: float = 0.0
+    trough_equity: float = 0.0
+    max_drawdown_pct: float = 0.0
     # How far away the target sat, in dollars per ounce. Recorded because a
     # cost is only meaningful next to the move it is charged against: the
     # same 0.40 spread is a rounding error against a 20-dollar target and
@@ -337,7 +345,8 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
     oz = get_spec(cfg.symbol).contract_size_oz
 
     equity = cfg.start_equity
-    res = Result(config=cfg, start_equity=equity, end_equity=equity)
+    res = Result(config=cfg, start_equity=equity, end_equity=equity,
+                 peak_equity=equity, trough_equity=equity)
     open_trades: list[Trade] = []
     last_rollover: date | None = None
 
@@ -393,6 +402,16 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
         used = sum(t.lots * oz * bar.close / cfg.leverage for t in open_trades)
         floating = sum(((bar.close - t.entry) if t.long else (t.entry - bar.close))
                        * t.lots * oz for t in open_trades)
+
+        marked = equity + floating
+        if marked > res.peak_equity:
+            res.peak_equity = marked
+        if res.trough_equity == 0.0 or marked < res.trough_equity:
+            res.trough_equity = marked
+        if res.peak_equity > 0:
+            drop = (res.peak_equity - marked) / res.peak_equity * 100.0
+            if drop > res.max_drawdown_pct:
+                res.max_drawdown_pct = drop
         if used > 0 and (equity + floating) / used < STOP_OUT_LEVEL:
             for t in open_trades:
                 pnl = ((bar.close - t.entry) if t.long else (t.entry - bar.close)) \

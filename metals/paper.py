@@ -176,6 +176,11 @@ class Session:
     # whole point of a chain is that the trades accumulate into a sample the
     # project's own statistics can then judge.
     r_multiples: list[float] = field(default_factory=list)
+    # The largest drop from a running high *inside* the session. The chain's
+    # own drawdown figure is measured close to close and therefore cannot
+    # see any of this -- it reports what the account looked like once the
+    # positions had resolved, not what holding them felt like.
+    intraday_drawdown_pct: float = 0.0
 
     @property
     def pnl_eur(self) -> float:
@@ -355,6 +360,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         could_not_trade=could_not,
         news_times_utc=[list(pair) for pair in base.news_times_utc],
         r_multiples=[round(x, 6) for x in result.r_multiples] if result else [],
+        intraday_drawdown_pct=round(result.max_drawdown_pct, 2) if result else 0.0,
     )
 
 
@@ -759,6 +765,9 @@ def render(s: Session) -> str:
     lines.append(f"  Ende    {s.end_equity_eur:>10,.2f} €")
     lines.append(f"  Ergebnis{s.pnl_eur:>+10,.2f} € "
                  f"({s.return_pct:+.2f} %)")
+    if s.intraday_drawdown_pct > 0:
+        lines.append(f"  Unterwegs{-s.intraday_drawdown_pct:>+10.2f} %"
+                     f"   groesster Rueckgang vom Hoch innerhalb der Sitzung")
     lines.append("")
     lines.append(f"  Signale {s.signals:>10}")
     lines.append(f"  Trades  {s.trades:>10}   "
@@ -824,7 +833,12 @@ def summarise() -> str:
     lines.append(f"  Gesamt  {end - start:>+10,.2f} € "
                  f"({(end / start - 1) * 100:+.1f} %)")
     lines.append("")
-    lines.append(f"  Groesster Rueckgang vom Hoch   {max_dd * 100:>6.1f} %")
+    lines.append(f"  Groesster Rueckgang vom Hoch   {max_dd * 100:>6.1f} %"
+                 f"   (Schluss zu Schluss)")
+    intraday = [e.get("intraday_drawdown_pct", 0.0) for e in ledger]
+    if any(intraday):
+        lines.append(f"  ... innerhalb einer Sitzung     "
+                     f"{max(intraday):>6.1f} %   (schlimmster Tag)")
     lines.append(f"  Sitzungen im Plus              "
                  f"{sum(1 for p in pnls if p > 0):>6} von {len(pnls)}")
     if traded:

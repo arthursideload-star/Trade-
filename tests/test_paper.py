@@ -866,3 +866,52 @@ class TestTheSummary(LedgerFixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheDrawdownIsNotUnderstated(LedgerFixture):
+    """Close-to-close hides most of what an account lives through.
+
+    The chain reported an 8.0% worst drawdown for twenty-nine sessions.
+    Marked to market inside the sessions it is 23.1% -- nearly three times
+    as deep. The floating value was already being computed every bar for the
+    stop-out check and thrown away, so the understatement was free to
+    persist.
+
+    It matters beyond presentation: a margin call responds to the marked
+    value, not to the closing one.
+    """
+
+    def test_a_session_records_its_intraday_drawdown(self):
+        s = run_session(**TODAY)
+        self.assertGreaterEqual(s.intraday_drawdown_pct, 0.0)
+
+    def test_the_run_tracks_a_peak_and_a_trough(self):
+        from metals.dayrange import DayRangeConfig, run as run_days
+        r = run_days(DayRangeConfig(start_equity=432.0, lot=0.01,
+                                    risk_pct=None), seed=11, bars=1_440)
+        self.assertGreaterEqual(r.peak_equity, r.start_equity)
+        self.assertLessEqual(r.trough_equity, r.peak_equity)
+        self.assertGreater(r.max_drawdown_pct, 0.0)
+
+    def test_a_winning_session_can_still_have_dipped(self):
+        """The case that makes the close-to-close figure misleading."""
+        from metals.dayrange import DayRangeConfig, run as run_days
+        r = run_days(DayRangeConfig(start_equity=432.0, lot=0.01,
+                                    risk_pct=None), seed=11, bars=1_440)
+        self.assertGreater(r.return_pct, 0.0)
+        self.assertGreater(r.max_drawdown_pct, r.return_pct * 0.5,
+                           "this run ended up while dipping more than half "
+                           "its gain -- if that stops being true, pick "
+                           "another seed rather than dropping the check")
+
+    def test_the_summary_reports_both_and_labels_which_is_which(self):
+        for _ in range(3):
+            paper.append(run_session(**TODAY))
+        text = paper.summarise()
+        self.assertIn("Schluss zu Schluss", text)
+        self.assertIn("innerhalb einer Sitzung", text)
+
+    def test_the_session_output_shows_the_dip(self):
+        s = run_session(**TODAY)
+        if s.intraday_drawdown_pct > 0:
+            self.assertIn("Unterwegs", paper.render(s))

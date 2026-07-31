@@ -419,6 +419,30 @@ Ein Test prüft das in beide Richtungen. Er würde anschlagen, wenn die Position
 irgendwann anfinge, mit dem Konto mitzuwachsen — und er hält gleichzeitig die Rechnung fest,
 die die Schlagzeile relativiert.
 
+## Der gemeldete Rückgang war zu freundlich
+
+Die Bilanz meldete lange „größter Rückgang vom Hoch: 8,0 %". Das ist von **Sitzungsende zu
+Sitzungsende** gerechnet und sieht damit nichts von dem, was innerhalb eines Tages passiert.
+
+Der Gleitwert des Kontos wurde ohnehin jedes Bar berechnet — für die Stop-out-Prüfung — und
+danach weggeworfen. Jetzt wird er festgehalten:
+
+| | |
+|---|---:|
+| Rückgang Schluss zu Schluss | 8,0 % |
+| Rückgang **innerhalb einer Sitzung** | **23,1 %** |
+
+Fast das Dreifache. Und der Unterschied ist nicht nur Darstellung: **Ein Margin Call reagiert
+auf den Gleitwert, nicht auf den Schlusskurs.** Wer bei 8 % Rückgang ruhig bleibt, hat unter
+Umständen 23 % ausgehalten, ohne es zu wissen.
+
+Der aussagekräftigste Fall ist eine Sitzung, die **im Plus endet und unterwegs tief im Minus
+stand** — etwa +5,72 % Schlussergebnis bei 7,12 % Rückgang zwischendurch. Genau diese
+Sitzungen macht eine Schluss-zu-Schluss-Rechnung unsichtbar, und genau sie entscheiden, ob
+jemand die Strategie durchhält.
+
+Jede Sitzung meldet ihren Wert jetzt einzeln, die Bilanz beide nebeneinander mit Etikett.
+
 ## Was das Journal festhält
 
 | Feld | Warum es drinsteht |
@@ -432,6 +456,7 @@ die die Schlagzeile relativiert.
 | `expectancy_r` | Der Erwartungswert je Trade, unabhängig von der Kontogröße |
 | `could_not_trade` | Wenn die Margin nicht reichte. Eine Sitzung ohne Trade ist ein Ergebnis, kein Fehler |
 | `stopped_out` | Broker-Stop-out |
+| `intraday_drawdown_pct` | Größter Rückgang vom Hoch **innerhalb** der Sitzung. Der Schluss-zu-Schluss-Wert unterschätzt ihn um fast das Dreifache |
 | `r_multiples` | Jeder Trade einzeln in R. Aus einem Sitzungsmittel lässt sich kein Konfidenzintervall zurückrechnen |
 | `slippage_fraction` | Welches Kostenmodell galt. Sitzungen 1–9 liefen mit 0,0, ab 10 mit der Backtest-Konvention 0,5 |
 | `news_times_utc` | Für welche Veröffentlichungen die Sitzung stillhielt. Leer heißt: R4 war aus |
