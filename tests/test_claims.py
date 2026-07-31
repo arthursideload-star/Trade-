@@ -545,6 +545,43 @@ class TestC11Swap(unittest.TestCase):
         self.assertEqual(ROLLOVER_HOUR_UTC, 21)
 
 
+class TestDocumentsDoNotFreezeEachOthersNumbers(unittest.TestCase):
+    """One document quoting another's moving figure rots silently.
+
+    REPO-AUDIT.md carried "die +0,176 R aus PAPIER-LAUF.md" for several
+    days. By the time anyone looked, PAPIER-LAUF.md contained no such
+    number and the live figure was +0.192 R -- the citation was wrong, and
+    nothing anywhere could notice, because prose has no compiler.
+
+    The rule this enforces is narrow on purpose: a document may state a
+    measurement it owns, and may point at where another one lives, but may
+    not copy a number out of a sibling and call it current.
+    """
+
+    import pathlib
+    DOCS = sorted(pathlib.Path("docs").glob("*.md"))
+
+    def test_no_document_quotes_an_r_figure_out_of_another(self):
+        import re
+
+        pattern = re.compile(
+            r"[+-]?\d+[.,]\d+\s*R\s+aus\s+\[?[A-ZÄÖÜ][A-ZÄÖÜa-zäöü-]*\.md")
+        offenders = []
+        for path in self.DOCS:
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if line.lstrip().startswith("*"):
+                    continue          # the note explaining the old mistake
+                if pattern.search(line):
+                    offenders.append(f"{path}:{n}: {line.strip()[:80]}")
+        self.assertEqual(offenders, [], "\n".join(
+            ["a moving figure was copied between documents; name the command "
+             "that produces it instead:"] + offenders))
+
+    def test_the_command_that_produces_the_live_figure_is_real(self):
+        from metals.cli import build_parser
+        build_parser().parse_args(["paper", "--evidence"])
+
+
 class TestTheAccountSizeDocumentStaysTrue(unittest.TestCase):
     """docs/KONTOGROESSE.md is the answer to 'is 400 euro enough'.
 

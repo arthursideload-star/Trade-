@@ -333,10 +333,19 @@ Die EA-Struktur ist eine Mischung aus der 0,5-R- und der 2,5-R-Zeile, also grob
 **+0,088 R gegen +0,110 R** — rund **20 % weniger**, wobei der Trail das in beide
 Richtungen verschieben kann.
 
-**Konsequenz, klar gesagt:** Die +0,176 R aus [PAPIER-LAUF.md](./PAPIER-LAUF.md) beschreiben
-den **Python-Ausstieg**. Der EA mit `InpUseDayRange = true` würde auf denselben Signalen ein
+**Konsequenz, klar gesagt:** Der Erwartungswert, den der Papier-Lauf ausweist, beschreibt den
+**Python-Ausstieg**. Der EA mit `InpUseDayRange = true` würde auf denselben Signalen ein
 etwas niedrigeres Ergebnis liefern. Der Unterschied ist nicht dramatisch, aber er ist da, und
 „portiert" heißt nicht „identisch".
+
+*Hier stand ursprünglich eine konkrete Zahl („die +0,176 R aus PAPIER-LAUF.md"). Sie war zum
+Zeitpunkt des Nachlesens weder dort noch sonst irgendwo aktuell — die Kette wächst, und der
+Wert wandert mit ihr. Ein Dokument, das den beweglichen Wert eines anderen einfriert, ist nach
+zwei Tagen falsch. Der aktuelle Stand kommt aus dem Befehl, nicht aus dieser Datei:*
+
+```bash
+python -m metals paper --evidence
+```
 
 **Warum nicht angeglichen:** Beide Ausstiege haben ein Argument. Der EA-Ausstieg (Teilgewinn
 früh, Rest laufen lassen) ist in `docs/BACKTEST-ERGEBNISSE.md` für die Scalping-Setups
