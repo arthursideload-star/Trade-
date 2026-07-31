@@ -406,6 +406,17 @@ def run_session(gold_price: float, day_high: float, day_low: float,
 class Distribution:
     returns_pct: list[float]
     equity_eur: float
+    # Every trade's R multiple across the sampled days. Kept alongside the
+    # euro returns because the two answer different questions: the return
+    # says how much a day moved the account, R says how well the rules
+    # traded. On a quiet day those diverge sharply, and confusing them is
+    # how a volatility floor gets adopted for the wrong reason.
+    r_multiples: list[float] = field(default_factory=list)
+    trades: int = 0
+
+    @property
+    def expectancy_r(self) -> float:
+        return statistics.fmean(self.r_multiples) if self.r_multiples else 0.0
 
     @property
     def median_pct(self) -> float:
@@ -460,20 +471,27 @@ def distribution(gold_price: float, day_high: float, day_low: float,
     typical, and the temptation to read a trend into three green days is
     exactly what this exists to defuse.
     """
-    returns = [run_session(gold_price=gold_price, day_high=day_high,
-                           day_low=day_low, price_source="distribution",
-                           start_equity_eur=equity_eur,
-                           seed=seed_base + i * 13).return_pct
-               for i in range(days)]
-    return Distribution(returns_pct=returns, equity_eur=equity_eur)
+    sessions = [run_session(gold_price=gold_price, day_high=day_high,
+                            day_low=day_low, price_source="distribution",
+                            start_equity_eur=equity_eur,
+                            seed=seed_base + i * 13)
+                for i in range(days)]
+    r_multiples: list[float] = []
+    for s in sessions:
+        r_multiples.extend(s.r_multiples)
+    return Distribution(returns_pct=[s.return_pct for s in sessions],
+                        equity_eur=equity_eur,
+                        r_multiples=r_multiples,
+                        trades=sum(s.trades for s in sessions))
 
 
 @dataclass
 class VolatilityDependence:
     """How the day's range maps onto the day's result."""
 
-    rows: list[tuple[float, float, float, float]]
-    # range as % of price, median return %, mean return %, share positive
+    rows: list[tuple[float, float, float, float, float, int]]
+    # range as % of price, median return %, mean return %, share positive,
+    # expectancy in R, trades
 
     @property
     def quietest(self) -> tuple[float, float, float, float]:
@@ -505,6 +523,48 @@ class VolatilityDependence:
         """
         return self.return_multiple > self.range_multiple
 
+    @property
+    def expectancy_range(self) -> tuple[float, float]:
+        values = [r[4] for r in self.rows]
+        return min(values), max(values)
+
+    @property
+    def expectancy_is_monotone(self) -> bool:
+        """Does per-trade quality actually trend with the range at all?
+
+        Worth asking before any statement of the form "wider days trade
+        better". The measured series is a hump: best around 1.2%, worst
+        around 2.0-2.6%, and the widest days back near the middle.
+        """
+        values = [r[4] for r in self.rows]
+        up = all(b >= a for a, b in zip(values, values[1:]))
+        down = all(b <= a for a, b in zip(values, values[1:]))
+        return up or down
+
+    @property
+    def quiet_expectancy(self) -> float:
+        """Mean expectancy over the quietest third of the range tested."""
+        n = max(1, len(self.rows) // 3)
+        return statistics.fmean(r[4] for r in self.rows[:n])
+
+    @property
+    def busy_expectancy(self) -> float:
+        n = max(1, len(self.rows) // 3)
+        return statistics.fmean(r[4] for r in self.rows[n:])
+
+    @property
+    def a_volatility_floor_would_help(self) -> bool:
+        """Only true if quiet days trade *worse*, not merely smaller.
+
+        Judged by comparing the quiet third against everything else, not by
+        dividing the two endpoints. The endpoint ratio came out at 1.5 and
+        said "yes" on a series that is not monotone at all -- the quietest
+        rows are mid-pack and the *worst* expectancy sits in the middle.
+        Two points cannot summarise a hump, and a filter adopted on that
+        basis would be a filter adopted on noise.
+        """
+        return self.busy_expectancy > self.quiet_expectancy * 1.5
+
 
 def volatility_dependence(
         gold_price: float,
@@ -526,7 +586,8 @@ def volatility_dependence(
                          day_low=gold_price - span / 2,
                          equity_eur=equity_eur, days=days,
                          seed_base=seed_base + i * 5_000)
-        rows.append((pct, d.median_pct, d.mean_pct, d.share_positive))
+        rows.append((pct, d.median_pct, d.mean_pct, d.share_positive,
+                     d.expectancy_r, d.trades))
     return VolatilityDependence(rows=rows)
 
 
@@ -699,14 +760,18 @@ def render_replay(r: Replay) -> str:
 
 def render_volatility_dependence(v: VolatilityDependence) -> str:
     lines = ["ABHAENGIGKEIT VON DER TAGESSPANNE", "=" * 68]
-    lines.append(f"  {'Spanne':>8} {'Median':>9} {'Mittel':>9} {'Tage im Plus':>14}")
-    lines.append("  " + "-" * 44)
-    for pct, median, mean, positive in v.rows:
+    lines.append(f"  {'Spanne':>8} {'Median':>9} {'Mittel':>9} {'im Plus':>9} "
+                 f"{'Erwartung':>11} {'Trades':>8}")
+    lines.append("  " + "-" * 60)
+    for pct, median, mean, positive, exp_r, trades in v.rows:
         lines.append(f"  {pct:>7.1f}% {median:>+8.2f}% {mean:>+8.2f}% "
-                     f"{positive * 100:>13.0f}%")
+                     f"{positive * 100:>8.0f}% {exp_r:>+10.3f}R {trades:>8}")
     lines.append("")
     lines.append(f"  Die Spanne waechst um das {v.range_multiple:.1f}-fache,")
-    lines.append(f"  der Median um das {v.return_multiple:.1f}-fache.")
+    lines.append(f"  der Median um das {v.return_multiple:.1f}-fache,")
+    lo, hi = v.expectancy_range
+    lines.append(f"  der Erwartungswert je Trade bleibt zwischen "
+                 f"{lo:+.3f}R und {hi:+.3f}R.")
     if v.grows_faster_than_the_range:
         lines.append("")
         lines.append("  Der Ertrag waechst SCHNELLER als die Volatilitaet.")
@@ -714,6 +779,26 @@ def render_volatility_dependence(v: VolatilityDependence) -> str:
         lines.append("  erntet — und Spanne laesst sich in einem Generator")
         lines.append("  ernten, der innerhalb des Tages zurueckkehrt. Echtes")
         lines.append("  Gold tut das nicht auf Bestellung.")
+    lines.append("")
+    lines.append("  BRAUCHT ES EINE VOLATILITAETS-UNTERGRENZE?")
+    lines.append(f"    ruhigstes Drittel {v.quiet_expectancy:+.3f}R gegen "
+                 f"{v.busy_expectancy:+.3f}R sonst")
+    if not v.expectancy_is_monotone:
+        lines.append("    (Der Erwartungswert steigt NICHT mit der Spanne —")
+        lines.append("    die Reihe ist ein Buckel, das schlechteste Ergebnis")
+        lines.append("    liegt in der Mitte. Zwei Endpunkte zu vergleichen")
+        lines.append("    waere hier irrefuehrend.)")
+    if v.a_volatility_floor_would_help:
+        lines.append("    Ja: ruhige Tage werden auch je Trade schlechter")
+        lines.append("    gehandelt, nicht nur kleiner.")
+    else:
+        lines.append("    Nein. Der Erwartungswert je Trade aendert sich kaum")
+        lines.append("    ueber die ganze Spannbreite — ein ruhiger Tag wird")
+        lines.append("    genauso gut gehandelt, nur in kleineren Betraegen:")
+        lines.append("    kleinere Spanne, kleinerer Stop, kleinerer Einsatz,")
+        lines.append("    gleiches R. Die uebliche Empfehlung, unterhalb einer")
+        lines.append("    ATR-Schwelle auszusetzen, wuerde hier gutes Handeln")
+        lines.append("    aussortieren, weil es klein ist.")
     lines.append("")
     lines.append("  Folge fuer die Kette: Welchen Tag sie wiederholt, ist")
     lines.append("  keine Nebensache, sondern der groesste einzelne Hebel")

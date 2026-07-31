@@ -116,6 +116,12 @@ CLAIMS: tuple[Claim, ...] = (
                  "scalping at 0.01-0.10 lot",
           "EA product pages", "vendor", True,
           "Checkable as arithmetic: margin at the legal leverage cap."),
+    Claim("C15", "Professional gold EAs use an ATR floor and ceiling, "
+                 "refusing trades outside an optimal volatility window",
+          "Broker and EA blogs (Pro-Scalper, FXNX, Investor Tipster)",
+          "editorial", True,
+          "The floor does not transfer: measured per trade rather than in "
+          "euro, quiet days trade as well as busy ones."),
     Claim("C11", "Overnight financing on gold is heavy and asymmetric: "
                  "around -73.6 USD per lot per night long against +30 short, "
                  "charged three times on Wednesday",

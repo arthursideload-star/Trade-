@@ -1518,3 +1518,53 @@ class TestTheObservedOnlyChain(LedgerFixture):
         paper.append(self._row(0, 4_150.0, 4_050.0, 400.0, 440.0))
         text = paper.render_provenance()
         self.assertIn("NUR BEOBACHTETE TAGE", text)
+
+
+class TestTheVolatilityFloorVerdict(unittest.TestCase):
+    """C15: professional gold EAs are said to refuse trades below an ATR
+    floor. Whether that applies here turns on a distinction the euro return
+    hides -- worse trading against merely smaller trading.
+
+    The first version of this verdict divided the widest row's expectancy by
+    the quietest row's, got 1.5, and answered "yes" on a series that is a
+    hump. These tests exist so that summary can never come back.
+    """
+
+    def _dep(self, expectancies):
+        pcts = (0.6, 0.9, 1.2, 1.6, 2.0, 2.6, 3.2)[:len(expectancies)]
+        rows = [(p, 1.0, 1.0, 0.6, e, 100)
+                for p, e in zip(pcts, expectancies)]
+        return paper.VolatilityDependence(rows=rows)
+
+    def test_a_hump_is_not_reported_as_monotone(self):
+        d = self._dep([0.104, 0.149, 0.179, 0.138, 0.072, 0.068, 0.160])
+        self.assertFalse(d.expectancy_is_monotone)
+
+    def test_a_genuine_trend_is_recognised(self):
+        self.assertTrue(self._dep([0.05, 0.10, 0.15, 0.20]).expectancy_is_monotone)
+        self.assertTrue(self._dep([0.20, 0.15, 0.10, 0.05]).expectancy_is_monotone)
+
+    def test_the_measured_series_does_not_justify_a_floor(self):
+        """The actual numbers: quiet third +0.127R against +0.124R for the
+        rest. Quiet days trade as well, in smaller amounts."""
+        d = self._dep([0.104, 0.149, 0.179, 0.138, 0.072, 0.068, 0.160])
+        self.assertAlmostEqual(d.quiet_expectancy, 0.1265, places=3)
+        self.assertFalse(d.a_volatility_floor_would_help)
+
+    def test_a_floor_is_recommended_when_quiet_days_really_are_worse(self):
+        d = self._dep([0.02, 0.03, 0.20, 0.22, 0.24, 0.26, 0.28])
+        self.assertTrue(d.a_volatility_floor_would_help)
+
+    def test_the_endpoint_ratio_alone_would_have_said_yes(self):
+        """Kept as a record of the defect: on the real series the two
+        extremes differ by more than half again, which is exactly what the
+        discarded rule tripped on."""
+        d = self._dep([0.104, 0.149, 0.179, 0.138, 0.072, 0.068, 0.160])
+        self.assertGreater(d.rows[-1][4] / d.rows[0][4], 1.5)
+        self.assertFalse(d.a_volatility_floor_would_help)
+
+    def test_the_report_names_the_non_monotone_shape(self):
+        d = self._dep([0.104, 0.149, 0.179, 0.138, 0.072, 0.068, 0.160])
+        text = paper.render_volatility_dependence(d)
+        self.assertIn("Buckel", text)
+        self.assertIn("ruhigstes Drittel", text)

@@ -33,7 +33,7 @@ Drei Quellenarten, bewusst getrennt gehalten:
 | **Fachpresse** | Broker-Blogs, Trading-Schulen, Forenbeiträge | Bei Mechanik (Spread, Sessions, Ausführung) meist richtig, bei Ergebnissen unbelegt |
 | **Aufsicht / Wissenschaft** | Zahlen, für die jemand geradestehen musste | Als Fakt zitiert — aber als Basisrate über eine Population, nicht als Prognose für ein Konto |
 
-## Die dreizehn Behauptungen
+## Die fünfzehn Behauptungen
 
 ### C1 — „90 % Trefferquote" · Anbieter · **messbar, und das Ergebnis ist der wichtigste Fund**
 
@@ -237,6 +237,38 @@ Die letzte Zeile war der eigentliche Fund und führte zu **Auditbefund
 [A12](./REPO-AUDIT.md)**: `min_range_atr` ist zwischen 0,5 und 5 vollständig wirkungslos —
 `train.py` hat vier Läufe lang vier identische Ergebnisse verglichen und daraus einen
 Sieger gekürt.
+
+### C15 — „Profi-Gold-EAs setzen unter einer ATR-Schwelle aus" · Fachpresse · **messbar, gilt für uns nicht**
+
+Die Empfehlung ist einhellig: ein ATR-Boden *und* eine ATR-Decke, außerhalb des Fensters
+kein Trade. Für uns stimmt die Decke (Nachrichtensperre R4), der **Boden nicht**.
+
+Dieselben Regeln, dasselbe Konto, nur die Tagesspanne verändert:
+
+| Tagesspanne | Median | Tage im Plus | **Erwartung je Trade** |
+|---:|---:|---:|---:|
+| 0,6 % | +0,14 % | 53 % | +0,104 R |
+| 0,9 % | +0,72 % | 63 % | +0,149 R |
+| 1,2 % | +1,07 % | 77 % | **+0,179 R** |
+| 1,6 % | +1,64 % | 73 % | +0,138 R |
+| 2,0 % | +1,33 % | 63 % | +0,072 R |
+| 2,6 % | +1,91 % | 80 % | **+0,068 R** |
+| 3,2 % | +3,84 % | 82 % | +0,160 R |
+
+In Euro sieht der ruhige Tag zwanzigmal schlechter aus. **Je Trade ist er es nicht.**
+Ruhigstes Drittel +0,127 R gegen +0,124 R für den Rest — praktisch identisch.
+
+Der Grund ist Arithmetik, nicht Marktverhalten: kleinere Spanne → kleinere vorhergesagte
+Bewegung → kleinerer Stop → kleinerer Einsatz bei fester Losgröße → kleinerer Eurobetrag
+bei **gleichem R**. Ein ATR-Boden würde hier gutes Handeln aussortieren, weil es klein ist.
+
+*Und ein Fehler auf dem Weg dahin, weil er lehrreich ist:* Meine erste Urteilsregel teilte
+einfach die breiteste Zeile durch die ruhigste, kam auf Faktor 1,5 und antwortete „ja".
+Die Reihe ist aber **kein Trend, sondern ein Buckel** — das schlechteste Ergebnis liegt in
+der Mitte (2,6 %), nicht am ruhigen Ende. Zwei Endpunkte können keinen Buckel
+zusammenfassen, und ein Filter auf dieser Grundlage wäre ein Filter auf Rauschen gewesen.
+Die Regel vergleicht jetzt das ruhigste Drittel gegen den Rest, und der verworfene
+Endpunkt-Vergleich steht als Test da.
 
 ## Was daraus in den Bot eingebaut wurde
 
