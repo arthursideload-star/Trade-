@@ -1126,3 +1126,87 @@ class TestTheSpreadCostsMoreInAOneDaySession(unittest.TestCase):
         off = sweep(self._cfg(spread_usd_oz=1.04, daily_loss_limit=False),
                     markets=12, bars=1_440, seed_base=610_000)
         self.assertLess(abs(on.mean_expectancy_r - off.mean_expectancy_r), 0.05)
+
+
+class TestTheDailyProfitStopTurnedOnOurselves(unittest.TestCase):
+    """C16: the one claim in the catalogue the project was already obeying.
+
+    "Stop for the day at +2%" is standard trading advice and it is also rule
+    R2b, which metals/exits.py has enforced since it was written. Measuring
+    somebody else's claims while exempting your own is not scepticism, it is
+    a preference.
+
+    The result is worth the trouble. Paired over identical markets, the rule
+    improves the median, cuts losing days from 54% to 35%, and softens the
+    worst day -- and it costs about 1.3% a day, with a confidence band clear
+    of zero. Three of the four numbers a person checks improve and the one
+    that pays gets worse.
+
+    That is claim C1 wearing a different hat: a profit target buys hit rate
+    with expectancy. So R2b stays on for the person at the keyboard, where
+    it addresses a behaviour, and off in the strategy, which has none.
+
+    These tests use a small sample deliberately -- they guard the machinery
+    and the direction, not the magnitude. The magnitude took 1,200 markets
+    and three seed blocks to establish, which is far too slow for a suite.
+    """
+
+    def test_the_rule_actually_stops_the_day(self):
+        from dataclasses import replace
+        from metals import simulate
+        from metals.dayrange import DayRangeConfig, run
+        cfg = DayRangeConfig(risk_pct=None, lot=0.01, start_equity=432.0,
+                             spread_usd_oz=0.34, daily_win_limit=True)
+        hit = 0
+        for i in range(12):
+            seed = 700_000 + i * 31
+            series = simulate.generate(
+                bars=1_440, timeframe="1m", seed=seed,
+                params=simulate.MarketParams(start_price=4_100.0))
+            hit += run(cfg, series=series, seed=seed).days_stopped_at_target
+        self.assertGreater(hit, 0, "the limit never fired, so nothing below "
+                                   "this is measuring the rule")
+
+    def test_it_is_counted_once_per_day_not_once_per_bar(self):
+        """The first version incremented on every bar after the target was
+        reached and reported 57,660 'days' out of 120 one-day runs."""
+        from metals import simulate
+        from metals.dayrange import DayRangeConfig, run
+        cfg = DayRangeConfig(risk_pct=None, lot=0.01, start_equity=432.0,
+                             spread_usd_oz=0.34, daily_win_limit=True)
+        series = simulate.generate(
+            bars=1_440, timeframe="1m", seed=700_000,
+            params=simulate.MarketParams(start_price=4_100.0))
+        r = run(cfg, series=series, seed=700_000)
+        self.assertLessEqual(r.days_stopped_at_target, 1)
+
+    def test_it_is_off_by_default(self):
+        from metals.dayrange import DayRangeConfig
+        self.assertFalse(DayRangeConfig().daily_win_limit)
+
+    def test_the_measurement_reports_a_band_and_not_just_a_number(self):
+        from metals.claims import measure_daily_win_stop
+        f = measure_daily_win_stop(markets=24)
+        self.assertLess(f.difference_low, f.mean_difference_pct)
+        self.assertGreater(f.difference_high, f.mean_difference_pct)
+
+    def test_it_flatters_the_numbers_a_person_would_check(self):
+        """The direction, which is stable even on a small sample. The
+        magnitude is not, and is deliberately not asserted here."""
+        from metals.claims import measure_daily_win_stop
+        f = measure_daily_win_stop(markets=60)
+        self.assertGreater(f.median_with_pct, f.median_without_pct)
+        self.assertLess(f.losing_share_with, f.losing_share_without)
+
+    def test_the_coverage_table_records_it_as_measured_not_forgotten(self):
+        """A rule that is off must say whether that was a decision. This one
+        was, and the reason is a measurement."""
+        from metals.dayrange import RULE_COVERAGE
+        status, reason = RULE_COVERAGE["R2b"]
+        self.assertEqual(status, "n/a")
+        self.assertIn("1.34", reason)
+        self.assertIn("C1", reason)
+
+    def test_the_rule_text_says_who_it_applies_to(self):
+        from metals.risk import RULES
+        self.assertIn("human", RULES["R2b"])

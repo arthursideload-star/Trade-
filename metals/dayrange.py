@@ -38,6 +38,7 @@ from datetime import date, datetime, timedelta
 
 from .candles import Candle, CandleSeries
 from .microscalp import EU_RETAIL_LEVERAGE_GOLD, STOP_OUT_LEVEL
+from .exits import DAILY_WIN_TARGET_PCT
 from .risk import (DAILY_LOSS_LIMIT_PCT, MAX_RISK_PER_TRADE_PCT,
                    NEWS_BLACKOUT_MINUTES, RULES, WEEKEND_FLAT_HOUR_UTC)
 from .specs import get_spec
@@ -152,6 +153,17 @@ class DayRangeConfig:
     # this one did not.
     daily_loss_limit: bool = True
 
+    # Rule R2b: at +DAILY_WIN_TARGET_PCT on the day, also stop. Off here, and
+    # that is a measurement rather than an oversight -- see A25.
+    #
+    # R2b is a rule about a human giving back a good day, and `metals stop`
+    # enforces it for the person at the keyboard. Applied to a systematic
+    # strategy it does something different: the loss side runs to -3% while
+    # the win side is cut at +2%, so it truncates the right tail of a
+    # distribution whose left tail it leaves alone. Whether that helps is not
+    # a matter of opinion, and the answer is in `measure_daily_win_stop`.
+    daily_win_limit: bool = False
+
     # --- the prediction ---
     # How close to an end of the day's range price must sit before the bot
     # will trade against it. 0.30 means the lower or upper third.
@@ -257,6 +269,15 @@ STATUSES = ("implemented", "needs-input", "n/a")
 RULE_COVERAGE: dict[str, tuple[str, str]] = {
     "R1": ("implemented", "lots_for caps risk_pct at MAX_RISK_PER_TRADE_PCT"),
     "R2": ("implemented", "daily loss limit stops new entries for the day"),
+    "R2b": ("n/a", "the +2% daily stop is a rule about a person giving a good "
+                   "day back, and a strategy does not tilt. Implemented as "
+                   "`daily_win_limit` and measured rather than assumed: "
+                   "paired over 1,200 identical markets it costs 1.34% a day "
+                   "(band -1.72..-0.96, clear of zero) while improving the "
+                   "median, the hit rate and the worst case. Three of the "
+                   "four numbers a person checks get better and the one that "
+                   "pays gets worse -- claim C1 in a second costume. Off by "
+                   "default for that reason, not by oversight."),
     "R3": ("n/a", "reward/risk follows from take_fraction and stop_fraction, "
                   "which are swept rather than fixed at 1:2. A hard 1:2 floor "
                   "would delete the strategy's main dial."),
@@ -454,6 +475,9 @@ class Result:
     # silent, because 'the strategy made 4%' means something
     # different when it also spent a third of the run switched off.
     days_stopped_out_of_risk: int = 0
+    # Days that ended early because they were winning (R2b),
+    # kept apart from days that ended because they were losing.
+    days_stopped_at_target: int = 0
     # Trades where the position could not be split and the EA
     # therefore closed in full at the first target. On a
     # minimum-lot account this is every trade.
@@ -519,6 +543,8 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
     # New York session, which is where the losses that trigger it happen.
     day_start_equity = equity
     current_day: date | None = None
+    # R2b fires once per trading day, not once per bar for the rest of it.
+    target_reached_today = False
 
     for i, bar in enumerate(candles):
         trading_day = (bar.ts.date() if bar.ts.hour < ROLLOVER_HOUR_UTC
@@ -526,6 +552,7 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
         if current_day is None or trading_day != current_day:
             current_day = trading_day
             day_start_equity = equity
+            target_reached_today = False
 
         # Overnight financing, charged before anything else this bar. A
         # position that is still open when the broker rolls the day pays for
@@ -666,12 +693,24 @@ def run(cfg: DayRangeConfig | None = None, series: CandleSeries | None = None,
                 equity = 0.0
                 break
 
-        day_loss_pct = ((day_start_equity - equity) / day_start_equity * 100.0
-                        if day_start_equity > 0 else 0.0)
+        day_change_pct = ((equity - day_start_equity) / day_start_equity * 100.0
+                          if day_start_equity > 0 else 0.0)
+        day_loss_pct = -day_change_pct
         daily_stop = (cfg.daily_loss_limit
                       and day_loss_pct >= DAILY_LOSS_LIMIT_PCT)
         if daily_stop:
             res.days_stopped_out_of_risk += 1
+        if cfg.daily_win_limit and day_change_pct >= DAILY_WIN_TARGET_PCT:
+            # R2b. Counted separately: a day that ended early because it was
+            # winning is not the same event as one that ended because it was
+            # losing, and pooling them would hide which limit was doing the
+            # work. Counted once per day, not once per bar -- the first
+            # version incremented on every remaining bar and reported 57,660
+            # "days" out of 120.
+            daily_stop = True
+            if not target_reached_today:
+                target_reached_today = True
+                res.days_stopped_at_target += 1
 
         if (len(open_trades) < cfg.max_positions and i < len(candles) - 1
                 and not daily_stop

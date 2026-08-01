@@ -10,8 +10,13 @@ Entscheidung, **Claude selbst als Gehirn** zu nutzen.
 > fachliche Grundlage in **[GOLD-SILBER.md](./GOLD-SILBER.md)** und der Quellenkatalog in
 > **[DATENQUELLEN.md](./DATENQUELLEN.md)**.
 >
-> **Stand der Sprints:** B1 bis B5 sind umgesetzt (Daten, Rechner, Muster, Orchestrierung,
-> News-Veto + Kalender). Offen ist B6 (Journal).
+> **Aktualisierung 01.08.2026:** **B1 bis B6 sind alle umgesetzt**, das Journal
+> (`metals/journal.py`, `metals paper`) zuletzt. Die Architektur unten gilt weiter und
+> beschreibt, was gebaut wurde. Was seither dazugekommen ist und in diesem Dokument nicht
+> steht: die Tagesspanne-Strategie (`metals/dayrange.py`), die laufende Papier-Kette
+> ([PAPIER-LAUF.md](./PAPIER-LAUF.md)), der MQL5-Expert (`mt5/`) und 26 Auditbefunde
+> ([REPO-AUDIT.md](./REPO-AUDIT.md)) — Letztere sind das eigentlich Wichtige, weil sie
+> beschreiben, was an dieser Architektur beim Bauen **nicht** funktioniert hat.
 
 ---
 
@@ -139,7 +144,7 @@ Direkt aus TRADING-WISSEN.md und den Projektgrundsätzen (CLAUDE.md: Risikolimit
 | **B3** | Kerzen-/Muster- und Fehlausbruch-Erkennung, alles nur am Level | Setups erkannt | ✅ `metals/patterns.py`, `setups.py` (G1–G12) |
 | **B4** | Top-Down-Orchestrierung + Empfehlungskarte | Erste echte Empfehlung | ✅ `metals/analyze.py` |
 | **B5** | News-Anbindung + News-Veto; Wirtschaftskalender | Kontext + Schutz | ✅ `metals/sources/news.py`, `calendar.py` |
-| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit | **offen** |
+| **B6** | Trade-Journal + wöchentliche Auswertung (Erwartungswert, Prozess-Treue) | Messbarkeit | ✅ `metals/journal.py`, `metals paper` |
 | **B7** | (optional) Disclosure-MCP, wenn Aktien/Krypto dazukommen | erweiterte Signale | zurückgestellt |
 
 **Anmerkung zu B5:** Statt eines autorisierungspflichtigen MCP-Servers werden RSS-Feeds der
@@ -147,9 +152,9 @@ Primärquellen (Fed, EZB) plus GDELT genutzt. Das braucht keinen Schlüssel, kei
 Autorisierung und keine Sitzungsbindung — und die Fed veröffentlicht ihre Statements selbst
 per RSS, also ist es zugleich die direktere Quelle.
 
-**Wichtig für den neuen Chat:** Zuerst den Branch `claude-trading-skills` als Vorlage ansehen —
-vieles (Position-Sizer, Technical-Analyst, Backtest-Expert) ist dort schon implementiert und kann
-adaptiert statt neu gebaut werden.
+**Historisch:** Vor dem Bau war als Vorlage der Branch `claude-trading-skills` gedacht.
+Gebraucht wurde er am Ende nicht — was hier liegt, ist neu geschrieben. Die Zeile bleibt als
+Hinweis darauf stehen, wo die Idee herkam, nicht als Arbeitsanweisung.
 
 ---
 
@@ -158,8 +163,11 @@ adaptiert statt neu gebaut werden.
 1. **Broker-Demo offen** (MT5, PuPrime oder später IC Markets) — zum Ausführen der Trades.
 2. **Claude-Sitzung öffnen** (Handy/iPad), Projekt geladen.
 3. **Fragen:** „Analysiere Gold" oder „Analysiere Silber".
-4. Claude liefert die **Empfehlungskarte**: Richtung, Konfidenz, Einstieg, Stop, Ziel, R:R,
-   Begründung, Warnungen, Datenqualität — und wie das Setup typischerweise scheitert.
+4. Claude liefert die **Empfehlungskarte**: Richtung, Einstieg, Stop, Ziel, R:R, Begründung,
+   Warnungen, Datenqualität — und wie das Setup typischerweise scheitert.
+   *Ursprünglich stand hier auch „Konfidenz". Eine Konfidenz**zahl** gibt es nicht, sie wäre
+   geraten — und geraten mit Prozentzeichen sieht aus wie gemessen. Was es gibt, sind
+   Konfidenz**bänder** aus Messungen: `python -m metals paper --evidence`. Siehe A26.*
 5. **Du entscheidest** und führst den Trade **manuell in MT5** aus.
 6. **Journal:** Ergebnis eintragen (Claude hilft dabei).
 7. **Wöchentlich:** Auswertung — funktioniert es? (Erwartungswert, Prozess-Treue).
@@ -200,12 +208,23 @@ Positionsgröße (offener Punkt O14).
 
 ## 9. Offene Punkte
 
+Stand 01.08.2026. Erledigtes ist entfernt, damit die Liste eine Liste bleibt und kein Archiv.
+
+- **Der Backtest auf echter Intraday-Historie.** Der einzige Punkt, der über die Strategie
+  entscheidet, und er läuft auf dem Rechner des Nutzers:
+  `python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 --equity 400 --risk 1`.
+  Alles bisher Gemessene läuft auf `metals/simulate.py`.
 - **Kontraktgröße XAGUSD** beim eigenen Broker prüfen (O14) — vor dem ersten Silber-Trade.
-- **Twelve-Data-API-Key** (kostenlos) anlegen. Ohne ihn läuft alles über Yahoo/Stooq; mit ihm
-  ist die Kerzenqualität besser.
-- **Journal-Modul** (Sprint B6) implementieren.
-- **Live-Erreichbarkeit** der Endpunkte im interaktiven Chat prüfen: `python -m metals check`.
-  In der automatischen Build-Session ist das wegen der Netzwerk-Policy nicht möglich.
+  5.000 oz bei den meisten, 1.000 bei manchen: Faktor 5 in der Positionsgröße.
+- **Den aktuellen Spread von der eigenen Plattform ablesen**, jede Sitzung neu. Nach A19
+  entscheidet er in einer Tagessitzung über das Vorzeichen des Erwartungswerts, deshalb wird
+  er nirgends mehr vorbelegt.
+- **Ob `mt5/Experts/GoldScalpAssistant.mq5` überhaupt kompiliert**, konnte hier niemand
+  prüfen — im Container gibt es keinen MetaEditor.
+- **Twelve-Data-API-Key** (kostenlos) anlegen. Ohne ihn läuft alles über Yahoo/Stooq.
 - **Setup-Konfidenzen kalibrieren**, sobald 30+ Trades pro Setup im Journal stehen. Bis dahin
-  sind es begründete Schätzungen, keine Messwerte.
-- Aktien/Krypto-Marktscope erst nach bewährtem Metall-Halbautomaten.
+  sind es begründete Schätzungen, keine Messwerte — und werden auch so genannt.
+
+*Erledigt und deshalb gestrichen:* Journal-Modul (B6, gebaut), Live-Erreichbarkeit der
+Endpunkte (geprüft: im Container 403 über den Proxy, siehe `docs/DATENQUELLEN.md`),
+Aktien/Krypto-Marktscope (verworfen, siehe [PLAN.md](../PLAN.md)).

@@ -29,24 +29,37 @@ Positionsgröße, und eine Analyse ohne Größe ist unvollständig.
 python -m metals analyse XAUUSD --equity <Kontostand>
 ```
 
-Wenn der Nutzer den aktuellen Spread aus MT5 nennt, gib ihn mit `--spread <USD/oz>` mit. Das
-ist die einzige Zahl, die du nicht selbst messen kannst und die über Erfolg oder Misserfolg
-eines Scalps mitentscheidet.
+**Frag nach dem Spread aus MT5 und gib ihn mit `--spread <USD/oz>` weiter.** Nicht optional,
+und nicht raten: In einer Tagessitzung entscheidet der Spread über das **Vorzeichen** des
+Erwartungswerts — +0,1141 R bei 0,34 $/oz gegen −0,0647 R bei 1,04 ([A19](../../docs/REPO-AUDIT.md)).
+Es ist die einzige Zahl, die du nicht selbst messen kannst.
+
+Was er typischerweise ist, als Größenordnung (Quellenart: Broker-Vergleiche, keine Messung
+eines Kontos):
+
+| Wann | Spread | gegen einen 3-$-Stop |
+|---|---:|---:|
+| London/NY-Überlappung | 0,10–0,25 $/oz | 3–8 % |
+| Standardkonto, liquide Zeit | 0,20–0,40 $/oz | 7–13 % |
+| **Rollover (~22:00 Serverzeit)** | **~5 $/oz** | **167 %** |
+| **Sekunden um NFP/CPI/FOMC** | **~8–15 $/oz** | **270–500 %** |
+
+Die letzten beiden Zeilen sind der Grund, warum R4 und R5 existieren, und sie sind keine
+Vorsicht, sondern Subtraktion: Zu diesen Zeitpunkten kostet allein der Einstieg mehr als der
+ganze Trade riskiert. **Es gibt keinen Einstiegskurs, der das rettet.**
 
 ## Schritt 3 — Die Antwort, die der Nutzer erwartet
 
 Antworte in **genau dieser Struktur**. Kurz. Keine Absätze voller Fachbegriffe.
 
 ```
-GOLD — <Uhrzeit> UTC — <Preis>
+GOLD — <Uhrzeit> UTC — <Preis>   (Spread: <n> $/oz, abgelesen aus MT5)
 
 RICHTUNG:   HOCH | RUNTER | ABWARTEN
-KONFIDENZ:  <n>%
 
 Einstieg:   <Preis>
 Stop:       <Preis>   (das ist die Zahl, die zählt)
-Ziel 1:     <Preis>   → hier 60% schließen
-Ziel 2:     <Preis>   → Rest, Stop auf Einstand nachziehen
+Ziel:       <Preis>
 Größe:      <n> Lots  (<n> USD Risiko = <n>%)
 
 WARUM:
@@ -67,6 +80,20 @@ SO GEHT DIESES SETUP KAPUTT:
 Bei **ABWARTEN** entfallen Einstieg/Stop/Ziel. Sag stattdessen konkret, **worauf** gewartet
 wird — welches Level, welches Ereignis. „Kein Setup" ist eine vollständige Antwort und an den
 meisten Tagen die richtige.
+
+### Zwei Dinge, die früher in dieser Vorlage standen und falsch waren
+
+**Kein Teilschluss bei 0,01 Lot.** Die Vorlage sagte „Ziel 1 → 60 % schließen, Rest laufen
+lassen". 60 % von 0,01 Lot sind 0,006 — unter dem Broker-Minimum. Auf einem Mindestlot-Konto
+**existiert der Runner nicht**, der EA schließt bei 0,5 R komplett, und eine Anweisung, die
+der Nutzer gar nicht ausführen kann, ist schlimmer als keine. Erst ab etwa 0,02 Lot lässt
+sich überhaupt teilen. Siehe [REPO-AUDIT.md, A13](../../docs/REPO-AUDIT.md).
+
+**Keine erfundene Konfidenzzahl.** Die Vorlage verlangte „KONFIDENZ: <n> %". Diese Zahl gibt
+es nicht — sie wäre geraten, und geraten mit zwei Nachkommastellen sieht aus wie gemessen.
+Was es gibt, sind Konfidenz**bänder** aus tatsächlichen Messungen (`python -m metals paper
+--evidence`). Wenn du die Sicherheit einer Einschätzung ausdrücken willst, sag sie in Worten
+und nenn dazu, **woran** sie hängt.
 
 ## Schritt 4 — Begleitung, solange der Nutzer im Trade ist
 
@@ -108,7 +135,11 @@ Diese verhandelst du nicht, auch nicht, wenn der Nutzer drängt:
 3. **Kein Einstieg bei Rollover, tiefer Asienzeit, Freitagabend.** (R5, M5)
 4. **Nie die Größe nach einem Verlust erhöhen.** (R6)
 5. **Bei −3 % am Tag ist Schluss.** (R2)
-6. **Wenn `metals stop` AUFHÖREN sagt, ist Schluss.** Du erklärst die Sperre, du
+6. **Bei +2 % am Tag ist auch Schluss.** (R2b) Diese Regel gilt **dem Menschen**, nicht der
+   Strategie: Auf den Bot angewandt kostet sie gemessen 1,3 % am Tag, weil sie den rechten
+   Rand der Verteilung abschneidet und den linken stehen lässt. Beim Menschen adressiert sie
+   ein Verhalten, das ein Automat nicht hat. Siehe `claims.measure_daily_win_stop`.
+7. **Wenn `metals stop` AUFHÖREN sagt, ist Schluss.** Du erklärst die Sperre, du
    argumentierst nicht dagegen.
 
 Wenn der Nutzer trotzdem handeln will: einmal klar sagen, warum die Regel existiert, seine

@@ -31,9 +31,20 @@ class InstrumentSpec:
     typical_spread_usd_oz: float
     # Typical spread in USD per ounce during rollover / thin liquidity.
     thin_spread_usd_oz: float
+    # What the spread does in the seconds around a high-impact release, as a
+    # multiple of the typical figure. This is the number that makes R4 an
+    # arithmetic argument instead of a maxim -- see NEWS_SPREAD_NOTE.
+    news_spread_usd_oz: float = 0.0
     # Broker-dependent flag: warn the user to verify against their own platform.
     broker_dependent: bool = True
     notes: str = ""
+
+    @property
+    def news_spread_multiple(self) -> float:
+        """How much wider a release makes it. 0 when not recorded."""
+        if not self.typical_spread_usd_oz or not self.news_spread_usd_oz:
+            return 0.0
+        return self.news_spread_usd_oz / self.typical_spread_usd_oz
 
     @property
     def value_per_dollar_move(self) -> float:
@@ -49,6 +60,67 @@ class InstrumentSpec:
         return round(price, self.price_decimals)
 
 
+# --- What the spread actually does, and where the numbers come from --------
+#
+# The previous note here read "PU Prime quotes roughly 0.30 USD/oz average on
+# Standard accounts and 0.08 on Prime/ECN". That is one broker's own marketing
+# copy carried as a contract specification, which CLAUDE.md forbids in as many
+# words. It has been replaced with ranges and their source kind.
+#
+# Source kind: broker comparison and broker-education pages, not academic work
+# and not a measurement of any account. Directionally consistent across
+# several independent sources; treat the magnitudes as order-of-magnitude.
+#
+#   London/NY overlap, competitive broker   0.10 - 0.25 USD/oz
+#   Standard retail account, liquid hours   0.20 - 0.40 USD/oz
+#   Daily rollover (~22:00 server time)     up to ~5 USD/oz on Standard
+#   Seconds around a high-impact release    ~8 - 15 USD/oz
+#
+# The last two lines are the point, and this project did not have them.
+#
+# R5 ("no entry during rollover") and R4 ("no entry within 30 minutes of a
+# release") have been maxims here. They are arithmetic. A gold scalp risks
+# about 3 USD/oz on its stop, so:
+#
+#   * at rollover the spread alone is larger than the whole stop;
+#   * around NFP it is three to five times the whole stop.
+#
+# There is no entry price at which that trade is worth taking. A rule that
+# looked like caution is a rule about not paying five times your risk to get
+# in -- and a backtest on clean simulated bars can never show it, because the
+# simulator has one spread all day. This is the strongest quantitative
+# argument in the project for a rule the measurements are structurally unable
+# to produce.
+SPREAD_NOTE = (
+    "Spread ranges are from broker comparisons, not from your account. "
+    "Read the live figure off your own platform: it decides the sign of the "
+    "expectancy in a one-day session (docs/REPO-AUDIT.md, A19)."
+)
+
+NEWS_SPREAD_NOTE = (
+    "Around a high-impact release the gold spread reaches roughly 8-15 "
+    "USD/oz for seconds as liquidity providers withdraw. Against a typical "
+    "3 USD/oz scalp stop that is three to five times the entire risk of the "
+    "trade, paid on entry. That is what rule R4 is protecting against, and "
+    "no simulated backtest in this repository can show it -- the simulator "
+    "charges one spread all day."
+)
+
+ROLLOVER_SPREAD_NOTE = (
+    "At the daily rollover the gold spread reaches roughly 5 USD/oz on "
+    "Standard accounts. Larger than a typical scalp stop, so the trade is "
+    "underwater by more than its own risk the moment it opens. Rule R5."
+)
+
+# The 10x trap, stated as arithmetic rather than as a warning. Brokers quoting
+# XAUUSD to 2 decimals call 0.10 USD/oz one pip; brokers quoting 3 decimals
+# call 0.01 USD/oz one pip. Broker comparison tables mix the two freely -- one
+# source consulted for the ranges above states "30 pips = 3 USD per lot",
+# which requires 1 pip = 0.001 USD/oz and contradicts its own quoting
+# convention. This package never sizes in pips for exactly this reason.
+PIP_CONVENTIONS_USD_OZ: dict[int, float] = {2: 0.10, 3: 0.01}
+
+
 # --- Spot CFD instruments (what MT5 / PuPrime / IC Markets quote) -----------
 
 XAUUSD = InstrumentSpec(
@@ -58,11 +130,13 @@ XAUUSD = InstrumentSpec(
     min_price_increment=0.01,
     price_decimals=2,
     typical_spread_usd_oz=0.20,
-    thin_spread_usd_oz=1.00,
+    thin_spread_usd_oz=5.00,
+    news_spread_usd_oz=10.00,
     notes=(
         "1 standard lot = 100 troy oz. A 1.00 USD/oz move = 100 USD per lot. "
-        "PU Prime quotes roughly 0.30 USD/oz average on Standard accounts and "
-        "0.08 USD/oz on Prime/ECN accounts; verify on your own platform."
+        "Spread figures below are ranges from broker comparisons, not a "
+        "measurement of your account -- read the live spread off your own "
+        "platform before sizing. See SPREAD_NOTE."
     ),
 )
 

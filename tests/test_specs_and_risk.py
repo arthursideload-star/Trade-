@@ -12,8 +12,8 @@ from metals.risk import (AccountState, MAX_CORRELATED_RISK_PCT,
                          MIN_REWARD_RISK, RULES, check_daily_state,
                          size_position, structural_stop)
 from metals.sessions import Quality, SessionState, Session
-from metals.specs import (XAGUSD, XAUUSD, get_spec, get_vol_profile,
-                          round_levels)
+from metals.specs import (PIP_CONVENTIONS_USD_OZ, XAGUSD, XAUUSD, get_spec,
+                          get_vol_profile, round_levels)
 
 UTC = timezone.utc
 # A Tuesday inside the London/NY overlap: the only clean window for sizing tests.
@@ -301,3 +301,69 @@ class TestRuleDocumentation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWhatTheSpreadDoesAtTheWrongMoment(unittest.TestCase):
+    """The arithmetic behind R4 and R5, which the project stated as maxims.
+
+    A gold scalp risks about 3 USD/oz on its stop. The spread it pays on
+    entry is roughly 0.20 in the London/NY overlap -- and roughly 5 at the
+    daily rollover, and roughly 8-15 in the seconds around a high-impact
+    release, as liquidity providers pull their quotes.
+
+    So at rollover the spread alone exceeds the entire stop, and around NFP
+    it is three to five times it. There is no entry price that rescues that
+    trade. "Do not trade the news" stops being caution and becomes
+    subtraction.
+
+    None of the backtests in this repository can produce this finding: the
+    simulator charges one spread for the whole day. A rule the measurements
+    are structurally unable to argue for still needs an argument, and this
+    is it -- which is why the numbers live in the spec rather than in prose.
+
+    Source kind: broker comparison and broker-education pages. Not academic,
+    not a measurement of any account. Order-of-magnitude, and labelled so.
+    """
+
+    TYPICAL_SCALP_STOP_USD_OZ = 3.0
+
+    def test_the_overlap_spread_is_a_small_share_of_the_stop(self):
+        share = XAUUSD.typical_spread_usd_oz / self.TYPICAL_SCALP_STOP_USD_OZ
+        self.assertLess(share, 0.15)
+
+    def test_the_rollover_spread_exceeds_the_whole_stop(self):
+        self.assertGreater(XAUUSD.thin_spread_usd_oz,
+                           self.TYPICAL_SCALP_STOP_USD_OZ)
+
+    def test_the_news_spread_is_a_multiple_of_the_whole_stop(self):
+        self.assertGreater(XAUUSD.news_spread_usd_oz,
+                           self.TYPICAL_SCALP_STOP_USD_OZ * 3)
+
+    def test_the_widening_is_recorded_as_a_multiple_too(self):
+        self.assertGreater(XAUUSD.news_spread_multiple, 20)
+
+    def test_an_instrument_without_the_figure_reports_zero_not_one(self):
+        """Silver has no news figure recorded. It must not read as 'no
+        widening' -- that is the A20 confusion in miniature."""
+        self.assertEqual(XAGUSD.news_spread_multiple, 0.0)
+
+    def test_the_notes_no_longer_carry_one_broker_s_marketing(self):
+        """CLAUDE.md: 'Marketingzahlen nicht als Fakten führen.' The note
+        used to quote a named broker's own advertised averages as if they
+        were part of the contract specification."""
+        self.assertNotIn("PU Prime", XAUUSD.notes)
+        self.assertIn("your own platform", XAUUSD.notes)
+
+    def test_both_pip_conventions_are_recorded_by_quoting_precision(self):
+        """The documented 10x sizing error. A broker quoting two decimals
+        calls 0.10 a pip; one quoting three calls 0.01 a pip."""
+        self.assertEqual(PIP_CONVENTIONS_USD_OZ[XAUUSD.price_decimals], 0.10)
+        self.assertEqual(PIP_CONVENTIONS_USD_OZ[XAGUSD.price_decimals], 0.01)
+        self.assertEqual(PIP_CONVENTIONS_USD_OZ[2] / PIP_CONVENTIONS_USD_OZ[3],
+                         10.0)
+
+    def test_the_notes_say_where_the_numbers_are_not_from(self):
+        from metals.specs import NEWS_SPREAD_NOTE, ROLLOVER_SPREAD_NOTE, SPREAD_NOTE
+        self.assertIn("not from your account", SPREAD_NOTE)
+        self.assertIn("R4", NEWS_SPREAD_NOTE)
+        self.assertIn("R5", ROLLOVER_SPREAD_NOTE)

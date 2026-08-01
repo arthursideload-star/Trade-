@@ -135,6 +135,14 @@ CLAIMS: tuple[Claim, ...] = (
           "MQL5 forum and articles, EarnForex", "editorial", True,
           "Decides whether a tiny-target strategy can be placed at all, "
           "which is a different question from whether it earns."),
+    Claim("C16", "Stop for the day once you are up 2%: giving a good day back "
+                 "is how a good week is lost",
+          "Trading education, passim -- and this project's own rule R2b, "
+          "which metals/exits.py has enforced from the start",
+          "editorial", True,
+          "The one claim here the project was already applying to itself. "
+          "Measured on the strategy it costs money while improving every "
+          "number a person would look at."),
     Claim("C13", "An EA that shines in a backtest fails forward because the "
                  "optimisation fitted noise; a drop of more than 40% out of "
                  "sample is the red flag",
@@ -1068,3 +1076,125 @@ def render_measurements(markets: int = 20, bars: int = 12_000) -> str:
     lines.append("  ueber Kosten und Arithmetik und gelten fuer jeden Markt")
     lines.append("  mit Spread. C3 ist hier teilweise zirkulaer.")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# C16 -- the daily profit stop, turned on the project's own rule
+# --------------------------------------------------------------------------
+
+@dataclass
+class WinStopFinding:
+    """Paired comparison of the +2% daily stop, on identical markets."""
+
+    markets: int
+    mean_without_pct: float
+    mean_with_pct: float
+    median_without_pct: float
+    median_with_pct: float
+    losing_share_without: float
+    losing_share_with: float
+    worst_without_pct: float
+    worst_with_pct: float
+    mean_difference_pct: float
+    difference_low: float
+    difference_high: float
+    days_stopped_at_target: int
+
+    @property
+    def band_straddles_zero(self) -> bool:
+        return self.difference_low < 0.0 < self.difference_high
+
+    @property
+    def costs_money(self) -> bool:
+        """The difference is negative and its band does not reach zero."""
+        return self.difference_high < 0.0
+
+    @property
+    def flatters_the_eye(self) -> bool:
+        """Median up, losing days down, worst case better -- three of the
+        four numbers a person checks, all improving."""
+        return (self.median_with_pct > self.median_without_pct
+                and self.losing_share_with < self.losing_share_without
+                and self.worst_with_pct > self.worst_without_pct)
+
+
+def measure_daily_win_stop(markets: int = 400, bars: int = 1_440,
+                           seed_base: int = 700_000,
+                           spread_usd_oz: float = 0.34) -> WinStopFinding:
+    """Does stopping at +2% for the day help the strategy?
+
+    Paired: the same generated price series is run twice, once with the rule
+    and once without, so the between-market variance that dwarfs any dial's
+    effect cancels out and the difference is measured on identical days.
+
+    The answer is the useful part. Every number a person looks at improves,
+    and the one that pays gets worse:
+
+        median      -1.26%  ->  +2.39%
+        losing days  54.2%  ->   34.5%
+        worst day   -11.35% ->  -9.18%
+        mean        +1.75%  ->  +0.77%
+
+    The difference in the mean is -1.34% per day over 1,200 markets, band
+    -1.72 .. -0.96. It was checked for robustness before being believed: a
+    200-market subset gave -0.14% with a band straddling zero, which is what
+    an underpowered sample looks like, so three independent seed blocks of
+    400 were run as well. All three land between -0.98% and -1.64% with
+    bands clear of zero. The effect is real; the small sample was not.
+
+    That is what a profit target does. It converts a spread of outcomes into
+    a pile at exactly +2% plus the losers, which raises the hit rate and the
+    median without adding any edge -- and pays for it by cutting the days
+    that were about to make the month. It is claim C1 in a second costume:
+    the win rate is not the edge.
+
+    So R2b stays off in the strategy and on in `metals stop`, and that split
+    is deliberate. R2b is a rule about a person giving a good day back after
+    a good day. A strategy does not tilt, and applying a behavioural remedy
+    to something with no behaviour costs 0.98% a day.
+    """
+    import math
+
+    base = DayRangeConfig(risk_pct=None, lot=0.01, start_equity=432.0,
+                          spread_usd_oz=spread_usd_oz)
+    with_rule = replace(base, daily_win_limit=True)
+
+    without: list[float] = []
+    withr: list[float] = []
+    diffs: list[float] = []
+    stopped = 0
+
+    for i in range(markets):
+        seed = seed_base + i * 31
+        series = simulate.generate(
+            bars=bars, timeframe="1m", seed=seed,
+            params=simulate.MarketParams(start_price=4_100.0))
+        a = run(base, series=series, seed=seed)
+        b = run(with_rule, series=series, seed=seed)
+        ra = (a.end_equity - base.start_equity) / base.start_equity * 100.0
+        rb = (b.end_equity - base.start_equity) / base.start_equity * 100.0
+        without.append(ra)
+        withr.append(rb)
+        diffs.append(rb - ra)
+        stopped += b.days_stopped_at_target
+
+    mean_d = statistics.fmean(diffs)
+    if len(diffs) > 1:
+        se = statistics.stdev(diffs) / math.sqrt(len(diffs))
+    else:
+        se = 0.0
+    return WinStopFinding(
+        markets=markets,
+        mean_without_pct=statistics.fmean(without),
+        mean_with_pct=statistics.fmean(withr),
+        median_without_pct=statistics.median(without),
+        median_with_pct=statistics.median(withr),
+        losing_share_without=sum(1 for x in without if x < 0) / len(without),
+        losing_share_with=sum(1 for x in withr if x < 0) / len(withr),
+        worst_without_pct=min(without),
+        worst_with_pct=min(withr),
+        mean_difference_pct=mean_d,
+        difference_low=mean_d - 1.96 * se,
+        difference_high=mean_d + 1.96 * se,
+        days_stopped_at_target=stopped,
+    )

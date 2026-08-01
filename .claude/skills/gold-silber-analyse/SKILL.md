@@ -1,6 +1,6 @@
 ---
 name: gold-silber-analyse
-description: Analysiert Gold (XAU/USD) und Silber (XAG/USD) für den halbautomatischen Trading-Assistenten. Nutzen, wenn der Nutzer nach einer Gold- oder Silber-Analyse fragt, eine Positionsgröße berechnen will, wissen möchte ob gerade gehandelt werden darf, nach der Gold-Silber-Ratio fragt, oder Begriffe wie XAUUSD, XAGUSD, Goldpreis, Silberpreis, Metalle, Edelmetalle verwendet. Auch nutzen für Fragen zu Sessions, Setups G1-G12, Risikoregeln R1-R8/M1-M6 oder Datenquellen dieses Projekts.
+description: Analysiert Gold (XAU/USD) und Silber (XAG/USD) für den halbautomatischen Trading-Assistenten. Nutzen, wenn der Nutzer nach einer Gold- oder Silber-Analyse fragt, eine Positionsgröße berechnen will, wissen möchte ob gerade gehandelt werden darf, nach der Gold-Silber-Ratio fragt, oder Begriffe wie XAUUSD, XAGUSD, Goldpreis, Silberpreis, Metalle, Edelmetalle verwendet. Auch nutzen für Fragen zu Sessions, Setups G1-G12, Risikoregeln R1-R8/R2b/M1-M6, zur Papier-Kette, zum Auditbefund-Katalog A1-A25 oder zu Datenquellen dieses Projekts.
 ---
 
 # Gold- und Silber-Analyse
@@ -10,6 +10,26 @@ deterministischen Berechnungen macht das Python-Paket `metals/`; du liest die Za
 setzt sie in Zusammenhang und schreibst die Empfehlung.
 
 **Der Nutzer führt jeden Trade selbst in MetaTrader 5 aus. Du führst nichts aus.**
+
+## Was du über die Zahlen dieses Projekts wissen musst, bevor du eine davon zitierst
+
+Es gibt hier viele gemessene Ergebnisse, und sie stammen **alle vom Simulator**
+(`metals/simulate.py`) — einer generierten Kursreihe, die dokumentierte statistische
+Eigenschaften von Gold nachbildet, nicht Gold. **Kein Ergebnis in diesem Repository ist
+bisher an echter Intraday-Historie geprüft worden.**
+
+Was das praktisch heißt:
+
+- Aussagen über **Arithmetik und Kosten** übertragen sich: Spread, Margin, Losgröße,
+  Swap, „eine Trefferquote ist keine Kante". Die gelten in jedem Markt mit einem Spread.
+- Aussagen über **Verhalten** übertragen sich nicht: welche Session besser läuft, ob ein
+  Volatilitätsfilter hilft, wie hoch die Erwartung ist. Der Simulator kann nur zurückgeben,
+  was in ihn hineingebaut wurde.
+- Der eine Lauf, der das entscheidet, läuft auf dem Rechner des Nutzers:
+  `python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 --equity 400 --risk 1`
+
+Wenn du eine Zahl aus `docs/` zitierst, nenn dazu, woher sie kommt. Eine Erwartung von
++0,19 R aus dem Simulator ist keine Aussage über morgen früh.
 
 ## Sprache
 
@@ -106,9 +126,25 @@ Für eine begleitete Handelssitzung gibt es den Slash-Command **`/trade`**
 (`.claude/commands/trade.md`) — der ist dem Chat-Ablauf hier vorzuziehen, sobald der Nutzer
 tatsächlich handeln will.
 
-**Die eine Zahl, die beim Scalping zuerst kommt:** Bei 3 USD/oz Stop und 0,20 USD/oz Spread
-startet jeder Trade 6,7 % seines Risikos im Minus. Frag nach dem aktuellen Spread aus MT5 und
-gib ihn mit `--spread` weiter.
+**Die eine Zahl, die beim Scalping zuerst kommt — und sie ist nicht klein.** Bei 3 USD/oz
+Stop startet ein Trade im Minus, und zwar um:
+
+| Wann | Spread | Anteil am 3-$-Stop |
+|---|---:|---:|
+| London/NY-Überlappung | 0,10–0,25 $/oz | 3–8 % |
+| Standardkonto, liquide Zeit | 0,20–0,40 $/oz | 7–13 % |
+| **Rollover (~22:00 Serverzeit)** | **~5 $/oz** | **167 %** |
+| **Sekunden um NFP/CPI/FOMC** | **~8–15 $/oz** | **270–500 %** |
+
+Die unteren beiden Zeilen sind die quantitative Begründung für R5 und R4: Der Einstieg allein
+kostet dann mehr als der ganze Trade riskiert. Kein Einstiegskurs rettet das.
+
+**Frag nach dem aktuellen Spread aus MT5 und gib ihn mit `--spread` weiter.** In einer
+Tagessitzung entscheidet er über das Vorzeichen des Erwartungswerts (A19), deshalb wird er
+nirgends im Projekt mehr vorbelegt.
+
+Quellenart der Spanne: Broker-Vergleiche und Broker-Schulungsseiten, keine Messung eines
+Kontos — Größenordnung, nicht Präzision.
 
 ## Nachschlagen
 
@@ -121,8 +157,21 @@ gib ihn mit `--spread` weiter.
 | Setup-Details G1–G12 | `docs/GOLD-SILBER.md` Teil XIII, Code `metals/setups.py` |
 | Risikoregeln | `docs/GOLD-SILBER.md` Teil XV, Code `metals/risk.py` |
 | Sessions und Zeiten | `docs/GOLD-SILBER.md` Teil VI, Code `metals/sessions.py` |
-| Datenquellen | `docs/DATENQUELLEN.md` |
+| Datenquellen | `docs/DATENQUELLEN.md`, `docs/WORLDMONITOR.md` |
 | Allgemeines Trading-Wissen | `docs/TRADING-WISSEN.md` |
+
+**Und die Seiten, auf denen die gemessenen Ergebnisse stehen** — die gehören in eine Antwort
+über Erwartungen, nicht ins Kleingedruckte:
+
+| Frage | Datei |
+|---|---|
+| **Was im Repo falsch war und was behoben ist** | `docs/REPO-AUDIT.md` (A1–A25) |
+| Die laufende Papier-Kette, 400 € Startkapital | `docs/PAPIER-LAUF.md` |
+| Das Urteil an der vorher festgelegten Stichprobe | `docs/URTEIL.md` |
+| Der Bot mit 100 / 200 / 400 € | `docs/KONTOGROESSE.md` |
+| Was die Bot-Szene behauptet, und was davon hält | `docs/YOUTUBE-RECHERCHE.md`, Code `metals/claims.py` |
+| Kann der Bot aus Fehlern lernen? | `docs/LERNEN.md` |
+| Tagesspanne-Strategie (die, die gemessen wird) | Code `metals/dayrange.py` |
 
 ## Ton
 

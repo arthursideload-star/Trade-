@@ -20,6 +20,16 @@ Das Band liegt **vollständig über der Null**. Auf diesen Daten ist der Vorteil
 
 ## Nachtrag nach 53 Sitzungen: die Kette steht auf drei Tagen
 
+> **Momentaufnahme vom 31.07.2026, Stand 53 Sitzungen.** Die Zahlen unten sind nicht
+> fortgeschrieben — ein Urteil, das man nachträglich an neue Daten anpasst, ist kein Urteil.
+> Der aktuelle Stand kommt aus `python -m metals paper --provenance`, und wie er sich
+> seither verändert hat, steht am Ende dieses Abschnitts.
+>
+> Die Zeilen „2,22 %" und „2,23 %" sind **derselbe Handelstag**, an zwei verschiedenen
+> Spotkursen abgefragt. Der Code schlüsselt inzwischen nach dem Hoch/Tief-Paar auf statt
+> nach der Prozentzahl und führt sie deshalb zusammen — die Aufteilung hier ist genau der
+> Fehler, den der Text darunter beschreibt, in seiner ursprünglichen Form stehengelassen.
+
 ```bash
 python -m metals paper --provenance
 ```
@@ -125,6 +135,28 @@ eine Zahl, die sich mitbewegt, wenn der Nenner sich bewegt.
 
 An der Kernaussage ändert das nichts — sie wird schärfer: **93 % des Gewinns stammen aus
 einer angesetzten Spanne und einem einzigen echten Handelstag.**
+
+### Stand nach 57 Sitzungen (01.08.2026)
+
+Vier Sitzungen später hat sich die Struktur **nicht** verbessert, und die Zahl, auf die es
+ankommt, ist die letzte:
+
+| | 53 Sitzungen | 57 Sitzungen |
+|---|---:|---:|
+| Endstand | 1.785,13 € | 1.799,24 € |
+| beobachtete Handelstage | 3 | **3** |
+| Anteil aus angesetzten Spannen | 56 % | **56 %** |
+| **dieselbe Kette, nur beobachtete Tage** | — | **400 € → 926,49 €** |
+
+Die letzte Zeile ist die ehrlichste Zahl des Projekts: Streicht man die Sitzungen, deren
+Tagesspanne nie jemand nachgeschlagen hat, bleiben von 1.799 € noch **926 €** — bei
+gleichen Sitzungen, gleicher Reihenfolge, gleichen Renditen. Reproduzierbar mit
+`python -m metals paper --provenance`.
+
+Und seit A21 kommt eine zweite Korrektur dazu, die in beiden Spalten oben noch nicht steckt:
+Die Euro-Beträge sind mit einem **angenommenen** Wechselkurs von 1,08 gerechnet. Beim
+EZB-Referenzkurs von 1,1476 sind es 5,9 % weniger — **1.716,82 €** statt 1.799,24 €.
+Nachzurechnen mit `python -m metals paper --restate 1.1476`.
 
 ## Was das heißt — und was nicht
 

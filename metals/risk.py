@@ -401,6 +401,16 @@ def check_daily_state(account: AccountState) -> list[str]:
 RULES: dict[str, str] = {
     "R1": "Risk per trade never exceeds 1% of account equity.",
     "R2": "At -3% on the day, trading stops until the next session.",
+    # A25. exits.DAILY_WIN_TARGET_PCT has been enforced since the exit module
+    # was written -- `metals stop` says AUFHOEREN at +2% and refuses further
+    # entries. It was not in this table, so `metals rules`, which announces
+    # itself as "HARD RISK RULES (in code, not configuration)", listed
+    # fourteen of the fifteen limits the code actually applies. A catalogue
+    # that under-reports is the defect A20 and A23 were both made of.
+    "R2b": "At +2% on the day, the person at the keyboard stops. Giving a "
+           "good day back is the most common way to lose a good week. This "
+           "one is scoped to the human: measured on the strategy it costs "
+           "1.3% a day (claims.measure_daily_win_stop).",
     "R3": "Minimum reward/risk 1:2, measured to the first target.",
     "R4": "No entry within 30 minutes either side of a high-impact release.",
     "R5": "No entry during rollover, deep Asian hours, or Friday late session.",

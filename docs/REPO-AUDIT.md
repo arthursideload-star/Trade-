@@ -536,6 +536,135 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A26 · Die beiden Dateien, die den Bot tatsächlich steuern, waren aus der ersten Woche
+
+Während 25 Auditbefunde entstanden, blieben zwei Dateien unangetastet — ausgerechnet die,
+aus denen der Assistent seine Anweisungen zieht: `.claude/skills/gold-silber-analyse/SKILL.md`
+und `.claude/commands/trade.md`. Vier konkrete Fehler:
+
+**1. Die hervorgehobene Kennzahl war um Größenordnungen zu klein.** SKILL.md nannte unter
+der Überschrift *„Die eine Zahl, die beim Scalping zuerst kommt"*:
+
+> Bei 3 USD/oz Stop und 0,20 USD/oz Spread startet jeder Trade 6,7 % seines Risikos im Minus.
+
+0,20 $/oz gilt in der London/NY-Überlappung. Beim Rollover sind es rund **5 $/oz**, in den
+Sekunden um NFP/CPI/FOMC rund **8–15 $/oz** — also **167 %** bzw. **270–500 %** desselben
+Stops. Der prominenteste Satz der Datei nannte den Bestfall als *den* Fall.
+
+**2. Eine Anweisung, die der Nutzer nicht ausführen kann.** `trade.md` verlangte
+„Ziel 1 → 60 % schließen, Rest laufen lassen". 60 % von 0,01 Lot sind 0,006, unter dem
+Broker-Minimum. Auf einem Mindestlot-Konto gibt es den Teilschluss nicht — [A13](#) hatte
+das gemessen und die Vorlage stand unverändert daneben.
+
+**3. Eine erfundene Zahl mit dem Anschein einer gemessenen.** Die Antwortvorlage verlangte
+`KONFIDENZ: <n>%`. Diese Zahl existiert nicht; sie wäre geraten. Das Projekt arbeitet sonst
+ausschließlich mit Konfidenz**bändern** aus Messungen — und SKILL.md verbietet im selben
+Atemzug „‚hohe Wahrscheinlichkeit'-Formulierungen ohne die Unsicherheit dazu".
+
+**4. Die zentrale Einschränkung fehlte ganz.** Keine der beiden Dateien erwähnte, dass
+**kein einziges Ergebnis dieses Repositories an echter Intraday-Historie geprüft ist**. Ein
+Assistent, der `docs/URTEIL.md` liest und „+0,198 R" zitiert, ohne zu wissen, dass die Zahl
+vom Simulator stammt, gibt eine Simulation als Marktaussage aus.
+
+Alle vier behoben, und die Nachschlagetabelle nennt jetzt auch `REPO-AUDIT.md`,
+`PAPIER-LAUF.md`, `URTEIL.md`, `KONTOGROESSE.md`, `LERNEN.md` und `YOUTUBE-RECHERCHE.md` —
+also die Seiten, auf denen die gemessenen Ergebnisse überhaupt stehen.
+
+
+## A25 · Der Regelkatalog verschwieg eine Grenze, die der Code durchsetzt — und die Messung dazu kippte sie
+
+`metals rules` überschreibt sich mit *„HARD RISK RULES (in code, not configuration)"* und
+listete vierzehn. Der Code setzt fünfzehn durch: `exits.DAILY_WIN_TARGET_PCT = 2.0` sagt seit
+jeher **AUFHÖREN** bei +2 % am Tag, stand aber in keinem Katalog. Dieselbe Form wie A20 und
+A23 — ein Verzeichnis, das weniger meldet, als es gibt.
+
+Eingetragen als **R2b**. Und weil `RULE_COVERAGE` erzwingt, dass jede Regel der Risikoschicht
+in der Strategie eine Entscheidung bekommt, hat der Eintrag sofort eine echte Frage
+aufgeworfen: **Soll der Bot bei +2 % auch aufhören?**
+
+### Gemessen statt entschieden
+
+Implementiert als `daily_win_limit`, gepaart über identische Kursreihen — dieselben Märkte
+zweimal, einmal mit und einmal ohne Regel:
+
+| | ohne R2b | mit R2b |
+|---|---:|---:|
+| Median | −1,26 % | **+2,39 %** |
+| Verlusttage | 54,2 % | **34,5 %** |
+| schlimmster Tag | −11,35 % | **−9,18 %** |
+| **Mittelwert** | **+1,75 %** | **+0,77 %** |
+
+**Drei von vier Zahlen, auf die ein Mensch schaut, werden besser. Die eine, die zahlt, wird
+schlechter.** Über 1.200 Märkte: **−1,34 % je Tag, Band −1,72 … −0,96**, klar unter der Null.
+
+Das ist genau Behauptung **C1 im zweiten Kostüm**: Ein Gewinnziel kauft Trefferquote mit
+Erwartungswert. Es verwandelt eine Verteilung in einen Haufen bei exakt +2 % plus die
+Verlierer — und bezahlt das mit den Tagen, die den Monat gemacht hätten.
+
+**Eine Vorsichtsmaßnahme, die sich gelohnt hat:** Die erste Messung über 200 Märkte ergab
+−0,14 % mit einem Band, das die Null schneidet. Das ist eine unterbesetzte Stichprobe, keine
+Widerlegung — nachgeprüft mit drei unabhängigen Seed-Blöcken zu je 400 Märkten: −0,98 %,
+−1,30 %, −1,64 %, alle Bänder klar unter Null. Beinahe hätte ich das Gegenteil veröffentlicht.
+
+**Konsequenz:** R2b gilt **dem Menschen am Rechner** und nicht der Strategie. Der Unterschied
+ist kein Taschenspielertrick: R2b adressiert, dass jemand nach einem guten Tag anfängt zu
+zocken. Eine Strategie tut das nicht, und ein Verhaltensmittel auf etwas ohne Verhalten
+anzuwenden kostet 1,3 % am Tag. Der Regeltext sagt das jetzt, und `RULE_COVERAGE` trägt die
+Messung als Begründung.
+
+
+## A24 · Eine Broker-Werbezahl stand als Kontraktspezifikation im Code — **behoben**
+
+`metals/specs.py` führte in den Notizen zu XAUUSD:
+
+> PU Prime quotes roughly 0.30 USD/oz average on Standard accounts and 0.08 USD/oz on
+> Prime/ECN accounts
+
+Das ist die Eigenwerbung **eines** Brokers, geführt als Teil der Kontraktspezifikation.
+`CLAUDE.md` verbietet das wörtlich: *„Marketingzahlen nicht als Fakten führen."*
+Und `thin_spread_usd_oz` stand auf **1,00** — der beobachtete Spot-Spread am 31.07. lag mit
+1,04 bereits über dem, was die Spezifikation als *dünnen Markt* auswies.
+
+Ersetzt durch Spannen mit Quellenart, und um die beiden Zahlen ergänzt, die dem Projekt
+gefehlt haben:
+
+| Wann | Spread | gegen einen 3-$-Stop |
+|---|---:|---:|
+| London/NY-Überlappung, kompetitiver Broker | 0,10–0,25 $/oz | 3–8 % |
+| Standardkonto, liquide Zeit | 0,20–0,40 $/oz | 7–13 % |
+| **Rollover (~22:00 Serverzeit)** | **~5 $/oz** | **167 %** |
+| **Sekunden um eine hochwirksame Veröffentlichung** | **~8–15 $/oz** | **270–500 %** |
+
+Quellenart: Broker-Vergleiche und Broker-Schulungsseiten. Keine akademische Quelle, keine
+Messung eines Kontos — Größenordnung.
+
+**Warum die letzten beiden Zeilen wichtiger sind als der Rest.** R4 und R5 waren in diesem
+Projekt Maximen. Sie sind Arithmetik: Beim Rollover ist der Spread allein größer als der
+ganze Stop, um NFP das Drei- bis Fünffache. **Es gibt keinen Einstiegskurs, der das rettet.**
+
+Und das ist der Grund, warum keine Messung dieses Repositories je auf diese Regeln kommen
+konnte: **Der Simulator berechnet einen Spread für den ganzen Tag.** Eine Regel, die die
+eigene Messmaschine strukturell nicht begründen kann, braucht trotzdem eine Begründung —
+deshalb stehen die Zahlen jetzt in der Spezifikation und nicht in einem Fließtext.
+
+### Nachtrag zu A19: was 1,04 $ war und was nicht
+
+A19 nannte „Bid 4.048,35 / Ask 4.049,39" den *beobachteten Spread*. Genauer: Das war der
+Spot-Quote **eines Datenanbieters**, nicht der Quote eines MT5-Brokers. Die **Messung** von
+A19 steht unverändert — der Spread entscheidet in einer Tagessitzung das Vorzeichen. Die
+**Zuordnung** war unpräzise: 1,04 $ ist für ein Broker-Konto in liquider Zeit eher zu
+pessimistisch, 0,34 $ eher zu optimistisch. Was daraus folgt, ändert sich nicht, sondern wird
+schärfer: **Der Spread gehört bei jeder Sitzung von der eigenen Plattform abgelesen.**
+
+### Und die 10er-Falle, als Arithmetik statt als Warnung
+
+`price_decimals` entscheidet die Pip-Konvention: Ein Broker mit zwei Nachkommastellen nennt
+0,10 $/oz einen Pip, einer mit drei nennt 0,01 $/oz einen Pip. Eine der Quellen für die
+Tabelle oben schreibt „30 Pips = 3 USD pro Lot", was 1 Pip = 0,001 $/oz erfordert und der
+eigenen Notierung widerspricht. `PIP_CONVENTIONS_USD_OZ` hält beide Konventionen fest —
+deshalb rechnet dieses Paket nirgends in Pips.
+
+
 ## A23 · „Umgesetzt" bedeutete zweierlei — und R4 war in 37 von 57 Sitzungen aus
 
 Die Tabelle `RULE_COVERAGE` in `metals/dayrange.py` gibt es wegen A16: Dreimal war eine
