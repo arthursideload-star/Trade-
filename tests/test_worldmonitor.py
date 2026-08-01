@@ -245,3 +245,91 @@ class TestAuthentication(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPersistenceMeasures(unittest.TestCase):
+    """The variance ratio, checked against series whose answer is known.
+
+    A statistic nobody has validated is a decoration. These build a random
+    walk, a persistent series and a mean-reverting one out of an AR(1) on
+    the returns, and require the test to sort them correctly.
+
+    The first version had an extra factor of T in the heteroskedasticity
+    correction. Every variance ratio came out right and every z came out
+    roughly thirty times too small -- z = +0.28 for a series with an AR(1)
+    coefficient of 0.3 in it, which fails to reject anything at all. The
+    ratios looked perfect, so nothing but a test with a known answer would
+    have caught it.
+    """
+
+    @staticmethod
+    def _ar1(n: int, seed: int, phi: float) -> list[float]:
+        import random
+        rng = random.Random(seed)
+        prices, r = [0.0], 0.0
+        for _ in range(n):
+            r = phi * r + rng.gauss(0.0, 0.001)
+            prices.append(prices[-1] + r)
+        return prices
+
+    def test_a_random_walk_is_not_rejected(self):
+        from metals.persistence import variance_ratio
+        rejects = sum(variance_ratio(self._ar1(4_000, s, 0.0), 4)
+                      .rejects_random_walk for s in range(12))
+        self.assertLessEqual(rejects, 2, "a 5% test should reject a true "
+                                         "random walk about once in twenty")
+
+    def test_a_persistent_series_is_rejected_upward(self):
+        from metals.persistence import variance_ratio
+        for s in range(4):
+            with self.subTest(seed=s):
+                v = variance_ratio(self._ar1(4_000, s, 0.3), 4)
+                self.assertTrue(v.rejects_random_walk)
+                self.assertGreater(v.ratio, 1.0)
+                self.assertEqual(v.verdict, "persistent")
+
+    def test_a_mean_reverting_series_is_rejected_downward(self):
+        from metals.persistence import variance_ratio
+        for s in range(4):
+            with self.subTest(seed=s):
+                v = variance_ratio(self._ar1(4_000, s, -0.3), 4)
+                self.assertTrue(v.rejects_random_walk)
+                self.assertLess(v.ratio, 1.0)
+                self.assertEqual(v.verdict, "mean reverting")
+
+    def test_the_z_statistic_is_the_right_order_of_magnitude(self):
+        """The regression. A clear AR(1) must produce a large z, not 0.28."""
+        from metals.persistence import variance_ratio
+        v = variance_ratio(self._ar1(4_000, 1, 0.3), 4)
+        self.assertGreater(abs(v.z), 8.0)
+
+    def test_hurst_alone_would_have_got_it_wrong(self):
+        """Why the variance ratio is reported and R/S is only shown.
+
+        On 4,000 observations the rescaled range reads about 0.51 for a
+        strongly mean-reverting series -- above 0.5, i.e. the wrong side --
+        while the variance ratio separates the same series cleanly.
+        """
+        from metals.persistence import hurst_rescaled_range, variance_ratio
+        prices = self._ar1(4_000, 1, -0.3)
+        self.assertGreater(hurst_rescaled_range(prices), 0.45)
+        self.assertLess(variance_ratio(prices, 4).ratio, 0.8)
+
+    def test_too_little_data_returns_the_neutral_answer(self):
+        from metals.persistence import hurst_rescaled_range, variance_ratio
+        short = self._ar1(40, 1, 0.3)
+        self.assertEqual(hurst_rescaled_range(short), 0.5)
+        v = variance_ratio(short, 4)
+        self.assertEqual(v.ratio, 1.0)
+        self.assertFalse(v.rejects_random_walk)
+
+    def test_the_verdict_does_not_lean_on_hurst_when_nothing_rejected(self):
+        """An H of 0.55 with every z inside the band is a random walk with a
+        decorative decimal on it."""
+        from metals.persistence import Persistence, VarianceRatio
+        p = Persistence(hurst=0.62,
+                        ratios=(VarianceRatio(2, 1.05, 1.1, 5_000),
+                                VarianceRatio(4, 1.09, 1.5, 5_000)),
+                        observations=5_000)
+        self.assertEqual(p.verdict, "random walk")
+        self.assertIn("random walk", p.target_advice.lower())

@@ -1,5 +1,31 @@
 # Das Urteil an der vorher festgelegten Stichprobe
 
+> ## Nachtrag 01.08.2026 — bitte zuerst lesen
+>
+> Alles unten steht. Die Deutung ist seit **[A27](./REPO-AUDIT.md)** eine andere, und zwar
+> nicht ein bisschen.
+>
+> Der Erwartungswert von +0,198 R ist überwiegend eine **Ablesung eines einzelnen
+> Parameters im Simulator**: `MarketParams.reversion = 0.002`. Setzt man ihn auf null,
+> fällt die Erwartung auf **+0,007 R** mit einem Band, das die Null schneidet; schaltet man
+> alle erzeugten Merkmale ab, verliert die Strategie **−0,133 R** — ihren eigenen Spread,
+> was auf einem Zufallspfad genau richtig ist. Die Dosis-Wirkungs-Kurve ist nahezu linear.
+>
+> Und dieser Parameter ist keine Behauptung über Gold. Sein Kommentar im Generator sagt,
+> wozu er da ist: *„prevents random walk blowups"* — eine Rechenschutzplanke.
+>
+> Dieses Dokument nannte „es läuft auf dem Simulator" schon immer als Vorbehalt Nummer
+> eins. Das war richtig und **zu schwach**: Es ist kein Vorbehalt neben anderen, es ist die
+> Quelle der gemessenen Kante.
+>
+> Das heißt **nicht**, dass die Strategie an echtem Gold scheitert. Es heißt, dass dieses
+> Urteil die Frage nicht beantwortet, auf die es eine Antwort zu geben scheint. Der Lauf,
+> der sie beantwortet, dauert Sekunden:
+>
+> ```bash
+> python -m metals persistence --file XAU_5m_data.csv --tz broker_gmt3
+> ```
+
 Bei Sitzung 18 wurde festgelegt, wann geurteilt wird: **rund 300 Trades**, hergeleitet aus
 einem nüchternen Vorteil von +0,10 R bei der beobachteten Streuung. Nicht „wenn es gut
 aussieht", sondern eine Zahl, die vorher feststand.

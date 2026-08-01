@@ -2200,3 +2200,111 @@ class TestTheCalendarIsWhatHappensWhenNobodyChooses(LedgerFixture):
     def test_auto_is_still_accepted_explicitly(self):
         captured, _, _ = self._spy(self._argv("--news", "auto"))
         self.assertEqual(captured.get("news_source"), "kalender")
+
+
+class TestTheRetrospective(LedgerFixture):
+    """`paper --review`: what the chain shows, recomputed rather than typed.
+
+    Built as a command and not as a document for a reason this project keeps
+    relearning: every figure written into prose here went stale within days.
+    URTEIL.md quoted 53 sessions, PAPIER-LAUF.md quoted a balance, the skill
+    file quoted a spread from the first week. The chain advances and the
+    document keeps asserting the old number.
+
+    The review's job is to separate what the sample carries from what merely
+    looks like something -- particularly the falling sequence of block
+    expectancies, which is what noise looks like half the time.
+    """
+
+    def _chain(self, r_per_session, spread=0.34):
+        equity = 400.0
+        for i, rs in enumerate(r_per_session):
+            pnl = sum(rs)
+            paper.append(Session(
+                index=i, timestamp=float(i), date_utc="2026-07-31 12:00",
+                gold_price=4_100.0, day_high=4_130.0, day_low=4_070.0,
+                price_source="t", start_equity_eur=round(equity, 2),
+                end_equity_eur=round(equity + pnl, 2), lot=MIN_LOT,
+                forced_risk_pct=1.0, trades=len(rs),
+                wins=sum(1 for x in rs if x > 0),
+                losses=sum(1 for x in rs if x <= 0),
+                spread_usd_oz=spread, r_multiples=list(rs),
+                exits={"target": sum(1 for x in rs if x > 0),
+                       "stop": sum(1 for x in rs if x <= 0)}))
+            equity += pnl
+
+    def test_an_empty_ledger_says_so(self):
+        self.assertIn("Noch keine", paper.render_review(paper.review()))
+
+    def test_it_finds_the_break_even_hit_rate(self):
+        """Symmetric winners and losers break even at 50%. If this drifts,
+        the whole fragility argument below drifts with it."""
+        self._chain([[1.0, -1.0, 1.0, -1.0, 1.0]] * 6)
+        r = paper.review()
+        self.assertAlmostEqual(r.breakeven_hit_rate, 0.5, places=2)
+
+    def test_a_symmetric_payoff_is_reported_as_all_hit_rate(self):
+        self._chain([[1.0, -1.0, 1.0, -1.0, 1.0]] * 6)
+        self.assertTrue(paper.review().edge_is_all_hit_rate)
+
+    def test_a_lopsided_payoff_is_not(self):
+        """Big winners, small losers: the hit rate is no longer the whole
+        story and the report must stop saying it is."""
+        self._chain([[3.0, -0.5, -0.5, -0.5, 3.0]] * 6)
+        self.assertFalse(paper.review().edge_is_all_hit_rate)
+
+    def test_the_headroom_is_the_distance_to_break_even(self):
+        self._chain([[1.0, -1.0, 1.0, -1.0, 1.0]] * 6)
+        r = paper.review()
+        self.assertAlmostEqual(r.hit_rate_headroom,
+                               r.hit_rate - r.breakeven_hit_rate, places=6)
+
+    def test_overlapping_blocks_are_not_called_a_trend(self):
+        """The finding this guards: five falling point estimates whose bands
+        all overlap are not a decaying edge, and the report must refuse to
+        call them one."""
+        import random
+        rng = random.Random(4)
+        sessions = [[rng.choice([1.0, -1.0]) for _ in range(9)]
+                    for _ in range(48)]
+        self._chain(sessions)
+        r = paper.review()
+        self.assertFalse(r.trend_established)
+        self.assertIn("Rauschen", paper.render_review(r))
+
+    def test_a_genuine_separation_is_called_one(self):
+        """And when the bands really do separate, it says so -- otherwise
+        the check is just a way of never concluding anything."""
+        good = [[1.0] * 9] * 24
+        bad = [[-1.0] * 9] * 24
+        self._chain(good + bad)
+        r = paper.review()
+        self.assertTrue(r.trend_established)
+        self.assertIn("belegt", paper.render_review(r))
+
+    def test_clock_exits_are_counted_apart_from_the_plan(self):
+        equity = 400.0
+        paper.append(Session(
+            index=0, timestamp=0.0, date_utc="2026-07-31 12:00",
+            gold_price=4_100.0, day_high=4_130.0, day_low=4_070.0,
+            price_source="t", start_equity_eur=equity, end_equity_eur=equity,
+            lot=MIN_LOT, forced_risk_pct=1.0, trades=4,
+            r_multiples=[1.0, -1.0, 0.3, -0.2],
+            exits={"target": 1, "stop": 1, "time_stop": 1, "still_open": 1}))
+        self.assertAlmostEqual(paper.review().share_ended_by_clock, 0.5)
+
+    def test_the_concentration_of_the_result_is_measured(self):
+        self._chain([[5.0] + [-0.1] * 9] * 6)
+        self.assertGreater(paper.review().top_decile_share, 0.5)
+
+    def test_the_command_reaches_the_function(self):
+        import io
+        from contextlib import redirect_stdout
+        from metals.cli import build_parser
+        self._chain([[1.0, -1.0, 1.0]] * 4)
+        args = build_parser().parse_args(["paper", "--review"])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = args.func(args)
+        self.assertEqual(code, 0)
+        self.assertIn("WAS DIE KETTE ZEIGT", out.getvalue())

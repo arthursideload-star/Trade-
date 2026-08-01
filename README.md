@@ -4,13 +4,30 @@ Halbautomatischer Trading-Assistent für **Gold (XAU/USD)** und **Silber (XAG/US
 Claude analysiert, du führst die Trades selbst in MetaTrader 5 aus.
 
 **Aktueller Stand:** Analyse-Engine, Scalping-Modus, Backtest, MetaTrader-EA und
-Journal-Modul implementiert und getestet (798 Tests). Nächster Schritt: Backtest auf echter
-Historie, dann eine Demo-Phase, deren Journal ausgewertet wird.
+Journal-Modul implementiert und getestet. Nächster Schritt ist nicht mehr einer unter
+mehreren, sondern der einzige, der zählt — siehe unten.
 
 > **Ehrlichkeitshinweis:** Die Strategie hat **keinen nachgewiesenen positiven
-> Erwartungswert**. Siehe [docs/BACKTEST-ERGEBNISSE.md](./docs/BACKTEST-ERGEBNISSE.md).
-> Belegt ist bislang die Regeldisziplin — korrekte Größen, haltbare Stops, ein Tageslimit
-> das greift. Das ist wertvoll und nicht dasselbe wie eine Kante.
+> Erwartungswert**. Belegt ist bislang die Regeldisziplin — korrekte Größen, haltbare
+> Stops, ein Tageslimit das greift. Das ist wertvoll und nicht dasselbe wie eine Kante.
+>
+> **Und seit A27 ist es schärfer als das.** Der auf dem Simulator gemessene Erwartungswert
+> von +0,17 bis +0,20 R ist überwiegend eine Ablesung **eines einzelnen Parameters des
+> Simulators** — `MarketParams.reversion`, dessen eigener Kommentar sagt, dass er
+> „random walk blowups" verhindern soll. Eine Rechenschutzplanke, keine Aussage über Gold.
+> Setzt man ihn auf null, fällt die Erwartung auf +0,007 R mit einem Band über der Null;
+> ohne alle erzeugten Merkmale verliert die Strategie ihren eigenen Spread.
+>
+> Nachzuvollziehen mit `python -m metals persistence --ablate`, ausgeführt in
+> [docs/REPO-AUDIT.md, A27](./docs/REPO-AUDIT.md).
+>
+> Das heißt **nicht**, dass die Strategie an echtem Gold scheitert. Es heißt, dass der
+> Simulator die Frage nicht beantworten kann. Der Lauf, der sie beantwortet, dauert
+> Sekunden und braucht nur eine heruntergeladene Datei:
+>
+> ```bash
+> python -m metals persistence --file XAU_5m_data.csv --tz broker_gmt3
+> ```
 
 ## Im Chat
 
@@ -74,6 +91,9 @@ python -m metals dayrange --equity 432 --risk 1 # Strategie unter der 1-%-Regel
 python -m metals paper --price 4102.83 --high 4120.16 --low 4028.77 \
     --spread 1.04 --eur-usd 1.1476        # Papier-Sitzung, Konto laeuft fort
 python -m metals paper --restate 1.1476          # Die Kette zu einem anderen Kurs lesen
+python -m metals paper --review                  # Was gut war, was schlecht war
+python -m metals persistence                     # Bleibt die Bewegung, oder kommt sie zurueck?
+python -m metals persistence --ablate            # Woraus besteht die gemessene Kante?
 python -m metals paper --summary                 # Stand der Papier-Kette
 python -m metals paper --evidence                # Was die Trades belegen (mit Band)
 python -m metals paper --verify                  # Journal aus seinen Eingaben nachrechnen
@@ -120,6 +140,7 @@ export FINNHUB_API_KEY="..."      # Live-Wirtschaftskalender
 | **[docs/FREMDKAPITAL.md](./docs/FREMDKAPITAL.md)** | Fremdkapital-Challenges und KI-Bots: was an den Verkaufsversprechen stimmt, was nicht, und die Simulation dazu |
 | **[docs/LERNEN.md](./docs/LERNEN.md)** | Kann der Bot aus Fehlern lernen? Was aufgezeichnet wird, was sich bewusst *nicht* selbst nachjustiert, und wie viele Trades ein Nachweis braucht |
 | **[docs/DATENQUELLEN.md](./docs/DATENQUELLEN.md)** | Katalog aller angebundenen Datenquellen mit Limits und Vorbehalten |
+| **[docs/REPO-AUDIT.md](./docs/REPO-AUDIT.md), A27** | **Der schwerwiegendste Befund: die gemessene Kante ist eine Rechenschutzplanke im Simulator** |
 | **[docs/WORLDMONITOR.md](./docs/WORLDMONITOR.md)** | World Monitor als Quelle: warum über die API und nicht über den Quellcode — und warum es eine Sitzung trotz Goldkurs und Kalender **nicht** speisen kann |
 | **[docs/TRADING-WISSEN.md](./docs/TRADING-WISSEN.md)** | Allgemeine Trading-Wissensbasis (36 Teile) |
 | **[docs/BOT-PLAN.md](./docs/BOT-PLAN.md)** | Bau- und Betriebsplan des Assistenten |

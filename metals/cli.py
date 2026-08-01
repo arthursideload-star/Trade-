@@ -694,6 +694,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
             gold_price=args.price, equity_eur=args.equity or 400.0,
             days=args.days)))
         return 0
+    if args.review:
+        from .paper import render_review, review
+        print(render_review(review()))
+        return 0
     if args.restate is not None:
         from .paper import render_restatement, restate
         print(render_restatement(restate(args.restate)))
@@ -1042,6 +1046,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="abgelesener EUR/USD-Kurs. Ohne Angabe rechnet die "
                          "Sitzung mit 1,08 und schreibt das als Annahme mit "
                          "(docs/REPO-AUDIT.md, A21)")
+    pa.add_argument("--review", action="store_true",
+                    help="was die Kette zeigt: was gut war, was schlecht war, "
+                         "und was davon die Stichprobe traegt")
     pa.add_argument("--restate", type=float, default=None, metavar="KURS",
                     help="die bestehende Kette zu einem anderen EUR/USD-Kurs "
                          "lesen, ohne sie zu veraendern")
@@ -1126,6 +1133,26 @@ def build_parser() -> argparse.ArgumentParser:
                     help="specific stop distances in USD per ounce")
     mn.set_defaults(func=cmd_minimum)
 
+    pe = sub.add_parser("persistence",
+                        help="bleibt die Bewegung, oder kommt sie zurueck?")
+    pe.add_argument("--file", default=None,
+                    help="heruntergeladene Historie statt Simulator")
+    pe.add_argument("--tz", default=None,
+                    help="Zeitzone der Datei — Pflicht bei --file")
+    pe.add_argument("--symbol", default="XAUUSD")
+    pe.add_argument("--file-timeframe", default="5m", dest="file_timeframe")
+    pe.add_argument("--timeframe", default="1m",
+                    choices=("1m", "5m", "15m", "1h"))
+    pe.add_argument("--bars", type=int, default=20_000)
+    pe.add_argument("--seed", type=int, default=99)
+    pe.add_argument("--price", type=float, default=4_100.0)
+    pe.add_argument("--ablate", action="store_true",
+                    help="woraus besteht die gemessene Kante? Ein Merkmal des "
+                         "Generators abschalten und neu messen")
+    pe.add_argument("--markets", type=int, default=150,
+                    help="Maerkte je Variante bei --ablate")
+    pe.set_defaults(func=cmd_persistence)
+
     b = sub.add_parser("backtest", help="run the scalping setups over history")
     b.add_argument("symbol", nargs="?", default="XAUUSD")
     b.add_argument("--source", choices=("sim", "live", "file"), default="sim",
@@ -1187,3 +1214,49 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_persistence(args: argparse.Namespace) -> int:
+    """Does this market continue or come back -- and whose market is it?"""
+    from . import simulate
+    from .candles import resample
+    from .persistence import ablate, measure, render, render_ablation
+    from .sources.history import HistoryError, load
+
+    if args.ablate:
+        print(render_ablation(ablate(markets=args.markets)))
+        return 0
+
+    if args.file:
+        if not args.tz:
+            print("--file braucht --tz. Es gibt bewusst keine Vorgabe: die "
+                  "falsche Zeitzone verschiebt jede Sessionregel lautlos.\n"
+                  "  Dukascopy / EODHD / Twelve Data -> utc\n"
+                  "  HistData                        -> us_eastern_no_dst\n"
+                  "  MetaTrader / Kaggle-Export      -> broker_gmt2 / broker_gmt3",
+                  file=sys.stderr)
+            return 1
+        try:
+            series, report = load(args.file, args.tz, args.symbol,
+                                  args.file_timeframe)
+        except HistoryError as exc:
+            print(f"could not load {args.file}: {exc}", file=sys.stderr)
+            return 1
+        print(report.render())
+        print()
+        if args.timeframe != args.file_timeframe:
+            series = resample(series, args.timeframe)
+    else:
+        # The honest default is the simulator, and the report says so in its
+        # own header rather than leaving the reader to notice.
+        series = simulate.generate(
+            bars=args.bars, timeframe=args.timeframe, seed=args.seed,
+            params=simulate.MarketParams(start_price=args.price))
+
+    print(render(measure(series)))
+    if not args.file:
+        print()
+        print("  Das war der Simulator. Auf echter Historie gemessen:")
+        print("    python -m metals persistence --file XAU_5m_data.csv "
+              "--tz broker_gmt3")
+    return 0

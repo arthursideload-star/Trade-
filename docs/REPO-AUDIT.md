@@ -536,6 +536,121 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A27 · Die gemessene Kante ist eine Schutzplanke im Simulator
+
+Das ist der schwerwiegendste Befund dieses Repositories, und er betrifft **jede Zahl**, die
+hier je gemessen wurde.
+
+### Wie es aufgefallen ist
+
+`paper --review` zeigt die Struktur der Kante: Gewinner +0,83 R, Verlierer −0,82 R,
+Payoff-Verhältnis **1,01**. Der Vorteil besteht also vollständig aus der Trefferquote und
+bricht bei 49,8 % zusammen. Die naheliegende Frage ist, ob man Gewinner länger laufen lassen
+kann — und das hängt an einer einzigen Eigenschaft des Marktes: Bleibt eine Bewegung, oder
+kommt sie zurück?
+
+`docs/TRADING-WISSEN.md` erwähnt den Hurst-Exponenten genau einmal, in einer Tabellenzeile,
+mit der Notiz „rechenintensiv, instabil bei kurzen Fenstern". Das hat gereicht, ihn nie zu
+berechnen. Er ist nicht rechenintensiv (`metals/persistence.py`), und die Instabilität ist
+real — deshalb steht daneben der **Varianzverhältnis-Test** von Lo/MacKinlay, der im
+Unterschied zum Hurst-Exponenten eine Nullverteilung hat.
+
+Der Simulator, auf dem alles gemessen wurde, liefert:
+
+```
+     q    VR(q)        z   Befund
+     2    0.985    -1.51    random walk
+     4    0.978    -1.15    random walk
+     8    0.981    -0.63    random walk
+    16    0.986    -0.32    random walk
+    32    1.000    -0.01    random walk
+```
+
+**Kein einziges q verwirft den Zufallspfad.** Und auf einem Zufallspfad hat jede
+Ausstiegsregel denselben Erwartungswert — mit Kosten also einen negativen. Ein gemessener
+Erwartungswert von **+0,174 R** kann dort nicht herkommen.
+
+### Der entscheidende Versuch
+
+Der Shuffle-Test in `metals/train.py` zeigt seit Langem, **dass** die Kante an der
+Balkenreihenfolge hängt: real +0,09 bis +0,19 R, gemischt −0,03 bis +0,05 R. Das wurde
+gelesen als „die Strategie liest den Chart". Der Test kann aber nicht sagen, **wessen**
+Struktur das ist.
+
+Die Merkmale des Generators sind Parameter, und Parameter kann man auf null setzen.
+150 Ein-Tages-Märkte je Variante (`python -m metals persistence --ablate`):
+
+| Variante | Trades | Erwartung | 95 %-Band |
+|---|---:|---:|---|
+| alles an (Standard) | 946 | +0,0988 R | +0,042 … +0,156 |
+| ohne Liquidity-Sweep | 937 | +0,1151 R | +0,059 … +0,171 |
+| ohne Runde-Zahlen-Magnet | 1.038 | +0,0813 R | +0,025 … +0,137 |
+| ohne Sprünge | 918 | +0,0738 R | +0,016 … +0,132 |
+| **ohne Mean-Reversion** | 925 | **+0,0071 R** | **−0,050 … +0,065** |
+| nichts davon | 893 | **−0,1326 R** | −0,192 … −0,073 |
+
+**Schaltet man `MarketParams.reversion` ab, ist die Kante weg.** Schaltet man alles ab,
+verliert die Strategie ungefähr ihren eigenen Spread — genau das, was auf einem
+driftfreien Zufallspfad passieren muss.
+
+Die Dosis-Wirkungs-Beziehung ist nahezu linear:
+
+| `reversion` | 0,0000 | 0,0005 | 0,0010 | **0,0020** | 0,0040 | 0,0080 |
+|---|---:|---:|---:|---:|---:|---:|
+| Erwartung | +0,007 | +0,034 | +0,057 | **+0,099** | +0,162 | +0,246 |
+
+Der gemessene Erwartungswert ist also im Wesentlichen eine **Ablesung dieses einen
+Parameters**.
+
+### Und was dieser Parameter ist
+
+Sein eigener Kommentar in `metals/simulate.py` sagt es:
+
+```python
+# Mean reversion toward a slow anchor, which prevents random walk blowups.
+reversion: float = 0.002
+```
+
+**Eine Rechenschutzplanke.** Eingebaut, damit erzeugte Kurse nicht ins Absurde laufen —
+keine Behauptung über Gold. Jeder Erwartungswert, den dieses Projekt veröffentlicht hat,
+ist nach dieser Messung überwiegend eine Messung dieser Schutzplanke.
+
+### Warum kein Test das gefangen hat
+
+Drei Prüfungen waren vorhanden und **alle drei sind konsistent mit diesem Befund**:
+
+- Der **Shuffle-Test** hat gezeigt, dass die Kante an der Reihenfolge hängt. Richtig — und
+  er konnte nicht unterscheiden, ob diese Ordnung eine Eigenschaft von Gold oder des
+  Generators ist.
+- Der **Varianztest** verwirft den Zufallspfad bei keinem q. Auch das stimmt: Die Reversion
+  ist zu schwach, um statistisch nachweisbar zu sein — VR fällt zwar monoton von 1,000 bei
+  q=32 auf 0,737 bei q=512, aber die Standardfehler wachsen schneller. **Zu klein zum
+  Nachweisen und groß genug, um die ganze Kante zu sein**, weil die Strategie sie nicht
+  einmal erkennen muss: Sie erntet sie hundertfach, genau an den Rändern der Tagesspanne,
+  wo der Anker am stärksten und am gerichtetsten zieht.
+- `docs/URTEIL.md` nennt seit Langem als Grund Nummer eins, warum das Ergebnis nicht
+  übertragbar ist: „es läuft auf dem Simulator". Das war richtig und zu schwach formuliert.
+  Es ist nicht nur *ein* Vorbehalt — es ist die Quelle der gesamten gemessenen Kante.
+
+### Was daraus folgt — und was nicht
+
+**Es folgt nicht, dass die Strategie an echtem Gold scheitert.** Echtes Gold kann intraday
+zu einem langsamen Anker zurückkehren; das ist eine offene empirische Frage. Was folgt, ist:
+
+> **Der Simulator kann die Frage nicht beantworten.** Damit ist der Backtest auf echter
+> Historie nicht mehr wünschenswert, sondern der **einzige Lauf, der überhaupt ein Ergebnis
+> liefert.**
+
+```bash
+python -m metals persistence --file XAU_5m_data.csv --tz broker_gmt3
+python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 --equity 400 --risk 1
+```
+
+Der erste Befehl ist dabei der wichtigere und dauert Sekunden: Verwirft echtes Gold den
+Zufallspfad in die richtige Richtung, hat die Strategie überhaupt eine Grundlage. Verwirft
+es ihn nicht, ist der zweite Lauf schon beantwortet.
+
+
 ## A26 · Die beiden Dateien, die den Bot tatsächlich steuern, waren aus der ersten Woche
 
 Während 25 Auditbefunde entstanden, blieben zwei Dateien unangetastet — ausgerechnet die,

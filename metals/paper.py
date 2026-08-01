@@ -1872,3 +1872,173 @@ def summarise() -> str:
         lines.append("  Kette sagt, wie sich die Streuung anfuehlt, nicht ob")
         lines.append("  die Strategie einen Vorteil hat.")
     return "\n".join(lines)
+
+
+# --- Retrospective: what this chain did well and what it did badly ---------
+
+@dataclass
+class Review:
+    """What 57 sessions actually show, separated into what is established
+    and what merely looks like something.
+
+    Written as a command rather than a document on purpose. Every figure in
+    this project that was typed into prose went stale within days -- the
+    chain advances, the numbers move, and the document keeps asserting the
+    old ones. This recomputes.
+    """
+
+    sessions: int
+    trades: int
+    hit_rate: float
+    mean_win_r: float
+    mean_loss_r: float
+    payoff_ratio: float
+    breakeven_hit_rate: float
+    hit_rate_headroom: float
+    expectancy_r: float
+    expectancy_low: float
+    expectancy_high: float
+    exits: dict[str, int]
+    share_ended_by_clock: float
+    top_decile_share: float
+    blocks: list[tuple[int, int, int, float, float, float, float]]
+    trend_established: bool
+
+    @property
+    def edge_is_all_hit_rate(self) -> bool:
+        """Winners and losers the same size means the edge is the hit rate
+        and nothing else. That is a fragile shape: nothing cushions a fall."""
+        return 0.85 <= self.payoff_ratio <= 1.20
+
+
+def review(start_eur: float = 400.0) -> Review:
+    """Read the chain back and say what it shows.
+
+    Deliberately does not compute a verdict. It computes the two or three
+    structural facts a verdict would have to rest on, and marks which of
+    them the sample can actually carry.
+    """
+    ledger = load_ledger()
+    rs = [x for row in ledger for x in row.get("r_multiples", [])]
+    exits: dict[str, int] = {}
+    for row in ledger:
+        for key, count in (row.get("exits") or {}).items():
+            exits[key] = exits.get(key, 0) + count
+
+    if not rs:
+        return Review(len(ledger), 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                      0.0, 0.0, 0.0, exits, 0.0, 0.0, [], False)
+
+    wins = [x for x in rs if x > 0]
+    losses = [x for x in rs if x <= 0]
+    mean_win = statistics.fmean(wins) if wins else 0.0
+    mean_loss = statistics.fmean(losses) if losses else 0.0
+    payoff = abs(mean_win / mean_loss) if mean_loss else 0.0
+
+    # The hit rate at which this payoff ratio breaks even, and how far the
+    # observed rate sits above it. With winners and losers the same size the
+    # answer is near 50% and the headroom is the whole edge.
+    denom = mean_win - mean_loss
+    breakeven = (-mean_loss / denom) if denom else 0.0
+    hit = len(wins) / len(rs)
+
+    from .journal import mean_interval
+
+    mean_r = statistics.fmean(rs)
+    lo, hi = mean_interval(rs)
+
+    by_clock = exits.get("time_stop", 0) + exits.get("still_open", 0)
+    total_exits = sum(exits.values()) or len(rs)
+
+    ranked = sorted(rs, reverse=True)
+    total = sum(rs)
+    cut = max(1, len(ranked) // 10)
+    top_decile = (sum(ranked[:cut]) / total) if total else 0.0
+
+    blocks: list[tuple[int, int, int, float, float, float, float]] = []
+    size = 12
+    for start in range(0, len(ledger), size):
+        chunk = ledger[start:start + size]
+        block_r = [x for row in chunk for x in row.get("r_multiples", [])]
+        if not block_r:
+            continue
+        m = statistics.fmean(block_r)
+        blo, bhi = mean_interval(block_r)
+        blocks.append((start + 1, start + len(chunk), len(block_r),
+                       sum(1 for x in block_r if x > 0) / len(block_r),
+                       m, blo, bhi))
+
+    # A trend is established only when the first and last block's intervals
+    # do not overlap. They almost never do at this sample size, and saying
+    # so is the point -- a falling sequence of point estimates is what noise
+    # looks like half the time.
+    trend = bool(blocks) and len(blocks) >= 2 and (
+        blocks[0][5] > blocks[-1][6] or blocks[-1][5] > blocks[0][6])
+
+    return Review(
+        sessions=len(ledger), trades=len(rs), hit_rate=hit,
+        mean_win_r=mean_win, mean_loss_r=mean_loss, payoff_ratio=payoff,
+        breakeven_hit_rate=breakeven, hit_rate_headroom=hit - breakeven,
+        expectancy_r=mean_r, expectancy_low=lo, expectancy_high=hi,
+        exits=exits, share_ended_by_clock=by_clock / total_exits,
+        top_decile_share=top_decile, blocks=blocks, trend_established=trend,
+    )
+
+
+def render_review(r: Review) -> str:
+    if not r.trades:
+        return "Noch keine Trades — nichts auszuwerten."
+
+    lines = [f"WAS DIE KETTE ZEIGT — {r.sessions} SITZUNGEN, {r.trades} TRADES",
+             "=" * 74, ""]
+
+    lines.append("  WAS GUT WAR")
+    lines.append(f"    Trefferquote            {r.hit_rate:>7.1%}")
+    lines.append(f"    Erwartungswert        {r.expectancy_r:>+8.3f} R   "
+                 f"95%-Band {r.expectancy_low:+.3f} … {r.expectancy_high:+.3f}")
+    if r.expectancy_low > 0:
+        lines.append("      Das Band liegt ueber der Null — auf DIESEN Daten.")
+    else:
+        lines.append("      Das Band schneidet die Null. Kein Nachweis.")
+    lines.append(f"    Ziel erreicht           {r.exits.get('target', 0):>7d} Trades")
+    lines.append("")
+
+    lines.append("  WAS SCHLECHT WAR — und das ist die wichtigere Haelfte")
+    lines.append("")
+    lines.append(f"    Gewinner im Mittel    {r.mean_win_r:>+8.3f} R")
+    lines.append(f"    Verlierer im Mittel   {r.mean_loss_r:>+8.3f} R")
+    lines.append(f"    Payoff-Verhaeltnis      {r.payoff_ratio:>7.2f}")
+    if r.edge_is_all_hit_rate:
+        lines.append("      Gewinner und Verlierer sind gleich gross. Damit ist")
+        lines.append("      die Trefferquote der GANZE Vorteil — es gibt nichts,")
+        lines.append("      was einen Rueckgang abfedert.")
+    lines.append(f"    Break-even bei          {r.breakeven_hit_rate:>7.1%} Trefferquote")
+    lines.append(f"    Luft nach unten         {r.hit_rate_headroom:>7.1%}-Punkte")
+    lines.append("      Faellt die Trefferquote um diesen Betrag, ist der")
+    lines.append("      Erwartungswert null. Nicht halbiert — null.")
+    lines.append("")
+    lines.append(f"    Durch die Uhr beendet   {r.share_ended_by_clock:>7.1%} der Trades")
+    lines.append("      Zeitstop oder Tagesende, also weder Ziel noch Stop.")
+    lines.append("      Diese Trades hat nicht die Strategie beendet.")
+    lines.append("")
+    lines.append(f"    Bestes Zehntel traegt   {r.top_decile_share:>7.1%} der R-Summe")
+    if r.top_decile_share > 0.5:
+        lines.append("      Ueber die Haelfte des Ergebnisses haengt an einem")
+        lines.append("      Zehntel der Trades. Fehlen die, bleibt fast nichts.")
+    lines.append("")
+
+    lines.append("  VERLAUF — Bloecke zu 12 Sitzungen")
+    lines.append(f"    {'Sitzungen':>12s} {'Trades':>7s} {'Treffer':>8s} "
+                 f"{'Erwartung':>10s}  95%-Band")
+    for a, b, n, hit, m, lo, hi in r.blocks:
+        lines.append(f"    {a:>5d}-{b:<6d} {n:>7d} {hit:>7.1%} {m:>+10.3f}  "
+                     f"{lo:+.3f} … {hi:+.3f}")
+    lines.append("")
+    if r.trend_established:
+        lines.append("    Erster und letzter Block ueberlappen NICHT — hier ist")
+        lines.append("    eine Veraenderung belegt und gehoert untersucht.")
+    else:
+        lines.append("    Die Baender ueberlappen alle. Eine fallende Reihe von")
+        lines.append("    Punktschaetzern ist noch kein Nachlassen — so sieht")
+        lines.append("    Rauschen in der Haelfte der Faelle aus.")
+    return "\n".join(lines)

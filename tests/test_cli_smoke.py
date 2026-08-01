@@ -54,8 +54,9 @@ class TestEverySubcommandIsReachable(unittest.TestCase):
         self.assertEqual(
             set(sub.choices),
             {"analyse", "backtest", "challenge", "check", "claims", "dayrange",
-             "journal", "microscalp", "minimum", "paper", "quote", "ratio",
-             "rules", "setups", "size", "sources", "stop", "train"},
+             "journal", "microscalp", "minimum", "paper", "persistence",
+             "quote", "ratio", "rules", "setups", "size", "sources", "stop",
+             "train"},
             "a command was added or removed without updating this test, "
             "which is the file that decides whether it gets smoke coverage")
 
@@ -85,6 +86,7 @@ SMOKE_ARGS: dict[str, list[str]] = {
     "backtest": ["backtest", "--source", "sim", "--bars", "1500"],
     "journal": ["journal"],
     "paper": ["paper", "--summary"],
+    "persistence": ["persistence", "--bars", "2000"],
     "train": ["train", "--summary"],
 }
 
