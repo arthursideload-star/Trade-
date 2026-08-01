@@ -536,6 +536,203 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A23 · „Umgesetzt" bedeutete zweierlei — und R4 war in 37 von 57 Sitzungen aus
+
+Die Tabelle `RULE_COVERAGE` in `metals/dayrange.py` gibt es wegen A16: Dreimal war eine
+Regel der Risikoschicht nie in der Strategie angekommen (R1 in A1, R4 in A7, M5 in A15),
+und jedes Mal blieb die *nächste* Lücke unsichtbar, bis zufällig jemand hinsah. Die Tabelle
+sollte das beenden.
+
+Sie hatte selbst eine Lücke, und ausgerechnet bei R4.
+
+`weekend_flat`, `daily_loss_limit`, `max_positions` und `min_range_atr` sind standardmäßig
+**an**. Wer nichts konfiguriert, ist durch sie geschützt. R4 ist es nicht:
+
+```python
+news_times_utc: tuple[tuple[int, int], ...] = ()      # Vorgabe: leer
+...
+if not news_times_utc:
+    return False                                       # sperrt nichts
+```
+
+Beide standen in der Tabelle als `"implemented"`. Im Journal heißt das:
+
+```
+20 von 57 Sitzungen hatten ueberhaupt Sperrzeiten gesetzt
+R4 war also in 37 Sitzungen wirkungslos
+```
+
+Eine abgeschaltete Regel schützt genau so viel wie eine nie geschriebene. Und **drei
+Auditbefunde sind dieselbe Regel**, die nirgends ankommt: A7 (die Strategie sah die Sperre
+nie), A9 (`--news` war an die falsche Funktion verdrahtet und tat zehn Sitzungen lang
+nichts), A20 (der Kalender dahinter hatte kein FOMC). Jeder wurde behoben, und R4 blieb aus.
+
+**Zwei Änderungen.**
+
+**1. Die Tabelle bekommt einen dritten Status.** `"needs-input"`: Der Mechanismus ist da und
+getestet, und er ist aus, bis ihn jemand füttert. `rules_needing_input()` listet sie auf, und
+ein Test weist die Wirkungslosigkeit **mechanisch** nach — er prüft alle 96 Viertelstunden
+eines Tages gegen eine Standardkonfiguration, statt dem Kommentar zu glauben. Wird R4
+irgendwann standardmäßig eingeschaltet, schlägt der Test fehl und die Tabelle muss korrigiert
+werden. Genau darum geht es: Die letzten drei Male hat es niemand bemerkt.
+
+**2. Der Kalender ist jetzt das, was ohne Entscheidung passiert.** `--news` greift ohne
+Angabe auf den eingebauten Kalender zurück. R4 abzuschalten muss man tippen, und es wird
+angesagt:
+
+```
+R4 ausgeschaltet (--news none): keine Nachrichtensperre.
+```
+
+Angegebene Zeiten schlagen weiterhin den Kalender.
+
+
+## A22 · `metals minimum` fragte nach einem Kontostand ohne Währung — **behoben**
+
+Direkt neben A21 aufgefallen und dieselbe Familie. `metals minimum` rechnet durchgehend in
+Dollar — „account needed 240 USD", „risk 1.80 USD" — und nahm `--equity` **ohne Einheit**
+entgegen:
+
+```
+YOUR ACCOUNT: 185.00
+```
+
+Das Beispiel in der README lautet `minimum XAUUSD --equity 55`, und das Konto, um das
+dieses ganze Projekt gebaut ist, läuft in **Euro**. Wer seinen Euro-Stand eintippt, wird
+gegen Dollar-Schwellen geprüft und damit um den Wechselkurs zu klein gerechnet — rund 15 %
+beim Kurs vom 31.07.2026.
+
+Und das bleibt nicht bei der Beschriftung. Bei **215 €**:
+
+| Kurs | in Dollar | Verdikt bei 2,40 $/oz Stop |
+|---:|---:|---|
+| 1,0800 | 232,20 $ | REFUSED — über dem 1-%-Limit |
+| 1,1476 | 246,73 $ | OK |
+
+Ein 2,40-$-Stop braucht 240 $, damit die 1-%-Regel hält. Die beiden Kurse liegen auf
+**verschiedenen Seiten** dieser Schwelle: dasselbe Konto, entgegengesetzte Antwort.
+
+**Behoben.** Ohne Angabe wird `--equity` ausdrücklich als Dollar beschriftet und auf die
+Alternative hingewiesen; `--eur` deutet ihn als Euro und zeigt beide Beträge samt Kurs und
+dessen Status:
+
+```
+YOUR ACCOUNT: 185.00 USD (use --eur if this balance is in euro)
+YOUR ACCOUNT: 185.00 EUR = 212.31 USD  (EUR/USD 1.1476, abgelesen)
+YOUR ACCOUNT: 185.00 EUR = 199.80 USD  (EUR/USD 1.0800, ANGENOMMEN)
+```
+
+
+## A21 · Der Wechselkurs war eine Konstante, und die Konstante war falsch
+
+`metals/paper.py` rechnet seit der ersten Sitzung mit
+
+```python
+ASSUMED_EUR_USD = 1.08
+```
+
+Der EZB-Referenzkurs am 30.07.2026 war **1,1476**. Die Abweichung beträgt 6,3 %, und sie
+steht unter **jeder Euro-Zahl, die dieses Projekt je veröffentlicht hat.**
+
+Daneben stand dieser Kommentar:
+
+> „Written down rather than fetched: the rate moves, and **nothing here turns on its
+> third decimal**."
+
+Das ist der eigentliche Befund. Der Satz ist falsch, und zwar nicht knapp.
+
+### Warum sich der Kurs nicht herauskürzt
+
+Die naheliegende Annahme ist, dass er es tut: Euro rein mal Kurs, Dollar handeln, Euro
+raus durch Kurs — das müsste sich aufheben. Bei **fester Losgröße** tut es das nicht.
+
+Eine 0,01-Lot-Position riskiert eine Anzahl **Dollar**, die vom Stop-Abstand bestimmt
+wird, nicht davon, was das Konto in Euro wert ist. Das Dollar-Ergebnis einer Sitzung
+steht also fest, egal welcher Kurs eingesetzt wird — gemessen:
+
+| Kurs | Ergebnis in € | × Kurs = in $ |
+|---:|---:|---:|
+| 1,0000 | −16,61 | −16,61 |
+| 1,0800 | −15,38 | −16,61 |
+| 1,1476 | −14,47 | −16,61 |
+| 1,2000 | −13,84 | −16,61 |
+
+Damit ist die Euro-Zahl das feste Dollar-Ergebnis **geteilt durch den Kurs**, und die
+ganze Kette skaliert mit 1/Kurs. Ein Kursfehler ist hier kein Rundungsthema, sondern ein
+proportionaler Fehler in jeder Euro-Zahl.
+
+### Was das für die Kette heißt
+
+```
+Berichtet     1.799,24 €   (Gewinn +1.399,24 €)   bei Kurs 1,0800
+Umgerechnet   1.716,82 €   (Gewinn +1.316,82 €)   bei Kurs 1,1476
+Differenz       −82,42 €   (−5,89 % des Gewinns)
+```
+
+**Der ausgewiesene Gewinn ist um 5,9 % zu hoch.** Zwei weitere Zahlen hängen mit dran:
+
+- **Das gemeldete Risiko je Trade ist zu hoch angesetzt.** Dieselbe Sitzung meldet 4,07 %
+  bei Kurs 1,08 und 3,83 % bei 1,1476 — das Konto ist in Dollar größer, als die Rechnung
+  annimmt.
+- **Die Mindestkontogröße stimmt nicht.** `docs/PAPIER-LAUF.md` nennt „unter etwa 190 €
+  kann gar nicht gehandelt werden". Bei 205 $ Margin sind das bei 1,08 tatsächlich
+  189,81 €, bei 1,1476 aber **178,63 €**.
+
+### Am Margin-Rand ist es keine Berichtsfrage mehr
+
+Oberhalb der Margin-Schwelle verschiebt ein falscher Kurs nur Zahlen: dieselben Trades,
+skalierte Euro-Beträge. **An der Schwelle entscheidet er, ob überhaupt gehandelt wird.**
+
+Dieselbe Sitzung, dasselbe Konto, nur der Kurs unterschiedlich:
+
+```
+180 € bei Kurs 1,0800:  margin 202 USD > equity 194 USD   → kein Trade
+180 € bei Kurs 1,1476:  4 Trades
+185 € bei Kurs 1,0800:  margin 202 USD > equity 200 USD   → kein Trade
+185 € bei Kurs 1,1476:  4 Trades
+```
+
+„Reicht mein Konto?" ist eine Frage, die dieses Projekt laut beantwortet — `metals minimum`
+tut nichts anderes. Es hat sie mit einer Konstanten beantwortet, und für Konten zwischen
+178 € und 190 € war die Antwort falsch.
+
+### Was nicht modelliert ist — und das ist der größere Punkt
+
+Derselbe Kurs auf beiden Seiten heißt: Die Kette hat in 57 Sitzungen **null
+Währungsrisiko** modelliert. Ein Euro-Konto, das XAUUSD handelt, trägt es aber:
+Gold kann in Dollar steigen und das Konto trotzdem in Euro verlieren, wenn der Euro
+gleichzeitig stärker wird. Der Kurs bewegt sich zwischen Eröffnung und Schluss einer
+Position, und keine einzige Zahl im Journal enthält davon irgendetwas.
+
+Das ist keine Kleinigkeit für ein 400-€-Konto: EUR/USD bewegt sich an einem normalen Tag
+um 0,3–0,6 %, an einem EZB- oder FOMC-Tag deutlich mehr. Das ist in derselben
+Größenordnung wie das, was die Strategie an einem Tag verdienen soll.
+
+### Was geändert wurde
+
+**Der Kurs wird pro Zeile aufgezeichnet**, mit dem Vermerk, ob er abgelesen oder
+angenommen wurde — dieselbe Behandlung wie `range_observed`:
+
+```
+EUR/USD 1.1476 (abgelesen) — jede Euro-Zahl haengt daran
+EUR/USD 1.0800 (ANGENOMMEN) — jede Euro-Zahl haengt daran
+```
+
+`--eur-usd` nimmt den abgelesenen Kurs. Er ist bewusst **nicht** verpflichtend wie
+`--spread` nach A19: Ein falscher Spread dreht das Vorzeichen des Erwartungswerts, ein
+falscher Kurs skaliert das Ergebnis. Beides ist schlecht, aber nur das erste macht aus
+einem Verlust einen Gewinn.
+
+**Die 57 bestehenden Zeilen werden nicht stillschweigend umgerechnet.** Sie wurden unter
+1,08 geschrieben, das steht jetzt in ihnen, und `paper --restate 1.1476` liest die Kette
+zu einem anderen Kurs, ohne sie zu verändern. Die Bilanz warnt, solange Zeilen mit einer
+Annahme darin stehen.
+
+**Die Nachrechnung nimmt den Kurs der jeweiligen Zeile**, nicht den heutigen. Eine
+Prüfung, die eine Zeile mit einem neueren Kurs nachrechnet, rechnet eine andere Sitzung
+nach und nennt die Differenz dann einen Fehler.
+
+
 ## A20 · Der Kalender versprach FOMC und lieferte nie eines — **behoben**
 
 Der Modul-Docstring von `metals/sources/calendar.py` sagt seit jeher:

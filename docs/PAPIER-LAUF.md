@@ -17,8 +17,8 @@ python -m metals paper --distribution --price 4114.79 \
 
 `--spread` kommt aus dem beobachteten Ask minus Bid und ist **Pflicht** — er wird nicht
 vorbelegt, weil der Vorgabewert über das Vorzeichen des Erwartungswerts entschied (A19, unten).
-`--news auto` liest die Sperrzeiten aus dem eingebauten Kalender (FOMC, EZB, NFP,
-CPI-Fenster), statt sie tippen zu lassen — und sagt dazu, was es gefunden hat:
+**Die Sperrzeiten für R4 kommen ohne Angabe aus dem eingebauten Kalender** (FOMC, EZB, NFP,
+CPI-Fenster), statt getippt werden zu müssen — und die Sitzung sagt dazu, was sie gefunden hat:
 
 ```
 R4 aus dem Kalender fuer 2026-07-29:
@@ -31,10 +31,14 @@ Die Sitzung schreibt mit, **woher** die Zeiten kamen (`news_source`: `kalender`,
 fand, und eine Sitzung, in der niemand gefragt hat, erzeugen dieselbe leere Liste und
 bedeuten das Gegenteil. Genau daran ist A20 vorbeigerutscht.
 
-Alternativ kommt `--news` von Hand aus dem Wirtschaftskalender
-(Rule R4 sperrt 30 Minuten um jede genannte Zeit). Ohne `--news` greift die Sperre **nicht**
-— das steht dann auch so in der Ausgabe, damit ein durchgehandelter FOMC-Tag nicht
-unbemerkt bleibt. Genau das war Auditbefund A7.
+Eigene Zeiten (`--news "12:30,18:00"`) schlagen den Kalender; `--news none` schaltet R4 ab
+und sagt es. R4 sperrt 30 Minuten um jede Zeit.
+
+Dass der Kalender die Vorgabe ist, hat einen Grund mit Vorgeschichte: **Drei Auditbefunde
+sind dieselbe Regel, die nirgends ankam** — A7 (die Strategie sah die Sperre nie), A9
+(`--news` war an die falsche Funktion verdrahtet), A20 (der Kalender hatte kein FOMC). Alle
+drei behoben, und R4 war trotzdem in **37 von 57 Sitzungen wirkungslos**, weil einfach
+nichts übergeben wurde ([A23](./REPO-AUDIT.md)).
 
 Das Journal liegt in `training/paper-ledger.jsonl`, eine Zeile je Sitzung.
 
@@ -86,9 +90,17 @@ Der Bot handelt hier trotzdem, weil das ist, was ein 400-€-Konto in der Realit
 `forced_risk_pct` steht in jeder Zeile des Journals und in jeder Ausgabe, und es ist die
 erste Zahl, die man lesen sollte. Wer die Rendite ohne diese Zahl liest, liest die Hälfte.
 
-Rechnerisch: unter etwa **190 €** kann gar nicht gehandelt werden, weil 0,01 Lot bei 1:20
-rund 205 $ Margin bindet. Ab etwa **2.850 €** wäre die 1-%-Regel eingehalten. Alles
-dazwischen ist der Bereich, in dem das Konto handeln kann, aber über Limit.
+Rechnerisch: 0,01 Lot bindet bei 1:20 rund **205 $** Margin. Was das in Euro ist, hängt am
+Wechselkurs — und genau daran hing diese Zahl bisher stillschweigend:
+
+| EUR/USD | Mindestkonto |
+|---:|---:|
+| 1,0800 (bisher angenommen) | 189,81 € |
+| **1,1476** (EZB-Referenz 30.07.2026) | **178,63 €** |
+
+Ab etwa **2.850 €** wäre die 1-%-Regel eingehalten. Alles dazwischen ist der Bereich, in
+dem das Konto handeln kann, aber über Limit. Warum der Kurs sich nicht heraus­kürzt und
+was er sonst noch verschiebt: [REPO-AUDIT.md, A21](./REPO-AUDIT.md).
 
 Die vollständige Rechnung dazu: [KONTOGROESSE.md](./KONTOGROESSE.md).
 

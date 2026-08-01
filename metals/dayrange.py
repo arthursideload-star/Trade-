@@ -240,13 +240,31 @@ def in_news_blackout(ts: datetime,
 # "n/a" is a legitimate answer and requires a reason. A rule that does not
 # apply is different from a rule nobody thought about, and the difference has
 # to be written down or it is lost.
+#
+# A23 added the third status. "implemented" used to cover two different
+# things, and the difference is the whole history of R4: weekend_flat,
+# daily_loss_limit, max_positions and min_range_atr are on by default and
+# protect a caller who configures nothing, while R4 does nothing at all until
+# somebody hands it release times. Both read as "implemented", so the table
+# built to stop rules going missing was hiding one that effectively had.
+# In the paper ledger R4 was inert in 37 of the first 57 sessions.
+#
+# "needs-input" means: the mechanism is there and tested, and it is off until
+# fed. `rules_needing_input()` lists them and a test proves the inertness
+# mechanically rather than trusting this comment.
+STATUSES = ("implemented", "needs-input", "n/a")
+
 RULE_COVERAGE: dict[str, tuple[str, str]] = {
     "R1": ("implemented", "lots_for caps risk_pct at MAX_RISK_PER_TRADE_PCT"),
     "R2": ("implemented", "daily loss limit stops new entries for the day"),
     "R3": ("n/a", "reward/risk follows from take_fraction and stop_fraction, "
                   "which are swept rather than fixed at 1:2. A hard 1:2 floor "
                   "would delete the strategy's main dial."),
-    "R4": ("implemented", "in_news_blackout refuses entries around releases"),
+    "R4": ("needs-input", "in_news_blackout refuses entries around releases, "
+                          "but news_times_utc defaults to empty and the check "
+                          "returns False on an empty tuple. Nothing is blocked "
+                          "until release times are supplied -- from the "
+                          "calendar (`paper --news auto`) or by hand."),
     "R5": ("implemented", "rollover is handled; the Friday late session is "
                           "covered by M5 below"),
     "R6": ("n/a", "size never increases after a loss by construction: it is "
@@ -275,6 +293,23 @@ RULE_COVERAGE: dict[str, tuple[str, str]] = {
 def uncovered_rules() -> list[str]:
     """Rules in the risk layer with no entry above. Should always be empty."""
     return [key for key in RULES if key not in RULE_COVERAGE]
+
+
+def rules_needing_input() -> list[str]:
+    """Rules that are present but inert until configured.
+
+    Read this before quoting "all eight hard rules are implemented". They
+    are; some of them are also switched off until someone hands them
+    something, and a rule that is off protects nothing.
+    """
+    return sorted(k for k, (status, _) in RULE_COVERAGE.items()
+                  if status == "needs-input")
+
+
+def undeclared_statuses() -> list[str]:
+    """Entries using a status outside STATUSES -- always empty, or a typo."""
+    return sorted(k for k, (status, _) in RULE_COVERAGE.items()
+                  if status not in STATUSES)
 
 
 def past_weekend_flat(ts: datetime) -> bool:

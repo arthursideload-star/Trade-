@@ -941,10 +941,25 @@ class TestRuleCoverageIsChecked(unittest.TestCase):
                          "implements it or why it cannot, and write it down")
 
     def test_every_entry_has_a_status_and_a_reason(self):
+        """The vocabulary comes from the module, not from a copy of it here.
+
+        This test held its own list of valid statuses, so adding the
+        "needs-input" status in A23 broke it -- and had the second copy been
+        the more permissive one instead, a typo'd status would have passed
+        unnoticed. A table that exists to stop rules going missing should not
+        have its own definition duplicated in the test that guards it.
+        """
+        from metals.dayrange import RULE_COVERAGE, STATUSES
+        for rule, (status, reason) in RULE_COVERAGE.items():
+            self.assertIn(status, STATUSES, rule)
+            self.assertTrue(reason.strip(), rule)
+
+    def test_a_rule_that_needs_input_explains_what_it_needs(self):
+        """Same bar as 'n/a': the status is only useful with the reason."""
         from metals.dayrange import RULE_COVERAGE
         for rule, (status, reason) in RULE_COVERAGE.items():
-            self.assertIn(status, ("implemented", "n/a"), rule)
-            self.assertTrue(reason.strip(), rule)
+            if status == "needs-input":
+                self.assertGreater(len(reason), 40, rule)
 
     def test_a_not_applicable_reason_is_a_sentence_not_a_shrug(self):
         """'n/a' with no argument is how a forgotten rule hides. Anything

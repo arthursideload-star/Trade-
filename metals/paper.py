@@ -52,9 +52,20 @@ from .specs import get_spec
 LEDGER_DIR = "training"
 LEDGER_PATH = os.path.join(LEDGER_DIR, "paper-ledger.jsonl")
 
-# The account is funded in euro, the contract settles in dollars. Written down
-# rather than fetched: the rate moves, and nothing here turns on its third
-# decimal.
+# The account is funded in euro, the contract settles in dollars.
+#
+# "Nothing here turns on its third decimal" is what this comment used to say,
+# and it was wrong -- see A21. The rate does not cancel. A session's dollar
+# result is fixed by the lot and the stop distance, so the euro result is that
+# dollar figure divided by the rate: halve the error in the rate and you halve
+# the error in every euro number the chain has ever printed. On 31 July 2026
+# the ECB reference rate was 1.1476 against the 1.08 assumed here, which
+# overstates the chain's reported gain by 5.9%.
+#
+# It stays as the fallback because 57 sessions were written under it and
+# silently repricing them would be worse than carrying the number visibly.
+# Sessions now record the rate they used; `restate()` converts the chain to
+# any other rate.
 ASSUMED_EUR_USD = 1.08
 
 # Expected range of a driftless random walk over n steps, in units of the
@@ -196,6 +207,12 @@ class Session:
     # question never came up, produce the same empty list and mean opposite
     # things. Rows written before this field default to "".
     news_source: str = ""
+    # The EUR/USD rate this session converted with, and whether it was looked
+    # up or assumed. Same treatment as range_observed, for the same reason: a
+    # euro figure is worth exactly as much as the rate behind it, and 57
+    # sessions were written before any row recorded which rate that was.
+    eur_usd: float = ASSUMED_EUR_USD
+    eur_usd_observed: bool = False
     # Every trade's R multiple, not just the session mean. Kept because the
     # session mean cannot be turned back into a confidence interval, and the
     # whole point of a chain is that the trades accumulate into a sample the
@@ -340,6 +357,7 @@ def run_session(gold_price: float, day_high: float, day_low: float,
                 spread_usd_oz: float | None = None,
                 news_times_utc: tuple[tuple[int, int], ...] = (),
                 news_source: str = "",
+                eur_usd: float | None = None,
                 range_observed: bool = True) -> Session:
     """One trading day on an account carried forward from the last one.
 
@@ -353,7 +371,10 @@ def run_session(gold_price: float, day_high: float, day_low: float,
     index = sessions_so_far()
     equity_eur = (current_equity_eur() if start_equity_eur is None
                   else start_equity_eur)
-    equity_usd = equity_eur * ASSUMED_EUR_USD
+    rate = ASSUMED_EUR_USD if eur_usd is None else float(eur_usd)
+    if rate <= 0:
+        raise PriceInputError(f"EUR/USD rate must be positive, got {rate}")
+    equity_usd = equity_eur * rate
     oz = get_spec("XAUUSD").contract_size_oz
 
     # A fresh market every session, and never one seen before.
@@ -411,7 +432,9 @@ def run_session(gold_price: float, day_high: float, day_low: float,
         daily_loss_limit=session_cfg.daily_loss_limit,
         range_observed=range_observed,
         start_equity_eur=round(equity_eur, 2),
-        end_equity_eur=round(end_usd / ASSUMED_EUR_USD, 2),
+        end_equity_eur=round(end_usd / rate, 2),
+        eur_usd=rate,
+        eur_usd_observed=eur_usd is not None,
         lot=MIN_LOT,
         forced_risk_pct=round(forced, 2),
         risk_pct_min=round(risk_min, 2),
@@ -1004,6 +1027,102 @@ def observed_chain(start_eur: float = 400.0) -> ObservedChain:
                          end_equity_eur=equity, start_equity_eur=start_eur)
 
 
+@dataclass
+class Restatement:
+    """The chain's euro figures at a different EUR/USD rate.
+
+    A21. The rate does not cancel out of the chain, which is the thing that
+    is easy to get wrong about it. Each session's *dollar* result is fixed by
+    the lot size and the stop distance -- a fixed 0.01 lot risks the same
+    number of dollars whatever the account is worth in euro -- so the euro
+    result is that dollar figure divided by the rate, and the whole chain
+    scales as 1/rate. An FX error is not a rounding matter here; it is a
+    proportional error in every euro number the project has published.
+    """
+
+    from_rate: float
+    to_rate: float
+    start_equity_eur: float
+    reported_end_eur: float
+    restated_end_eur: float
+    sessions: int
+    rows_with_assumed_rate: int
+
+    @property
+    def reported_gain_eur(self) -> float:
+        return self.reported_end_eur - self.start_equity_eur
+
+    @property
+    def restated_gain_eur(self) -> float:
+        return self.restated_end_eur - self.start_equity_eur
+
+    @property
+    def difference_eur(self) -> float:
+        return self.restated_gain_eur - self.reported_gain_eur
+
+    @property
+    def difference_pct(self) -> float:
+        base = self.reported_gain_eur
+        return (self.difference_eur / base * 100.0) if base else 0.0
+
+
+def restate(to_rate: float, start_eur: float = 400.0) -> Restatement:
+    """Re-express the chain at another EUR/USD rate.
+
+    Row by row, because rows may have been written at different rates once
+    the rate is looked up per session. Each session's dollar P&L is recovered
+    from the rate it was recorded with and re-divided by the new one.
+    """
+    if to_rate <= 0:
+        raise PriceInputError(f"EUR/USD rate must be positive, got {to_rate}")
+
+    ledger = load_ledger()
+    equity = start_eur
+    assumed = 0
+    rates: set[float] = set()
+    for row in ledger:
+        rate = float(row.get("eur_usd") or ASSUMED_EUR_USD)
+        rates.add(rate)
+        if not row.get("eur_usd_observed"):
+            assumed += 1
+        pnl_eur = row["end_equity_eur"] - row["start_equity_eur"]
+        equity += pnl_eur * rate / to_rate
+
+    reported = ledger[-1]["end_equity_eur"] if ledger else start_eur
+    return Restatement(
+        from_rate=(rates.pop() if len(rates) == 1 else ASSUMED_EUR_USD),
+        to_rate=to_rate,
+        start_equity_eur=start_eur,
+        reported_end_eur=reported,
+        restated_end_eur=round(equity, 2),
+        sessions=len(ledger),
+        rows_with_assumed_rate=assumed,
+    )
+
+
+def render_restatement(r: Restatement) -> str:
+    if r.sessions == 0:
+        return "Noch keine Sitzung — nichts umzurechnen."
+    lines = [
+        f"KETTE ZUM KURS {r.to_rate:.4f} STATT {r.from_rate:.4f}",
+        "=" * 68,
+        f"  Berichtet   {r.reported_end_eur:>10,.2f} €   "
+        f"(Gewinn {r.reported_gain_eur:+,.2f} €)",
+        f"  Umgerechnet {r.restated_end_eur:>10,.2f} €   "
+        f"(Gewinn {r.restated_gain_eur:+,.2f} €)",
+        f"  Differenz   {r.difference_eur:>+10,.2f} €   "
+        f"({r.difference_pct:+.2f} % des Gewinns)",
+        "",
+        f"  {r.rows_with_assumed_rate} von {r.sessions} Zeilen tragen einen "
+        f"angenommenen Kurs, keinen abgelesenen.",
+        "",
+        "  Der Kurs kuerzt sich nicht heraus. Bei fester Losgroesse steht das",
+        "  Dollar-Ergebnis einer Sitzung fest — die Euro-Zahl ist dieses",
+        "  Ergebnis geteilt durch den Kurs. Die ganze Kette skaliert mit 1/Kurs.",
+    ]
+    return "\n".join(lines)
+
+
 def day_key(day_high: float, day_low: float) -> tuple[float, float]:
     """What identifies one observed trading day.
 
@@ -1238,8 +1357,13 @@ def verify(start_equity_eur: float = 400.0,
         seed = 500_000 + row["index"] * 97
         series = simulate.generate(bars=BARS_PER_DAY, timeframe="1m",
                                    seed=seed, params=params)
+        # The rate the row was written with, not today's. Verification
+        # reproduces a row from its own inputs; substituting a newer rate
+        # would recompute a different session and call the difference an
+        # error.
+        row_rate = float(row.get("eur_usd") or ASSUMED_EUR_USD)
         cfg = replace(
-            base, start_equity=row["start_equity_eur"] * ASSUMED_EUR_USD,
+            base, start_equity=row["start_equity_eur"] * row_rate,
             lot=MIN_LOT, risk_pct=None,
             spread_usd_oz=row.get("spread_usd_oz") or base.spread_usd_oz,
             slippage_fraction=row.get("slippage_fraction", 0.0),
@@ -1248,7 +1372,7 @@ def verify(start_equity_eur: float = 400.0,
                                  for x in row.get("news_times_utc", [])))
         res = run(cfg, series=series, seed=seed)
 
-        recomputed = round(res.end_equity / ASSUMED_EUR_USD, 2)
+        recomputed = round(res.end_equity / row_rate, 2)
         if abs(recomputed - row["end_equity_eur"]) > tolerance_eur:
             result.equity_mismatches.append(
                 f"Sitzung {n}: protokolliert {row['end_equity_eur']:.2f} €, "
@@ -1490,6 +1614,9 @@ def render(s: Session) -> str:
                      "Veroeffentlichung")
     else:
         lines.append("  Keine Nachrichtensperre gesetzt — R4 greift nicht")
+    origin = "abgelesen" if s.eur_usd_observed else "ANGENOMMEN"
+    lines.append(f"  EUR/USD {s.eur_usd:.4f} ({origin}) — jede Euro-Zahl "
+                 f"haengt daran")
     lines.append(f"  Quelle: {s.price_source}")
     lines.append("")
     if s.could_not_trade:
@@ -1671,6 +1798,23 @@ def summarise() -> str:
     lines.append(f"  Jetzt   {end:>10,.2f} €")
     lines.append(f"  Gesamt  {end - start:>+10,.2f} € "
                  f"({(end / start - 1) * 100:+.1f} %)")
+
+    # A21: every euro figure above is a dollar result divided by a rate, and
+    # the rate does not cancel. Rows written under the assumption say so here
+    # rather than in a document nobody opens next to the number.
+    assumed_fx = sum(1 for e in ledger if not e.get("eur_usd_observed"))
+    if assumed_fx:
+        rates = {round(float(e.get("eur_usd") or ASSUMED_EUR_USD), 4)
+                 for e in ledger}
+        shown = ", ".join(f"{r:.4f}" for r in sorted(rates))
+        lines.append("")
+        lines.append(f"  ACHTUNG, Waehrungskurs: {assumed_fx} von "
+                     f"{len(ledger)} Zeilen rechnen mit einem")
+        lines.append(f"  ANGENOMMENEN EUR/USD ({shown}), nicht mit einem "
+                     f"abgelesenen.")
+        lines.append("  Der Kurs kuerzt sich nicht heraus — die Kette "
+                     "skaliert mit 1/Kurs.")
+        lines.append("  Umrechnen: python -m metals paper --restate 1.1476")
     lines.append("")
     lines.append(f"  Groesster Rueckgang vom Hoch   {max_dd * 100:>6.1f} %"
                  f"   (Schluss zu Schluss)")

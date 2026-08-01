@@ -265,3 +265,57 @@ class TestTheRealHistoryPath(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMinimumStatesItsCurrency(unittest.TestCase):
+    """A22: `--equity` had no unit and every threshold beside it was USD.
+
+    The README's own example is `minimum XAUUSD --equity 55` and the account
+    this project is built around is denominated in euro. A euro balance typed
+    into a dollar comparison understates the account by whatever EUR/USD is
+    -- roughly 15% at the rate that applied on 31 July 2026 -- and near the
+    margin threshold that is the difference between "you can trade this" and
+    "you cannot".
+
+    Nothing crashed. The output simply said "YOUR ACCOUNT: 185.00" and left
+    the reader to supply the currency.
+    """
+
+    def test_a_bare_equity_is_labelled_dollars_and_offers_the_alternative(self):
+        out = run_command(["minimum", "XAUUSD", "--equity", "185"])
+        self.assertIn("185.00 USD", out)
+        self.assertIn("--eur", out)
+
+    def test_euro_is_converted_and_both_figures_are_shown(self):
+        out = run_command(["minimum", "XAUUSD", "--equity", "185", "--eur",
+                           "--eur-usd", "1.1476"])
+        self.assertIn("185.00 EUR", out)
+        self.assertIn("212.31 USD", out)
+        self.assertIn("1.1476", out)
+        self.assertIn("abgelesen", out)
+
+    def test_an_unread_rate_is_marked_as_assumed(self):
+        out = run_command(["minimum", "XAUUSD", "--equity", "185", "--eur"])
+        self.assertIn("ANGENOMMEN", out)
+
+    def test_the_rate_changes_the_verdict_not_only_the_label(self):
+        """The reason this matters rather than being tidying.
+
+        215 EUR is 232.20 USD at 1.08 and 246.73 at 1.1476. A 2.40 USD/oz
+        stop needs 240 USD to stay inside the 1% rule, so the two rates fall
+        on opposite sides of it and the command reaches opposite verdicts on
+        the same account.
+        """
+        cheap = run_command(["minimum", "XAUUSD", "--equity", "215", "--eur",
+                             "--eur-usd", "1.0800"])
+        dear = run_command(["minimum", "XAUUSD", "--equity", "215", "--eur",
+                            "--eur-usd", "1.1476"])
+        self.assertGreater(cheap.count("REFUSED"), dear.count("REFUSED"))
+
+    def test_a_nonsense_rate_is_refused(self):
+        args = build_parser().parse_args(["minimum", "XAUUSD", "--equity",
+                                          "185", "--eur", "--eur-usd", "0"])
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            code = args.func(args)
+        self.assertEqual(code, 1)

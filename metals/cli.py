@@ -363,13 +363,34 @@ def cmd_minimum(args: argparse.Namespace) -> int:
         print(f"  {stop:>14.2f}  {risk:>15.2f} USD  {needed:>12,.0f} USD")
 
     if args.equity:
-        print()
-        print(f"  YOUR ACCOUNT: {args.equity:,.2f}")
+        # A22: every figure above is USD, and --equity used to be printed
+        # without a unit. A user whose account is in euro types their balance
+        # and is compared against dollar thresholds -- which understates the
+        # account by whatever EUR/USD happens to be, and near the margin
+        # threshold that is the difference between "you can trade" and "you
+        # cannot". The unit is now stated, and converted when asked.
+        from .paper import ASSUMED_EUR_USD
+
+        if args.eur:
+            rate = args.eur_usd if args.eur_usd is not None else ASSUMED_EUR_USD
+            if rate <= 0:
+                print("EUR/USD muss positiv sein.", file=sys.stderr)
+                return 1
+            equity_usd = args.equity * rate
+            origin = "abgelesen" if args.eur_usd is not None else "ANGENOMMEN"
+            print()
+            print(f"  YOUR ACCOUNT: {args.equity:,.2f} EUR "
+                  f"= {equity_usd:,.2f} USD  (EUR/USD {rate:.4f}, {origin})")
+        else:
+            equity_usd = args.equity
+            print()
+            print(f"  YOUR ACCOUNT: {equity_usd:,.2f} USD "
+                  f"(use --eur if this balance is in euro)")
         print("  " + "-" * 68)
         blocked = 0
         for stop in stops:
             risk = stop * min_lot * spec.contract_size_oz
-            pct = risk / args.equity * 100.0
+            pct = risk / equity_usd * 100.0
             verdict = ("OK" if pct <= MAX_RISK_PER_TRADE_PCT
                        else "REFUSED -- over the 1% limit")
             if pct > MAX_RISK_PER_TRADE_PCT:
@@ -673,6 +694,10 @@ def cmd_paper(args: argparse.Namespace) -> int:
             gold_price=args.price, equity_eur=args.equity or 400.0,
             days=args.days)))
         return 0
+    if args.restate is not None:
+        from .paper import render_restatement, restate
+        print(render_restatement(restate(args.restate)))
+        return 0
     if args.provenance:
         from .paper import render_provenance
         print(render_provenance())
@@ -742,7 +767,16 @@ def cmd_paper(args: argparse.Namespace) -> int:
         print("Aufschluesselung: python -m metals paper --provenance")
         return 3
 
-    if (args.news or "").strip().lower() == "auto":
+    # A23: R4 was inert in 37 of the first 57 sessions because nothing was
+    # supplied and an empty tuple blocks nothing. Three separate audit
+    # findings -- A7, A9, A20 -- were all this rule failing to reach
+    # anything, so the calendar is now what happens when nobody chooses.
+    # `--news none` opts out, visibly.
+    if (args.news or "").strip().lower() == "none":
+        news_times, news_source = (), ""
+        print("R4 ausgeschaltet (--news none): keine Nachrichtensperre.")
+        print()
+    elif args.news is None or args.news.strip().lower() == "auto":
         day = datetime.now(timezone.utc).date()
         news_times, labels, horizon = _news_times_from_calendar(day)
         print(f"R4 aus dem Kalender fuer {day.isoformat()}:")
@@ -767,6 +801,7 @@ def cmd_paper(args: argparse.Namespace) -> int:
                         spread_usd_oz=args.spread,
                         news_times_utc=news_times,
                         news_source=news_source,
+                        eur_usd=args.eur_usd,
                         range_observed=not args.assumed_range)
     except PriceInputError as exc:
         print(f"Kursangaben passen nicht zusammen: {exc}", file=sys.stderr)
@@ -1003,12 +1038,19 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--spread", type=float, default=None,
                     help="beobachteter Spread in USD/oz, Ask minus Bid — "
                          "erforderlich, wird nicht vorbelegt")
+    pa.add_argument("--eur-usd", type=float, default=None, dest="eur_usd",
+                    help="abgelesener EUR/USD-Kurs. Ohne Angabe rechnet die "
+                         "Sitzung mit 1,08 und schreibt das als Annahme mit "
+                         "(docs/REPO-AUDIT.md, A21)")
+    pa.add_argument("--restate", type=float, default=None, metavar="KURS",
+                    help="die bestehende Kette zu einem anderen EUR/USD-Kurs "
+                         "lesen, ohne sie zu veraendern")
     pa.add_argument("--news", default=None,
                     help="Zeiten hochwirksamer Veroeffentlichungen in UTC, "
                          "z.B. \"12:30,18:00\" — R4 sperrt 30 Minuten drum "
-                         "herum. \"auto\" liest sie aus dem eingebauten "
-                         "Kalender (FOMC, EZB, NFP, CPI-Fenster) statt sie "
-                         "tippen zu lassen")
+                         "herum. Ohne Angabe (oder \"auto\") kommen sie aus "
+                         "dem eingebauten Kalender: FOMC, EZB, NFP, "
+                         "CPI-Fenster. \"none\" schaltet R4 ab")
     pa.add_argument("--source", default="manuell",
                     help="woher der Kurs stammt — wird mitprotokolliert")
     pa.add_argument("--equity", type=float, default=None,
@@ -1069,7 +1111,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="what account size does this instrument need?")
     mn.add_argument("symbol", nargs="?", default="XAUUSD")
     mn.add_argument("--equity", type=float, default=None,
-                    help="check a specific balance against the limits")
+                    help="check a specific balance against the limits. "
+                         "Interpreted as USD unless --eur is given")
+    mn.add_argument("--eur", action="store_true",
+                    help="--equity ist in Euro, nicht in Dollar")
+    mn.add_argument("--eur-usd", type=float, default=None, dest="eur_usd",
+                    help="abgelesener EUR/USD-Kurs fuer --eur; ohne Angabe "
+                         "wird 1,08 angenommen und als Annahme ausgewiesen")
     mn.add_argument("--timeframe", default="m5",
                     choices=("m5", "m15", "h1", "h4", "d1"))
     mn.add_argument("--min-lot", type=float, default=0.01,

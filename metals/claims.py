@@ -410,10 +410,15 @@ def margin_required(price: float, lot: float, leverage: float) -> float:
 # A1 -- how much account the strategy actually needs
 # --------------------------------------------------------------------------
 
-# The account is funded in euro and the contract settles in dollars. Stated
-# as an assumption rather than fetched, because the rate moves and the
-# conclusion here does not turn on the third decimal.
-ASSUMED_EUR_USD = 1.08
+# The account is funded in euro and the contract settles in dollars.
+#
+# One definition, imported from paper.py rather than repeated here. It used
+# to be declared twice with the same value and the same reassuring comment
+# about third decimals, which meant correcting one of them would have left
+# the other quietly disagreeing. A21 explains why the comment was wrong: the
+# rate does not cancel, and at 1.1476 rather than 1.08 both the forced risk
+# and the smallest viable account below move by about 6%.
+from .paper import ASSUMED_EUR_USD  # noqa: E402
 
 
 @dataclass

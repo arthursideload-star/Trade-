@@ -63,7 +63,8 @@ python -m metals check                          # Was ist erreichbar? Welche Ses
 python -m metals setups scalp                   # Der Scalping-Katalog S1–S6
 python -m metals ratio                          # Gold/Silber-Ratio und Regime
 python -m metals rules                          # Risikoregeln und Kontraktspezifikationen
-python -m metals minimum XAUUSD --equity 55     # Reicht mein Konto für dieses Metall?
+python -m metals minimum XAUUSD --equity 400 \
+    --eur --eur-usd 1.1476                      # Reicht mein Konto für dieses Metall?
 python -m metals journal                        # Was hat der EA getan — und was belegt das?
 python -m metals challenge --fee 500 --programm # Lohnt eine Fremdkapital-Challenge?
 python -m metals microscalp --markets 100        # 'Sofort schliessen wenn im Plus' messen
@@ -71,7 +72,8 @@ python -m metals claims                         # Was im Netz behauptet wird
 python -m metals claims --measure               # ... und was davon einer Messung standhält
 python -m metals dayrange --equity 432 --risk 1 # Strategie unter der 1-%-Regel
 python -m metals paper --price 4102.83 --high 4120.16 --low 4028.77 \
-    --spread 1.04 --news auto             # Papier-Sitzung, Konto laeuft fort
+    --spread 1.04 --eur-usd 1.1476        # Papier-Sitzung, Konto laeuft fort
+python -m metals paper --restate 1.1476          # Die Kette zu einem anderen Kurs lesen
 python -m metals paper --summary                 # Stand der Papier-Kette
 python -m metals paper --evidence                # Was die Trades belegen (mit Band)
 python -m metals paper --verify                  # Journal aus seinen Eingaben nachrechnen

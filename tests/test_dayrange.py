@@ -277,3 +277,60 @@ class TestTheTrainingLogStaysHonest(unittest.TestCase):
         models = {e.get("slippage_fraction", 0.0) for e in load_log()}
         if len(models) > 1:
             self.assertIn("Kostenmodelle", summarise())
+
+
+class TestTheCoverageTableDistinguishesActiveFromInert(unittest.TestCase):
+    """A23: "implemented" was covering two different things.
+
+    weekend_flat, daily_loss_limit, max_positions and min_range_atr are on by
+    default -- a caller who configures nothing is still protected by them.
+    R4 is not: news_times_utc defaults to empty and in_news_blackout returns
+    False on an empty tuple, so it blocks nothing until someone supplies
+    release times. In the paper ledger it was inert for 37 of the first 57
+    sessions.
+
+    Both read as "implemented" in a table whose entire purpose (A16) was to
+    stop rules going quietly missing. A rule that is switched off protects
+    exactly as much as a rule that was never written.
+    """
+
+    def test_every_status_is_one_of_the_declared_ones(self):
+        from metals.dayrange import undeclared_statuses
+        self.assertEqual(undeclared_statuses(), [],
+                         "a typo in a status silently drops a rule out of "
+                         "every query that filters on it")
+
+    def test_r4_is_declared_as_needing_input(self):
+        from metals.dayrange import rules_needing_input
+        self.assertIn("R4", rules_needing_input())
+
+    def test_r4_really_is_inert_on_a_default_config(self):
+        """Mechanical, not a declaration. If a future default switches R4 on,
+        this fails and the table has to be corrected -- which is the point:
+        the last three times this rule went missing, nothing noticed."""
+        from datetime import datetime, timezone
+        from metals.dayrange import DayRangeConfig, in_news_blackout
+        cfg = DayRangeConfig()
+        self.assertEqual(cfg.news_times_utc, ())
+        for hour in range(24):
+            for minute in (0, 15, 30, 45):
+                ts = datetime(2026, 7, 29, hour, minute, tzinfo=timezone.utc)
+                self.assertFalse(
+                    in_news_blackout(ts, cfg.news_times_utc),
+                    f"R4 fired at {hour:02d}:{minute:02d} with no times set")
+
+    def test_the_rules_declared_implemented_are_on_by_default(self):
+        """The other side of the same distinction: anything called
+        "implemented" must protect a caller who configures nothing."""
+        from metals.dayrange import DayRangeConfig
+        cfg = DayRangeConfig()
+        self.assertTrue(cfg.weekend_flat)          # M5
+        self.assertTrue(cfg.daily_loss_limit)      # R2
+        self.assertEqual(cfg.max_positions, 1)     # R6b
+        self.assertGreater(cfg.min_range_atr, 0)   # M1
+
+    def test_only_r4_needs_input(self):
+        """Narrow on purpose. If a second rule joins it, that is a decision
+        worth making deliberately rather than discovering later."""
+        from metals.dayrange import rules_needing_input
+        self.assertEqual(rules_needing_input(), ["R4"])

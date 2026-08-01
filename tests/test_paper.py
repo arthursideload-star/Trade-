@@ -1945,3 +1945,258 @@ class TestTheCalendarCanFillInR4(LedgerFixture):
                 "could_not_trade": "", "exits": {}, "signals": 3,
             }) + "\n")
         self.assertEqual(paper.load_ledger()[0].get("news_source", ""), "")
+
+
+class TestTheExchangeRateDoesNotCancel(LedgerFixture):
+    """A21: 1.08 was a constant, and the constant was wrong.
+
+    On 31 July 2026 the ECB reference rate was 1.1476. Every euro figure the
+    chain has published was computed at 1.08.
+
+    The reason this is not a rounding matter is the fixed lot. A 0.01-lot
+    position risks a number of *dollars* set by the stop distance, not by
+    what the account is worth in euro -- so a session's dollar result is
+    identical at any rate, and the euro result is that dollar figure divided
+    by the rate. The chain therefore scales as 1/rate: an error in the rate
+    is a proportional error in every euro number, not a third-decimal
+    quibble. Measured on the real ledger: -82.42 EUR, or -5.89% of the
+    reported gain.
+    """
+
+    def _session_at(self, rate: float):
+        return run_session(**TODAY, start_equity_eur=400.0, eur_usd=rate)
+
+    def test_the_dollar_result_is_the_same_at_every_rate(self):
+        """The load-bearing fact. If this ever stops holding, the scaling
+        argument below stops holding with it."""
+        usd = [round(self._session_at(r).pnl_eur * r, 2)
+               for r in (1.0, 1.08, 1.1476, 1.25)]
+        self.assertEqual(len(set(usd)), 1, f"dollar results differ: {usd}")
+
+    def test_a_higher_rate_shrinks_the_euro_result(self):
+        cheap = self._session_at(1.00).pnl_eur
+        dear = self._session_at(1.25).pnl_eur
+        self.assertGreater(abs(cheap), abs(dear))
+
+    def test_the_rate_is_recorded_on_the_session(self):
+        s = self._session_at(1.1476)
+        self.assertAlmostEqual(s.eur_usd, 1.1476)
+        self.assertTrue(s.eur_usd_observed)
+
+    def test_leaving_it_out_records_the_assumption_as_an_assumption(self):
+        s = run_session(**TODAY, start_equity_eur=400.0)
+        self.assertAlmostEqual(s.eur_usd, paper.ASSUMED_EUR_USD)
+        self.assertFalse(s.eur_usd_observed)
+
+    def test_a_nonsense_rate_is_refused_rather_than_dividing_by_zero(self):
+        for bad in (0.0, -1.1):
+            with self.subTest(rate=bad):
+                with self.assertRaises(paper.PriceInputError):
+                    run_session(**TODAY, start_equity_eur=400.0, eur_usd=bad)
+
+    def test_the_session_output_names_the_rate_and_its_status(self):
+        assumed = paper.render(run_session(**TODAY, start_equity_eur=400.0))
+        read = paper.render(self._session_at(1.1476))
+        self.assertIn("ANGENOMMEN", assumed)
+        self.assertIn("abgelesen", read)
+        self.assertIn("1.1476", read)
+
+
+class TestRestatingTheChain(LedgerFixture):
+    def _chain(self, pnls, rate=1.08):
+        equity = 400.0
+        for i, pnl in enumerate(pnls):
+            paper.append(Session(
+                index=i, timestamp=float(i), date_utc="2026-07-31 12:00",
+                gold_price=4_100.0, day_high=4_130.0, day_low=4_070.0,
+                price_source="t", start_equity_eur=round(equity, 2),
+                end_equity_eur=round(equity + pnl, 2), lot=MIN_LOT,
+                forced_risk_pct=1.0, trades=2, eur_usd=rate))
+            equity += pnl
+
+    def test_a_higher_rate_shrinks_a_gain(self):
+        self._chain([50.0, 50.0])
+        r = paper.restate(1.1476)
+        self.assertLess(r.restated_gain_eur, r.reported_gain_eur)
+        self.assertAlmostEqual(r.restated_gain_eur, 100.0 * 1.08 / 1.1476, 2)
+
+    def test_a_higher_rate_also_shrinks_a_loss(self):
+        """Not "makes it better" -- the same scaling, applied to a negative
+        number. A restatement that flattered losses would be worthless."""
+        self._chain([-50.0, -50.0])
+        r = paper.restate(1.1476)
+        self.assertGreater(r.restated_gain_eur, r.reported_gain_eur)
+        self.assertLess(r.restated_gain_eur, 0.0)
+
+    def test_restating_to_the_same_rate_changes_nothing(self):
+        self._chain([50.0, -20.0, 30.0])
+        r = paper.restate(1.08)
+        self.assertAlmostEqual(r.restated_end_eur, r.reported_end_eur, 2)
+        self.assertAlmostEqual(r.difference_eur, 0.0, 2)
+
+    def test_it_counts_how_many_rows_only_assumed_the_rate(self):
+        self._chain([10.0, 10.0])
+        r = paper.restate(1.1476)
+        self.assertEqual(r.rows_with_assumed_rate, 2)
+        self.assertEqual(r.sessions, 2)
+
+    def test_rows_at_different_rates_are_each_converted_from_their_own(self):
+        """Once the rate is looked up per session the ledger stops being
+        uniform, and converting everything from one rate would be wrong."""
+        paper.append(Session(index=0, timestamp=0.0,
+                             date_utc="2026-07-31 12:00", gold_price=4_100.0,
+                             day_high=4_130.0, day_low=4_070.0,
+                             price_source="t", start_equity_eur=400.0,
+                             end_equity_eur=500.0, lot=MIN_LOT,
+                             forced_risk_pct=1.0, trades=2, eur_usd=1.08))
+        paper.append(Session(index=1, timestamp=1.0,
+                             date_utc="2026-07-31 12:00", gold_price=4_100.0,
+                             day_high=4_130.0, day_low=4_070.0,
+                             price_source="t", start_equity_eur=500.0,
+                             end_equity_eur=600.0, lot=MIN_LOT,
+                             forced_risk_pct=1.0, trades=2, eur_usd=1.20,
+                             eur_usd_observed=True))
+        r = paper.restate(1.10)
+        expected = 400.0 + 100.0 * 1.08 / 1.10 + 100.0 * 1.20 / 1.10
+        self.assertAlmostEqual(r.restated_end_eur, round(expected, 2), 2)
+        self.assertEqual(r.rows_with_assumed_rate, 1)
+
+    def test_an_empty_ledger_says_so(self):
+        self.assertIn("Noch keine", paper.render_restatement(paper.restate(1.1)))
+
+    def test_a_nonsense_rate_is_refused(self):
+        with self.assertRaises(paper.PriceInputError):
+            paper.restate(0.0)
+
+    def test_the_summary_warns_while_rows_carry_an_assumption(self):
+        self._chain([50.0])
+        self.assertIn("ANGENOMMENEN", paper.summarise())
+
+    def test_the_summary_stops_warning_once_every_row_is_read(self):
+        paper.append(Session(index=0, timestamp=0.0,
+                             date_utc="2026-07-31 12:00", gold_price=4_100.0,
+                             day_high=4_130.0, day_low=4_070.0,
+                             price_source="t", start_equity_eur=400.0,
+                             end_equity_eur=450.0, lot=MIN_LOT,
+                             forced_risk_pct=1.0, trades=2, eur_usd=1.1476,
+                             eur_usd_observed=True))
+        self.assertNotIn("ANGENOMMENEN", paper.summarise())
+
+    def test_verification_uses_each_rows_own_rate(self):
+        """Verification reproduces a row from its own inputs. Substituting
+        today's rate would recompute a different session and then call the
+        difference an error."""
+        s = run_session(**TODAY, start_equity_eur=400.0, eur_usd=1.1476)
+        paper.append(s)
+        self.assertTrue(paper.verify().ok, paper.render_verify(paper.verify()))
+
+
+class TestTheRateChangesTheAnswerNotJustTheWording(LedgerFixture):
+    """A21's sharpest case: near the margin threshold the rate decides
+    whether a trade happens at all.
+
+    Above the threshold a wrong rate misreports -- the strategy takes the
+    same trades and the euro figures are scaled. At the threshold it does
+    something worse: 0.01 lot needs about 205 USD of margin, and whether a
+    given euro balance clears that depends entirely on the rate. At 1.08 a
+    180 EUR account is told it cannot trade. At the rate that actually
+    applied on 31 July 2026 it can.
+
+    "Reicht mein Konto?" is a question this project answers out loud. It was
+    answering it with a constant.
+    """
+
+    def test_above_the_threshold_only_the_reporting_changes(self):
+        runs = [run_session(**TODAY, start_equity_eur=400.0, eur_usd=r)
+                for r in (1.00, 1.08, 1.1476, 1.30)]
+        self.assertEqual(len({s.trades for s in runs}), 1)
+        self.assertEqual(len({round(s.expectancy_r, 6) for s in runs}), 1)
+
+    def test_the_reported_risk_per_trade_moves_with_the_rate(self):
+        """Not cosmetic: forced_risk_pct is the number the summary tells you
+        to read first."""
+        cheap = run_session(**TODAY, start_equity_eur=400.0, eur_usd=1.08)
+        dear = run_session(**TODAY, start_equity_eur=400.0, eur_usd=1.1476)
+        self.assertGreater(cheap.forced_risk_pct, dear.forced_risk_pct)
+
+    def test_at_the_threshold_the_rate_decides_whether_it_trades(self):
+        for equity in (180.0, 185.0):
+            with self.subTest(equity=equity):
+                blocked = run_session(**TODAY, start_equity_eur=equity,
+                                      eur_usd=1.08)
+                allowed = run_session(**TODAY, start_equity_eur=equity,
+                                      eur_usd=1.1476)
+                self.assertTrue(blocked.could_not_trade,
+                                "1.08 should price this account out")
+                self.assertFalse(allowed.could_not_trade,
+                                 "1.1476 should not")
+                self.assertGreater(allowed.trades, 0)
+
+    def test_well_above_the_threshold_both_rates_trade(self):
+        for rate in (1.08, 1.1476):
+            with self.subTest(rate=rate):
+                s = run_session(**TODAY, start_equity_eur=195.0, eur_usd=rate)
+                self.assertFalse(s.could_not_trade)
+
+
+class TestTheCalendarIsWhatHappensWhenNobodyChooses(LedgerFixture):
+    """A23: R4's default was "off", and off is where it stayed.
+
+    Three audit findings are the same rule failing to reach anything. A7:
+    the strategy never saw the blackout. A9: `--news` was wired to the wrong
+    function and did nothing for ten sessions. A20: the calendar behind it
+    had no FOMC in it. Each was fixed, and R4 was still inert in 37 of the
+    first 57 sessions -- because nothing was passed, and nothing is what an
+    empty tuple blocks.
+
+    So the calendar is now the default and switching R4 off is the thing
+    that has to be typed.
+    """
+
+    def _run(self, argv: list[str]) -> tuple[int, str]:
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from metals.cli import build_parser
+        args = build_parser().parse_args(argv)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = args.func(args)
+        return code, out.getvalue() + err.getvalue()
+
+    def _argv(self, *extra: str) -> list[str]:
+        return ["paper", "--price", "4105.62", "--high", "4137.85",
+                "--low", "4073.39", "--spread", "0.50", "--dry-run", *extra]
+
+    def _spy(self, argv):
+        captured: dict = {}
+        real = paper.run_session
+
+        def spy(**kwargs):
+            captured.update(kwargs)
+            return real(**kwargs)
+
+        with mock.patch.object(paper, "run_session", spy):
+            code, text = self._run(argv)
+        return captured, code, text
+
+    def test_saying_nothing_asks_the_calendar(self):
+        captured, code, text = self._spy(self._argv())
+        self.assertEqual(code, 0)
+        self.assertEqual(captured.get("news_source"), "kalender")
+        self.assertIn("Kalender", text)
+
+    def test_switching_it_off_has_to_be_typed_and_is_announced(self):
+        captured, code, text = self._spy(self._argv("--news", "none"))
+        self.assertEqual(code, 0)
+        self.assertEqual(captured.get("news_times_utc"), ())
+        self.assertEqual(captured.get("news_source"), "")
+        self.assertIn("ausgeschaltet", text)
+
+    def test_explicit_times_still_win_over_the_calendar(self):
+        captured, _, _ = self._spy(self._argv("--news", "09:45"))
+        self.assertEqual(captured.get("news_times_utc"), ((9, 45),))
+        self.assertEqual(captured.get("news_source"), "manuell")
+
+    def test_auto_is_still_accepted_explicitly(self):
+        captured, _, _ = self._spy(self._argv("--news", "auto"))
+        self.assertEqual(captured.get("news_source"), "kalender")
