@@ -24,6 +24,47 @@ from .sources.registry import SOURCES, coverage_report
 from .specs import SPECS, get_vol_profile
 
 
+# --- Input validation at the boundary --------------------------------------
+#
+# A29. Six commands answered a mistyped number with a Python traceback:
+# `stop --equity -100`, `stop --equity 0`, `size --equity 0`, `size --equity
+# -5`, `minimum FOOBAR` and `paper --restate 0`.
+#
+# The project already holds itself to the opposite standard on the file path
+# -- there is a test called "a missing file is reported, not traced" -- and
+# that standard was simply never applied to the numeric arguments. The
+# difference matters at exactly the wrong moment: somebody at their PC with
+# half an hour, one typo away from a wall of Python.
+#
+# These validate and return a sentence. They deliberately do NOT wrap the
+# commands in a blanket try/except: that would turn a real bug into a tidy
+# message too, and a bug that prints politely is a bug nobody reports.
+
+def _bad_equity(value: float | None, flag: str = "--equity") -> str | None:
+    """Message when an account balance cannot be used, else None."""
+    if value is None:
+        return None
+    if value != value or value in (float("inf"), float("-inf")):
+        return f"{flag} muss eine Zahl sein, nicht {value}."
+    if value <= 0:
+        return (f"{flag} muss groesser als null sein, war {value:g}.\n"
+                f"Ein Konto ohne Geld hat keine Positionsgroesse — die Regeln "
+                f"R1 und R2 rechnen\nbeide in Prozent davon.")
+    return None
+
+
+def _unknown_symbol(symbol: str) -> str | None:
+    """Message when the instrument is not one this package knows."""
+    if symbol in SPECS:
+        return None
+    known = ", ".join(sorted(SPECS))
+    return (f"Unbekanntes Instrument: {symbol}\n"
+            f"Bekannt sind: {known}\n"
+            f"Heisst es bei deinem Broker anders (GOLD, XAUUSD.r, XAUUSDm), "
+            f"nimm hier\ntrotzdem XAUUSD — die Kontraktgroesse ist dieselbe, "
+            f"und nur die zaehlt.")
+
+
 def cmd_analyse(args: argparse.Namespace) -> int:
     from .analyze import analyse
 
@@ -271,6 +312,11 @@ def cmd_stop(args: argparse.Namespace) -> int:
     """Should I keep trading right now?"""
     from .exits import DayState, session_advice
 
+    problem = _bad_equity(args.equity)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+
     account = AccountState(
         equity=args.equity,
         realised_pnl_today=args.pnl_today,
@@ -334,6 +380,19 @@ def cmd_minimum(args: argparse.Namespace) -> int:
     table than as advice.
     """
     from .specs import get_spec, get_vol_profile
+
+    problem = _unknown_symbol(args.symbol)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    if args.equity is not None:
+        # `if args.equity:` used to gate the account section, so --equity 0
+        # skipped it in silence -- the reader asked a question and got a
+        # generic table back with no indication their number was ignored.
+        problem = _bad_equity(args.equity)
+        if problem:
+            print(problem, file=sys.stderr)
+            return 2
 
     spec = get_spec(args.symbol)
     vol = get_vol_profile(args.symbol)
@@ -699,8 +758,12 @@ def cmd_paper(args: argparse.Namespace) -> int:
         print(render_review(review()))
         return 0
     if args.restate is not None:
-        from .paper import render_restatement, restate
-        print(render_restatement(restate(args.restate)))
+        from .paper import PriceInputError, render_restatement, restate
+        try:
+            print(render_restatement(restate(args.restate)))
+        except PriceInputError as exc:
+            print(f"--restate: {exc}", file=sys.stderr)
+            return 2
         return 0
     if args.provenance:
         from .paper import render_provenance
@@ -857,6 +920,11 @@ def cmd_rules(args: argparse.Namespace) -> int:
 
 
 def cmd_size(args: argparse.Namespace) -> int:
+    problem = _bad_equity(args.equity) or _unknown_symbol(args.symbol)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+
     account = AccountState(equity=args.equity, realised_pnl_today=args.pnl_today)
     atr_value = args.atr
     if atr_value is None:

@@ -1,0 +1,6 @@
+{
+  "folder": "10-Handelstage",
+  "format": "YYYY-MM-DD",
+  "template": "90-Vorlagen/Vorlage Handelstag",
+  "autorun": false
+}

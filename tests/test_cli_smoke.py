@@ -324,3 +324,83 @@ class TestMinimumStatesItsCurrency(unittest.TestCase):
         with redirect_stdout(io.StringIO()), redirect_stderr(err):
             code = args.func(args)
         self.assertEqual(code, 1)
+
+
+class TestNoCommandAnswersATypoWithATraceback(unittest.TestCase):
+    """A29. Six commands did, and the standard already existed elsewhere.
+
+    `tests/test_cli_smoke.py` has held the file path to "a missing file is
+    reported, not traced" since the history loader was written. The numeric
+    arguments were never held to it, so `stop --equity -100`,
+    `stop --equity 0`, `size --equity 0`, `size --equity -5`,
+    `minimum FOOBAR` and `paper --restate 0` each produced a wall of Python.
+
+    That is not a cosmetic complaint. The moment it happens is somebody at
+    their PC with half an hour and a mistyped number, and the difference
+    between a sentence and a traceback is whether they carry on.
+
+    This is a table rather than six tests on purpose: the value is that the
+    NEXT command added to this project is one line away from being covered.
+    """
+
+    # Every case is a plausible mistake, not a fuzzing artefact: a negative
+    # balance, a zero balance, an instrument named the way a broker names it.
+    BAD_INPUTS: list[list[str]] = [
+        ["stop", "--equity", "-100"],
+        ["stop", "--equity", "0"],
+        ["size", "XAUUSD", "--entry", "4100", "--stop", "4088",
+         "--target", "4130", "--equity", "0"],
+        ["size", "XAUUSD", "--entry", "4100", "--stop", "4088",
+         "--target", "4130", "--equity", "-5"],
+        ["size", "GOLD", "--entry", "4100", "--stop", "4088",
+         "--target", "4130", "--equity", "1000"],
+        ["minimum", "FOOBAR", "--equity", "400"],
+        ["minimum", "XAUUSD", "--equity", "0"],
+        ["minimum", "XAUUSD", "--equity", "-400"],
+        ["paper", "--restate", "0"],
+        ["paper", "--restate", "-1.1"],
+        ["paper", "--price", "4100", "--high", "4070", "--low", "4130",
+         "--spread", "0.3", "--dry-run"],
+        ["persistence", "--file", "/nope/missing.csv", "--tz", "utc"],
+        ["verdict", "--file", "/nope/missing.csv", "--tz", "utc"],
+        ["journal", "--file", "/nope/missing.csv"],
+    ]
+
+    def test_none_of_them_produces_a_traceback(self):
+        for argv in self.BAD_INPUTS:
+            with self.subTest(argv=" ".join(argv)):
+                out = run_command(argv)
+                self.assertNotIn("Traceback", out,
+                                 "a mistyped argument must produce a "
+                                 "sentence, not a stack")
+
+    def test_each_of_them_says_something(self):
+        """Silence is worse than a traceback: at least a traceback tells you
+        something went wrong. `minimum --equity 0` used to skip the account
+        section without a word, so the reader's number was ignored and
+        nothing said so."""
+        for argv in self.BAD_INPUTS:
+            with self.subTest(argv=" ".join(argv)):
+                self.assertTrue(run_command(argv).strip())
+
+    def test_a_refused_input_does_not_return_success(self):
+        """Exit code 0 on a refused input makes the command unusable in a
+        script -- and START-WINDOWS.bat is a script."""
+        for argv in self.BAD_INPUTS:
+            with self.subTest(argv=" ".join(argv)):
+                args = build_parser().parse_args(argv)
+                with redirect_stdout(io.StringIO()), \
+                     redirect_stderr(io.StringIO()):
+                    code = args.func(args)
+                self.assertNotEqual(code, 0)
+
+    def test_an_unknown_symbol_names_the_ones_that_work(self):
+        """Brokers call gold GOLD, XAUUSD.r or XAUUSDm. The message has to
+        say what to type instead, not just that this was wrong."""
+        out = run_command(["minimum", "XAUUSDm", "--equity", "400"])
+        self.assertIn("XAUUSD", out)
+        self.assertIn("XAGUSD", out)
+
+    def test_a_zero_balance_explains_why_that_cannot_work(self):
+        out = run_command(["stop", "--equity", "0"])
+        self.assertIn("R1", out)

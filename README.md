@@ -48,6 +48,16 @@ python -m metals verdict --file XAU_5m_data.csv --tz broker_gmt3 --equity 400
 
 Fünf Prüfungen, eine Empfehlung im Klartext — und sie darf **NICHT INSTALLIEREN** sagen.
 
+## Journal in Obsidian
+
+Ein fertiger Tresor liegt in **[obsidian/](./obsidian/)** — Obsidian öffnen, *Open folder as
+vault*, fertig. Keine Plugins nötig, Vorlagen und Tagesnotizen sind eingestellt.
+
+Er hält **Entscheidungen und Beobachtungen** fest, nicht Kennzahlen. Warum das der
+entscheidende Unterschied ist, steht in `obsidian/00-Start/Warum hier keine Zahlen stehen.md`
+— kurz: Ein wiederkehrendes Muster in den 29 Auditbefunden dieses Projekts ist eine Zahl,
+die in Fließtext kopiert wurde und dort alt geworden ist, ohne dass es auffiel.
+
 ## Im Chat
 
 ```

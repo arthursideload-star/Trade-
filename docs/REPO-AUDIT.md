@@ -536,6 +536,49 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A29 · Sechs Kommandos antworteten auf einen Tippfehler mit einem Python-Traceback — **behoben**
+
+Ein Robustheitsdurchgang über alle Kommandos mit unsinnigen, aber **plausiblen** Eingaben —
+nicht mit Fuzzing-Artefakten, sondern mit dem, was jemand tatsächlich eintippt:
+
+```
+  TRACEBACK  metals stop --equity -100
+  TRACEBACK  metals stop --equity 0
+  TRACEBACK  metals size XAUUSD --entry 4100 --stop 4088 --target 4130 --equity 0
+  TRACEBACK  metals size XAUUSD --entry 4100 --stop 4088 --target 4130 --equity -5
+  TRACEBACK  metals minimum FOOBAR --equity 400
+  TRACEBACK  metals paper --restate 0
+```
+
+Das Projekt hält sich beim **Dateipfad** seit Langem an den umgekehrten Standard — es gibt
+einen Test namens *„a missing file is reported, not traced"*. Auf die **Zahlen** wurde er nie
+angewandt.
+
+Der Zeitpunkt, an dem das weh tut, ist präzise vorhersagbar: jemand am eigenen Rechner mit
+einer halben Stunde Zeit, einen Tippfehler von einer Wand aus Python entfernt. `minimum FOOBAR`
+ist dabei kein konstruierter Fall — Broker nennen Gold `GOLD`, `XAUUSD.r` oder `XAUUSDm`.
+
+**Und ein stiller Fall dazu:** `minimum XAUUSD --equity 0` stürzte nicht ab, sondern
+überging den Konto-Abschnitt kommentarlos, weil `if args.equity:` bei 0 falsch ist. Der
+Leser stellte eine Frage und bekam eine allgemeine Tabelle zurück, ohne Hinweis darauf, dass
+seine Zahl ignoriert wurde. Das ist schlimmer als ein Traceback — der sagt wenigstens, dass
+etwas schiefging.
+
+**Behoben** mit zwei Prüffunktionen an der Grenze (`_bad_equity`, `_unknown_symbol`), die
+einen Satz zurückgeben und Rückgabecode 2. Ausdrücklich **kein** pauschales `try/except` um
+die Kommandos: Das würde einen echten Fehler ebenfalls in eine höfliche Meldung verwandeln,
+und ein Fehler, der höflich meldet, wird nie gemeldet.
+
+**Der strukturelle Teil** ist eine Tabelle statt sechs Tests
+(`TestNoCommandAnswersATypoWithATraceback`): vierzehn plausible Fehleingaben, drei
+Eigenschaften je Eingabe — kein Traceback, **eine Ausgabe überhaupt**, und **kein
+Rückgabecode 0**. Der letzte Punkt zählt, seit `START-WINDOWS.bat` existiert: Ein
+abgelehnter Aufruf, der 0 zurückgibt, ist in einem Skript unbrauchbar.
+
+Der Wert der Tabelle liegt darin, dass das **nächste** Kommando eine Zeile davon entfernt
+ist, mitgeprüft zu werden.
+
+
 ## A28 · Das Maß, auf das die PC-Anleitung eine Installationsentscheidung stützte, zeigt in die Gegenrichtung
 
 Beim Bau von `metals verdict` — dem einen Befehl, der morgen am PC die Frage aus A27
