@@ -707,29 +707,53 @@ class TestThePcGuideStaysTrue(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertIn(match.group(1), self.text)
 
-    def test_it_teaches_both_backtests_not_just_one(self):
+    def test_it_keeps_the_two_strategies_apart(self):
         """The likeliest mistake at the decisive moment.
 
-        `backtest --source file` tests the scalping setups S1-S6, which is
-        what the EA trades by default. `dayrange --file` tests the day-range
-        strategy, which is what PAPIER-LAUF.md and URTEIL.md are about and
-        which is switched *off* in the EA. Running the first and reading it
-        as evidence about the second is the natural error, and the guide
-        used to name only the first.
+        The scalping setups S1-S6 are what the EA trades by default. The
+        day-range strategy is what PAPIER-LAUF.md and URTEIL.md are about,
+        and it is switched *off* in the EA. Measuring the first and reading
+        it as evidence about the second is the natural error.
+
+        The guide used to fix this by naming two commands and warning "do not
+        confuse them". `metals verdict` fixes it better: it runs both and
+        reports them as separate, numbered steps, so there is nothing left to
+        confuse. What this test guards is the property, not the wording --
+        whichever way the guide teaches it, both strategies must be named and
+        told apart.
         """
         from metals.cli import build_parser
         parser = build_parser()
 
-        self.assertIn("python -m metals backtest --source file", self.text)
-        parser.parse_args(["backtest", "--source", "file", "--file",
-                           "XAU_5m_data.csv", "--tz", "broker_gmt3"])
+        self.assertIn("python -m metals verdict", self.text)
+        parser.parse_args(["verdict", "--file", "XAU_5m_data.csv",
+                           "--tz", "broker_gmt3", "--equity", "400"])
 
-        self.assertIn("python -m metals dayrange --file", self.text)
-        parser.parse_args(["dayrange", "--file", "XAU_5m_data.csv",
-                           "--tz", "broker_gmt3", "--equity", "1000",
-                           "--risk", "1"])
+        self.assertIn("S1", self.text)
+        self.assertIn("Tagesspanne", self.text)
+        self.assertIn("DR", self.text)
+        self.assertIn("standardmäßig", self.text)
+        self.assertIn("zwei verschiedene Strategien", self.text)
 
-        self.assertIn("Verwechsle die beiden nicht", self.text)
+    def test_it_leads_with_the_question_that_decides_everything(self):
+        """A27: nothing measured in this repo came from real data, and the
+        edge it did measure was a parameter of the generator. A setup guide
+        that starts with "install MetaTrader" has the order wrong."""
+        before_mt5 = self.text[:self.text.index("MetaTrader 5 installieren")]
+        self.assertIn("A27", before_mt5)
+        self.assertIn("verdict", before_mt5)
+
+    def test_it_names_the_double_click_entry_point(self):
+        """The starter script is the whole point of the rewrite: someone
+        with a CSV and half an hour should not have to assemble a research
+        programme out of a documentation page."""
+        import os
+        self.assertIn("START-WINDOWS.bat", self.text)
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for name in ("START-WINDOWS.bat", "start-mac-linux.sh"):
+            with self.subTest(name=name):
+                self.assertTrue(os.path.exists(os.path.join(root, name)),
+                                f"{name} is advertised but not in the repo")
 
     def test_it_does_not_send_a_pc_user_to_rent_a_vps(self):
         """The whole point of this file is that renting a server is not a

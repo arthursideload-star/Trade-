@@ -11,93 +11,91 @@ Kein VPS. Keine Miete. Kein Container, kein KasmVNC, kein `CUSTOM_USER`-Rätsel.
 
 ---
 
-## Vorher: Tag 1 gehört dem Backtest, nicht der Installation
+## Zuerst: ein Doppelklick, und du weißt, ob sich der Rest lohnt
 
-Bevor du irgendetwas installierst, beantworte die Frage, die alles andere entscheidet:
-**Funktioniert die Strategie auf echten Golddaten überhaupt?**
+Bevor du MetaTrader auch nur herunterlädst, beantworte die Frage, die alles andere
+entscheidet: **Funktioniert die Strategie auf echten Golddaten überhaupt?**
 
-Bisher gemessen wurde nur auf einem Marktsimulator, weil die Bauumgebung keinen Netzzugang
-hat — und dort war **jede** Konfiguration negativ
-([BACKTEST-ERGEBNISSE.md](../docs/BACKTEST-ERGEBNISSE.md)). Auf echten Daten ist das noch
-nicht geprüft. Das ist der offene Punkt O18, und du bist die erste Gelegenheit, ihn zu
-schließen.
+Der Grund, warum das zuerst kommt, steht in [REPO-AUDIT.md, A27](../docs/REPO-AUDIT.md).
+Kurz: Alles bisher Gemessene lief auf einem Marktsimulator, und der gemessene Vorteil ist
+im Wesentlichen die Ablesung **eines einzelnen Parameters dieses Simulators** — einer
+Rechenschutzplanke, die verhindern soll, dass erzeugte Kurse ins Absurde laufen. Setzt man
+sie auf null, ist die Kante weg. Der Simulator kann die Frage also nicht beantworten.
+Deine heruntergeladene Datei kann es.
 
-**Datei holen** (kostenlos, fertig als CSV):
-Kaggle → *„XAU/USD Gold Price Historical Data"* von `novandraanugrah` → `XAU_5m_data.csv`.
-Enthält 5-Minuten-Kerzen ab 2004. Alternativen und die Zeitzonenfallen:
+### Drei Schritte
+
+**1. Das Projekt holen.** Grüner Knopf *Code* → *Download ZIP* auf
+`github.com/arthursideload-star/Trade-`, entpacken. Oder, wenn Git da ist:
+
+```
+git clone https://github.com/arthursideload-star/Trade-.git
+```
+
+**2. Die Golddatei holen.** Kaggle → *„XAU/USD Gold Price Historical Data"* von
+`novandraanugrah` → `XAU_5m_data.csv`. Kostenlos, 5-Minuten-Kerzen ab 2004. Die Datei in
+denselben Ordner legen wie `START-WINDOWS.bat`. Alternativen und die Zeitzonenfallen:
 [DATENQUELLEN.md](../docs/DATENQUELLEN.md).
 
-**Laufen lassen — und zwar beides, das sind zwei verschiedene Strategien:**
+**3. `START-WINDOWS.bat` doppelklicken.**
+
+Das war es. Das Skript prüft Python, prüft das Paket, findet die Datei und rechnet. Fehlt
+etwas, sagt es, was fehlt und wo es herkommt. Auf Mac oder Linux stattdessen
+`./start-mac-linux.sh`.
+
+Wer lieber selbst tippt:
 
 ```bash
-# 1. Die Scalping-Setups S1-S6 (das, was der EA standardmaessig handelt)
-python -m metals backtest --source file --file XAU_5m_data.csv --tz broker_gmt3
-
-# 2. Die Tagesspanne-Strategie (das, was der Papier-Lauf misst)
-python -m metals dayrange --file XAU_5m_data.csv --tz broker_gmt3 \
-    --equity 1000 --risk 1
+python -m metals verdict --file XAU_5m_data.csv --tz broker_gmt3 --equity 400
 ```
 
-**Verwechsle die beiden nicht.** Der erste Befehl testet die Setups, die der EA ohne weitere
-Einstellung handelt. Der zweite testet die Strategie, über die
-[PAPIER-LAUF.md](../docs/PAPIER-LAUF.md) und [URTEIL.md](../docs/URTEIL.md) sprechen — Bewegung
-vorhersagen, bei der Hälfte schließen. Das ist die, die du beschrieben hast, und im EA ist sie
-als Setup „DR" **standardmäßig ausgeschaltet**.
+### Was dabei herauskommt
 
-Nur Befehl 1 laufen zu lassen und das Ergebnis auf den Papier-Lauf zu beziehen, wäre der
-naheliegendste Fehler an dieser Stelle.
+Fünf Prüfungen und eine Empfehlung im Klartext:
 
-Beim zweiten Befehl wird dir auffallen, dass er auf 1.000 € die allermeisten Signale ablehnt
-(in einem Testlauf: 886 von 924). Das ist kein Fehler, sondern die 1-%-Regel — die Rechnung
-dazu steht in [KONTOGROESSE.md](../docs/KONTOGROESSE.md).
+```
+  [JA ] 1. Die Datei                    geladen, Zeitzone plausibel
+  [   ] 2. Kehrt Gold zur Tagesmitte zurueck?     zur Einordnung
+  [JA ] 3. Ist Gold von einem Zufallspfad zu unterscheiden?
+  [?  ] 4. Was verdient die Tagesspanne-Strategie?
+  [NEIN] 5. Was verdienen die Scalping-Setups S1-S6?
 
-Der Lader erkennt das Format selbst und **prüft die Zeitzone gegen Golds bekanntes
-Volatilitätsprofil**. Kommt eine Warnung wie *„die volatilsten Stunden sind [0,1,4,6] UTC,
-normal sind 12–17"*, stimmt `--tz` nicht — dann `broker_gmt2` oder `utc` probieren, bis die
-Warnung verschwindet. Das ist kein Schönheitsfehler: Eine falsche Zeitzone verschiebt jede
+  EMPFEHLUNG: NOCH NICHT INSTALLIEREN
+```
+
+**Schritt 3 ist der wichtigste.** Er misst mit dem Varianzverhältnis-Test, ob Bewegungen
+zurückkommen oder weiterlaufen — und anders als der Hurst-Exponent hat er eine
+Nullverteilung, sagt also nicht nur eine Zahl, sondern ob sie etwas bedeutet.
+
+**Schritt 2 entscheidet bewusst nichts.** Der Anteil der Tage, die in der Mitte ihrer
+eigenen Spanne schließen, sah wie das billigste Maß für dieselbe Frage aus. Er ist es
+nicht: Auf 5-Minuten-Balken fällt er, wenn die Rückkehr steigt, auf 1-Minuten-Balken steigt
+er. Derselbe Generator, dieselben Tage, entgegengesetzte Antworten
+([A28](../docs/REPO-AUDIT.md)). Er steht noch da, weil er eine echte Beobachtung über deine
+Datei ist — aber er trägt keine Entscheidung.
+
+**Schritt 4 und 5 sind zwei verschiedene Strategien**, und sie zu verwechseln ist der
+naheliegendste Fehler an dieser Stelle. Schritt 5 misst die Setups S1–S6, die der EA
+**standardmäßig** handelt. Schritt 4 misst die Tagesspanne-Strategie, über die
+[PAPIER-LAUF.md](../docs/PAPIER-LAUF.md) und [URTEIL.md](../docs/URTEIL.md) sprechen — sie
+ist im EA als Setup „DR" **standardmäßig ausgeschaltet**.
+
+### Und was du dann tust
+
+| Empfehlung | Was sie bedeutet |
+|---|---|
+| **NICHT INSTALLIEREN** | Bewegungen laufen weiter statt zurückzukommen, und die Strategie zeigt keine Kante. Fertig. Das hat eine halbe Stunde gekostet statt einer Demo-Phase über Wochen. |
+| **NOCH NICHT INSTALLIEREN** | Kein Ergebnis in die eine oder andere Richtung — der häufigste Ausgang. Was hier nicht als Kante sichtbar ist, wird es durch eine Demo-Phase nicht. |
+| **INSTALLIEREN — im Advisor-Modus** | Die Kante ist auf echten Daten messbar. Erster Beleg dieses Projekts, der nicht vom Simulator kommt. Dann weiter mit dem Rest dieser Seite. |
+
+Kommt oben eine **Zeitzonen-Warnung** („die volatilsten Stunden sind [0,1,4,6] UTC, normal
+sind 12–17"), stimmt `--tz` nicht. Dann `broker_gmt2` oder `utc` probieren, bis die Warnung
+verschwindet. Das ist kein Schönheitsfehler: Eine falsche Zeitzone verschiebt jede
 Session-Regel und produziert einen plausibel aussehenden, falschen Backtest.
 
-**Was du dann liest:** nicht die Trefferquote, sondern den **Erwartungswert pro Trade**. Eine
-Quote von 68 % bei −0,18R ist keine Seltenheit, sondern der Normalfall, wenn die Kosten die
-Bruttokante auffressen. Der Report zeigt beides getrennt.
-
-- **Erwartungswert deutlich negativ** → nicht installieren. Dann ist der EA ein sehr
-  disziplinierter Weg, Geld zu verlieren, und die Arbeit gehört in die Setups.
-- **Um null herum** → installieren, aber im Advisor-Modus und ohne Eile.
-- **Deutlich positiv** → dann wird es interessant, und dann reden wir über die nächsten
-  Schritte.
-
-
-**Und der wichtigste Einzeltest, bevor du irgendeiner Zahl glaubst:**
-
-```bash
-python -c "
-from metals.sources.history import load
-from metals.claims import close_position_stats
-s, _ = load('XAU_5m_data.csv', 'broker_gmt3')
-st = close_position_stats(s)
-print(f'{st.days} Tage · {st.share_closing_mid*100:.0f}% schliessen mittig · Abstand {st.mean_distance_from_middle:.3f}')
-"
-```
-
-Das misst die **eine Annahme, auf der praktisch die gesamte gemessene Kante steht**: dass
-Gold innerhalb des Tages zur Mitte zurückkehrt. Der Simulator hat das eingebaut; schaltet
-man es ab, bleiben von +0,144 R noch +0,021 R ([URTEIL.md](../docs/URTEIL.md)).
-
-Vergleichswerte aus dem Simulator, 120 Tage je Zeile:
-
-| eingebaute Rückkehr | Tage mit Schluss in der Mitte | Abstand von der Mitte |
-|---|---:|---:|
-| voll (0,0020) | **32 %** | 0,227 |
-| schwach (0,0005) | 27 % | 0,259 |
-| keine (0,0000) | **23 %** | 0,266 |
-
-Liegt echtes Gold bei ~23 %, war die gemessene Kante der Generator. Liegt es bei ~32 %,
-ist die Annahme berechtigt. Dazwischen: entsprechend anteilig.
-
-Braucht nur Tageshoch, -tief und -schluss — keine Tickdaten.
-
-Erst danach das hier:
+**Was du liest, ist nicht die Trefferquote, sondern der Erwartungswert pro Trade.** Eine
+Quote von 68 % bei −0,18 R ist kein Sonderfall, sondern der Normalfall, wenn die Kosten die
+Bruttokante auffressen.
 
 ---
 

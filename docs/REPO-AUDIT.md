@@ -536,6 +536,78 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A28 · Das Maß, auf das die PC-Anleitung eine Installationsentscheidung stützte, zeigt in die Gegenrichtung
+
+Beim Bau von `metals verdict` — dem einen Befehl, der morgen am PC die Frage aus A27
+beantworten soll — sind zwei Tests fehlgeschlagen, die eigentlich nur die Verkabelung
+prüfen sollten. Der Fehler lag nicht in den Tests.
+
+`close_position_stats` misst den Anteil der Handelstage, die im **mittleren Drittel ihrer
+eigenen Tagesspanne** schließen. Eingeführt als C14, mit der Begründung, es sei „die
+billigste Statistik, die die Frage beantwortet" — und `mt5/PC-SETUP.md` forderte den Leser
+auf, daran zu entscheiden, ob er den Bot installiert:
+
+> Liegt echtes Gold bei ~23 %, war die gemessene Kante der Generator. Liegt es bei ~32 %,
+> ist die Annahme berechtigt.
+
+Gegen den Generator gemessen, dessen Rückkehr-Parameter man ja kennt:
+
+| `reversion` | 5-Minuten-Balken | 1-Minuten-Balken |
+|---:|---:|---:|
+| 0,0000 | **40,9 %** | 36,4 % |
+| 0,0005 | 38,6 % | 43,2 % |
+| 0,0010 | 40,9 % | 43,2 % |
+| 0,0020 | 38,6 % | 47,7 % |
+| 0,0040 | 31,8 % | 52,3 % |
+| 0,0080 | **27,3 %** | **61,4 %** |
+
+**Auf 1-Minuten-Balken steigt der Wert mit der Rückkehr. Auf 5-Minuten-Balken fällt er.**
+Derselbe Generator, dieselben 44 Tage, entgegengesetzte Antworten. Und die Kaggle-Datei,
+die die Anleitung empfiehlt, ist eine **5-Minuten**-Datei — also genau die Zeitebene, auf
+der das Maß in die falsche Richtung zeigt.
+
+Auch die Referenzwerte selbst (23 % / 32 %) reproduzieren nicht: Auf 5m ergaben sich
+40,9 % ohne Rückkehr und 27,3 % mit starker.
+
+### Was stattdessen entscheidet
+
+Der Varianzverhältnis-Test aus A27, und zwar weil er die Eigenschaft hat, die dem anderen
+Maß fehlt — er ist **auf beiden Zeitebenen monoton und in derselben Richtung**:
+
+| `reversion` | 5m: VR(8) / z | 1m: VR(8) / z |
+|---:|---:|---:|
+| 0,0000 | 0,921 / −2,06 | 0,955 / −2,39 |
+| 0,0020 | 0,912 / −2,32 | 0,944 / −2,96 |
+| 0,0080 | **0,880 / −3,15** | **0,930 / −3,72** |
+
+Mehr Rückkehr, niedrigeres Verhältnis, negativeres z. Auf jeder Zeitebene.
+
+**Behoben.** Schritt 2 in `metals verdict` bleibt drin — er ist eine echte Beobachtung über
+die Datei des Nutzers —, ist aber auf `info` herabgestuft, trägt keine Entscheidung und
+nennt seine eigene Unzuverlässigkeit im Klartext. Schritt 3 beantwortet die Frage.
+`mt5/PC-SETUP.md` ist entsprechend umgeschrieben.
+
+### Und ein Fehler, den ich beim Beheben fast eingebaut hätte
+
+Beim Umbau der Entscheidungslogik stand kurz da:
+
+```python
+no_reversion = walk.status != "ok" and "richtige Richtung" not in walk.headline
+if no_reversion and day.status != "ok":
+    v.recommendation = "NICHT INSTALLIEREN"
+```
+
+Das heißt: „Der Varianztest hat den Zufallspfad nicht verworfen" wird zu „Gold kehrt nicht
+zurück". Das ist **Abwesenheit von Belegen als Beleg für Abwesenheit** — exakt der Fehler,
+gegen den dieses Projekt seine gesamte Bandbreiten-Disziplin aufgebaut hat, eingebaut in
+ausgerechnet das Werkzeug, das die Installationsempfehlung ausspricht.
+
+Ein Test hat es gefangen (`test_failing_to_reject_is_not_treated_as_a_refutation`). Die
+Bedingung ist jetzt eng: Nur eine Verwerfung **in die falsche Richtung** — Bewegungen, die
+weiterlaufen, während die Strategie auf Rückkehr setzt — widerspricht der Prämisse. Alles
+andere ist unentschieden und landet bei „NOCH NICHT INSTALLIEREN".
+
+
 ## A27 · Die gemessene Kante ist eine Schutzplanke im Simulator
 
 Das ist der schwerwiegendste Befund dieses Repositories, und er betrifft **jede Zahl**, die

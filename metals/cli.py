@@ -1133,6 +1133,21 @@ def build_parser() -> argparse.ArgumentParser:
                     help="specific stop distances in USD per ounce")
     mn.set_defaults(func=cmd_minimum)
 
+    vd = sub.add_parser("verdict",
+                        help="der eine Befehl fuer echte Historie: lohnt es "
+                             "sich, den Bot ueberhaupt zu installieren?")
+    vd.add_argument("--file", default=None, help="heruntergeladene Historie")
+    vd.add_argument("--tz", default=None, help="Zeitzone der Datei — Pflicht")
+    vd.add_argument("--symbol", default="XAUUSD")
+    vd.add_argument("--file-timeframe", default="5m", dest="file_timeframe")
+    vd.add_argument("--equity", type=float, default=400.0,
+                    help="Kontostand in Euro, den du tatsaechlich einsetzen "
+                         "wuerdest")
+    vd.add_argument("--eur-usd", type=float, default=1.1476, dest="eur_usd")
+    vd.add_argument("--spread", type=float, default=0.34,
+                    help="dein abgelesener Spread in USD/oz")
+    vd.set_defaults(func=cmd_verdict)
+
     pe = sub.add_parser("persistence",
                         help="bleibt die Bewegung, oder kommt sie zurueck?")
     pe.add_argument("--file", default=None,
@@ -1260,3 +1275,41 @@ def cmd_persistence(args: argparse.Namespace) -> int:
         print("    python -m metals persistence --file XAU_5m_data.csv "
               "--tz broker_gmt3")
     return 0
+
+
+def cmd_verdict(args: argparse.Namespace) -> int:
+    """The one command for the day the downloaded history arrives."""
+    from .sources.history import HistoryError, load
+    from .verdict import render, run_verdict
+
+    if not args.file:
+        print("`verdict` braucht eine heruntergeladene Historie:\n"
+              "  python -m metals verdict --file XAU_5m_data.csv "
+              "--tz broker_gmt3\n\n"
+              "Woher die Datei kommt: docs/DATENQUELLEN.md. Ohne sie kann "
+              "dieses Projekt\nseine eigene Kernfrage nicht beantworten — "
+              "siehe docs/REPO-AUDIT.md, A27.", file=sys.stderr)
+        return 2
+    if not args.tz:
+        print("--file braucht --tz. Es gibt bewusst keine Vorgabe: die "
+              "falsche Zeitzone\nverschiebt jede Sessionregel lautlos und "
+              "erzeugt einen plausibel aussehenden,\nfalschen Backtest.\n"
+              "  Dukascopy / EODHD / Twelve Data -> utc\n"
+              "  HistData                        -> us_eastern_no_dst\n"
+              "  MetaTrader / Kaggle-Export      -> broker_gmt3 (oder gmt2)",
+              file=sys.stderr)
+        return 2
+
+    try:
+        series, report = load(args.file, args.tz, args.symbol,
+                              args.file_timeframe)
+    except HistoryError as exc:
+        print(f"could not load {args.file}: {exc}", file=sys.stderr)
+        return 1
+
+    print(report.render())
+    v = run_verdict(series, equity_eur=args.equity, eur_usd=args.eur_usd,
+                    spread_usd_oz=args.spread,
+                    load_warnings=tuple(report.warnings))
+    print(render(v))
+    return 1 if v.recommendation.startswith("NICHT") else 0

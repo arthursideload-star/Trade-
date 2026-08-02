@@ -56,7 +56,7 @@ class TestEverySubcommandIsReachable(unittest.TestCase):
             {"analyse", "backtest", "challenge", "check", "claims", "dayrange",
              "journal", "microscalp", "minimum", "paper", "persistence",
              "quote", "ratio", "rules", "setups", "size", "sources", "stop",
-             "train"},
+             "train", "verdict"},
             "a command was added or removed without updating this test, "
             "which is the file that decides whether it gets smoke coverage")
 
@@ -87,6 +87,9 @@ SMOKE_ARGS: dict[str, list[str]] = {
     "journal": ["journal"],
     "paper": ["paper", "--summary"],
     "persistence": ["persistence", "--bars", "2000"],
+    # No file: the refusal path is the one that runs offline, and it is the
+    # path a user hits first.
+    "verdict": ["verdict"],
     "train": ["train", "--summary"],
 }
 

@@ -29,6 +29,25 @@ mehreren, sondern der einzige, der zählt — siehe unten.
 > python -m metals persistence --file XAU_5m_data.csv --tz broker_gmt3
 > ```
 
+## Am PC starten — ein Doppelklick
+
+```
+START-WINDOWS.bat          (Windows)
+./start-mac-linux.sh       (macOS / Linux)
+```
+
+Prüft Python, prüft das Paket, sucht `XAU_5m_data.csv` und fällt das Urteil. Fehlt etwas,
+sagt es, was fehlt und wo es herkommt. Vollständige Anleitung:
+**[mt5/PC-SETUP.md](./mt5/PC-SETUP.md)**.
+
+Der Befehl dahinter, für alle, die lieber tippen:
+
+```bash
+python -m metals verdict --file XAU_5m_data.csv --tz broker_gmt3 --equity 400
+```
+
+Fünf Prüfungen, eine Empfehlung im Klartext — und sie darf **NICHT INSTALLIEREN** sagen.
+
 ## Im Chat
 
 ```
