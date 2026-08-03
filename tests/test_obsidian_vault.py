@@ -94,9 +94,34 @@ class TestTheVaultIsIntact(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(VAULT, cfg["folder"])))
 
     def test_every_folder_a_reader_lands_in_explains_itself(self):
-        for folder in ("10-Handelstage", "20-Wissen", "30-Entscheidungen"):
-            with self.subTest(folder=folder):
-                self.assertIn(f"{folder}/README.md", self.notes)
+        """Derived from the folders on disk rather than listed, so a folder
+        added later cannot arrive without a note telling the reader what it
+        is for. `00-Start` and `01-Strategie` carry named entry notes
+        instead of a README, which is the same thing with a better title."""
+        named_entry = {"00-Start", "01-Strategie", "02-Regeln", "90-Vorlagen"}
+        for entry in sorted(os.listdir(VAULT)):
+            path = os.path.join(VAULT, entry)
+            if not os.path.isdir(path) or entry == ".obsidian":
+                continue
+            if entry in named_entry:
+                with self.subTest(folder=entry):
+                    self.assertTrue(
+                        any(k.startswith(entry + os.sep) for k in self.notes),
+                        f"{entry} has no notes at all")
+                continue
+            with self.subTest(folder=entry):
+                self.assertIn(f"{entry}/README.md", self.notes,
+                              f"{entry} has no README, so a reader landing "
+                              f"there has to guess what it is for")
+
+    def test_the_generated_trade_index_exists_before_the_first_export(self):
+        """The vault links to [[Alle Trades]] from several places. If that
+        note only appears after the first export, every one of those links
+        is dead in a fresh checkout -- and Obsidian shows a dead link as
+        ordinary text, so nobody notices."""
+        self.assertIn("05-Trades/Alle Trades.md", self.notes)
+        self.assertIn("Noch kein Export gelaufen",
+                      self.notes["05-Trades/Alle Trades.md"])
 
 
 class TestTheVaultKeepsItsOwnRule(unittest.TestCase):

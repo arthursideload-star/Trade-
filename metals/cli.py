@@ -1201,6 +1201,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="specific stop distances in USD per ounce")
     mn.set_defaults(func=cmd_minimum)
 
+    va = sub.add_parser("vault",
+                        help="die Trades des EA als Notizen in den "
+                             "Obsidian-Tresor schreiben")
+    va.add_argument("--journal", default="GoldScalpAssistant.csv",
+                    help="die CSV, die der EA in MQL5/Files schreibt")
+    va.add_argument("--vault", default="obsidian",
+                    help="Pfad zum Obsidian-Tresor")
+    va.set_defaults(func=cmd_vault)
+
     vd = sub.add_parser("verdict",
                         help="der eine Befehl fuer echte Historie: lohnt es "
                              "sich, den Bot ueberhaupt zu installieren?")
@@ -1381,3 +1390,22 @@ def cmd_verdict(args: argparse.Namespace) -> int:
                     load_warnings=tuple(report.warnings))
     print(render(v))
     return 1 if v.recommendation.startswith("NICHT") else 0
+
+
+def cmd_vault(args: argparse.Namespace) -> int:
+    """Write the EA's trades into the Obsidian vault, one note each."""
+    from .journal import JournalError
+    from .vault import export, render_result
+
+    if not os.path.isdir(args.vault):
+        print(f"Vault-Ordner nicht gefunden: {args.vault}\n"
+              f"Im Repo liegt er unter `obsidian/`. Liegt deiner woanders, "
+              f"gib ihn mit\n--vault <Pfad> an.", file=sys.stderr)
+        return 2
+    try:
+        result = export(args.journal, args.vault)
+    except JournalError as exc:
+        print(f"Journal nicht lesbar: {exc}", file=sys.stderr)
+        return 1
+    print(render_result(result))
+    return 0

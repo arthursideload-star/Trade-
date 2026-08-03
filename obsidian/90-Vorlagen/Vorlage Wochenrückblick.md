@@ -43,6 +43,6 @@ das sagt, **schreib es hier hin**, statt es zu überlesen:
 ## Braucht das Repo eine Änderung?
 
 Wenn dir etwas aufgefallen ist, das im Code oder in den Regeln falsch ist:
-→ neue Notiz in [[30-Entscheidungen]], dann im Chat ansprechen.
+→ neue Notiz in [[06-Entscheidungen]], dann im Chat ansprechen.
 
 - 

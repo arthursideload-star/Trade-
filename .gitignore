@@ -14,3 +14,12 @@ venv/
 # Local journal data (contains account figures)
 journal/
 *.journal.json
+
+# Generated trade notes. They are the user's own record, written by
+# `python -m metals vault` from their EA journal -- checking them in would
+# put one person's trades into everyone's checkout. The index and the README
+# are tracked, because the vault links to them and Obsidian shows a dead
+# link as ordinary text.
+obsidian/05-Trades/*.md
+!obsidian/05-Trades/README.md
+!obsidian/05-Trades/Alle Trades.md

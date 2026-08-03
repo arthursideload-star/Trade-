@@ -32,14 +32,37 @@ python -m metals journal            # was der EA getan hat
 python -m metals stop --equity 400  # darf ich gerade handeln?
 ```
 
+## Der Trade-Ordner füllt sich selbst
+
+`05-Trades/` ist der Grund, warum dieser Tresor mehr ist als ein Notizbuch. Jeder
+abgeschlossene Trade des EA bekommt eine eigene Notiz:
+
+```bash
+python -m metals vault --journal GoldScalpAssistant.csv
+```
+
+Mit Einstieg, Stop, Ziel, Ausstiegsgrund, Haltedauer, **Spread beim Einstieg** und Ergebnis
+in R — als durchsuchbare, verlinkbare Notiz statt als CSV-Zeile.
+
+**Deine eigenen Notizen bleiben erhalten.** Jede Trade-Notiz hat einen Block
+*„Was ich dazu weiß"*. Der Export liest ihn vor dem Überschreiben aus und setzt ihn danach
+wieder ein — du kannst also jede Woche gefahrlos neu exportieren.
+
+Damit lässt sich nach dreißig Trades fragen: *Welche sind am Stop gestorben und hatten
+gleichzeitig einen Spread über 0,40 $/oz?* Aus Fehlern lernen setzt voraus, dass man sie
+wiederfindet.
+
 ## Aufbau
 
 | Ordner | Inhalt |
 |---|---|
-| `00-Start` | Einstieg und die drei Notizen, die man wirklich lesen sollte |
-| `10-Handelstage` | Eine Notiz je Tag — auch an Tagen ohne Trade |
-| `20-Wissen` | Deine eigenen Erkenntnisse, nicht die aus `docs/` |
-| `30-Entscheidungen` | Warum etwas so ist, wie es ist |
+| `00-Start` | Einstieg |
+| `01-Strategie` | **Was der Bot macht** und was noch offen ist |
+| `02-Regeln` | Die harten Grenzen und warum es sie gibt |
+| `03-Wissen` | Deine eigenen Erkenntnisse, nicht die aus `docs/` |
+| `04-Handelstage` | Eine Notiz je Tag — auch an Tagen ohne Trade |
+| `05-Trades` | **Füllt sich selbst** aus dem Journal des EA |
+| `06-Entscheidungen` | Warum etwas so ist, wie es ist |
 | `90-Vorlagen` | Vorlagen für Handelstag, Wochenrückblick, Entscheidung |
 
 ## Wenn du ihn woanders haben willst

@@ -56,7 +56,7 @@ class TestEverySubcommandIsReachable(unittest.TestCase):
             {"analyse", "backtest", "challenge", "check", "claims", "dayrange",
              "journal", "microscalp", "minimum", "paper", "persistence",
              "quote", "ratio", "rules", "setups", "size", "sources", "stop",
-             "train", "verdict"},
+             "train", "vault", "verdict"},
             "a command was added or removed without updating this test, "
             "which is the file that decides whether it gets smoke coverage")
 
@@ -90,6 +90,8 @@ SMOKE_ARGS: dict[str, list[str]] = {
     # No file: the refusal path is the one that runs offline, and it is the
     # path a user hits first.
     "verdict": ["verdict"],
+    # Refusal path again: no journal file exists in a fresh checkout.
+    "vault": ["vault", "--journal", "/nope/j.csv"],
     "train": ["train", "--summary"],
 }
 
@@ -364,6 +366,8 @@ class TestNoCommandAnswersATypoWithATraceback(unittest.TestCase):
         ["persistence", "--file", "/nope/missing.csv", "--tz", "utc"],
         ["verdict", "--file", "/nope/missing.csv", "--tz", "utc"],
         ["journal", "--file", "/nope/missing.csv"],
+        ["vault", "--journal", "/nope/j.csv"],
+        ["vault", "--journal", "/nope/j.csv", "--vault", "/nope/vault"],
     ]
 
     def test_none_of_them_produces_a_traceback(self):
