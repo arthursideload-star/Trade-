@@ -817,3 +817,77 @@ class TestSetupGuideStaysTrue(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheEaRefusesTheWrongChart(unittest.TestCase):
+    """A30. It ran on EURUSD H1 and drew its panel as if nothing was wrong.
+
+    The check existed and was a `Print`. That is not protection: nobody
+    reads the Experts log to find out whether the thing they just started is
+    doing what they think it is. Meanwhile every calculation in the file
+    reads `_Symbol` -- the ATR bands (2-12 USD/oz), the ten-dollar
+    round-number grid, the position sizing -- and on a pair quoted at 1.15
+    they produce numbers that are nonsense without being errors.
+
+    Found from a screen recording: MetaEditor said "(Debugging)" in its
+    title bar and the chart said "GoldScalpAssistant (Debugging)" on
+    EURUSD,H1. Pressing F5 rather than F7 starts a debug session on
+    MetaEditor's default symbol and timeframe, so the EA lands somewhere the
+    user never chose. The EA cannot stop that from happening. It can refuse
+    to pretend it is fine.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            cls.src = fh.read()
+
+    def test_a_non_gold_symbol_is_refused_not_warned_about(self):
+        block = self.src[self.src.index('StringFind(_Symbol, "XAU")'):]
+        block = block[:block.index("if(!AccountInfoInteger")]
+        self.assertIn("INIT_PARAMETERS_INCORRECT", block,
+                      "the wrong symbol has to stop OnInit, not print")
+        self.assertIn("REFUSED", block)
+
+    def test_the_refusal_is_visible_without_opening_a_log(self):
+        """A message only in the Experts tab is a message nobody sees at the
+        moment it matters."""
+        block = self.src[self.src.index('StringFind(_Symbol, "XAU")'):]
+        block = block[:block.index("if(!AccountInfoInteger")]
+        self.assertIn("Alert(", block)
+
+    def test_it_names_the_symbols_a_broker_might_use(self):
+        block = self.src[self.src.index('StringFind(_Symbol, "XAU")'):]
+        block = block[:block.index("if(!AccountInfoInteger")]
+        for name in ("XAUUSD.r", "XAUUSDm", "GOLD"):
+            with self.subTest(name=name):
+                self.assertIn(name, block,
+                              "a refusal that does not say what to type "
+                              "instead just moves the problem")
+
+    def test_the_accepted_substrings_still_cover_the_common_names(self):
+        """The check is a substring match, so it has to actually match the
+        names the message promises."""
+        for name in ("XAUUSD", "XAUUSD.r", "XAUUSDm", "GOLD", "GOLD.spot"):
+            with self.subTest(name=name):
+                self.assertTrue("XAU" in name or "GOLD" in name)
+        for name in ("EURUSD", "GBPUSD", "US500"):
+            with self.subTest(name=name):
+                self.assertFalse("XAU" in name or "GOLD" in name)
+
+    def test_a_wrong_timeframe_is_a_note_and_not_a_refusal(self):
+        """Everything asks CopyRates for PERIOD_M5 explicitly, so an H1
+        chart computes identical numbers. Refusing it would be a lie about
+        what the code does; saying nothing leaves the panel disagreeing with
+        the candles for no visible reason."""
+        self.assertIn("_Period != PERIOD_M5", self.src)
+        block = self.src[self.src.index("_Period != PERIOD_M5"):]
+        block = block[:block.index("if(!AccountInfoInteger")]
+        self.assertNotIn("INIT_", block)
+        self.assertIn("NOTE:", block)
+
+    def test_every_price_series_really_is_m5(self):
+        """The claim the note above rests on. If a CopyRates ever asks for
+        PERIOD_CURRENT, the chart timeframe stops being cosmetic and the note
+        becomes wrong."""
+        self.assertNotIn("PERIOD_CURRENT", self.src)

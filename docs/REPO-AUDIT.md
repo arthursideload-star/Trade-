@@ -536,6 +536,67 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A30 · Der EA lief auf EURUSD und zeichnete sein Panel, als wäre alles in Ordnung — **behoben**
+
+Aus einer Bildschirmaufnahme vom 03.08.2026, 01:20 Uhr. Der Nutzer meldete, „der Bot öffnet
+immer das Falsche".
+
+### Was auf dem Video zu sehen ist
+
+- MetaEditor-Titelleiste: **„MetaEditor (Debugging)"**, unten der Reiter **Debug** aktiv
+- MT5-Titelleiste: **`<deine Kontonummer> - MetaQuotes-Demo: Demokonto - Hedge - MetaQuotes Ltd. - [EURUSD,H1]`**
+- oben rechts im Chart: **„GoldScalpAssistant (Debugging)"**
+- der Dialog: **„GoldScalpAssistant 1.10 (EURUSD,H1)"**
+- ein **XAUUSD,M5**-Chart existiert als zweiter Reiter — ohne EA darauf
+
+**Ursache:** **F5 statt F7.** F7 kompiliert, F5 startet eine Debug-Sitzung — und die legt
+einen Chart mit dem *Debug-Standardsymbol* an, meist EURUSD H1, und hängt den EA dort an.
+Nicht auf den Chart, den der Nutzer offen hatte. Die Tasten liegen nebeneinander.
+
+Das kann der EA nicht verhindern. Was er verhindern kann, ist so zu tun, als wäre es in
+Ordnung — und genau das hat er getan:
+
+```mql5
+if(StringFind(_Symbol, "XAU") < 0 && StringFind(_Symbol, "GOLD") < 0)
+   Print("WARNING: this EA is built for gold. ...");
+```
+
+**Eine Warnung in ein Log, das niemand liest, ist kein Schutz.** Niemand öffnet den
+Experten-Reiter, um herauszufinden, ob das gerade Gestartete das tut, was er denkt.
+
+Und die Folge ist nicht kosmetisch: Alles im EA liest `_Symbol`. Auf EURUSD laufen die
+ATR-Bänder (2–12 $/oz), das Zehn-Dollar-Raster für runde Zahlen und die gesamte
+Positionsgrößen-Arithmetik gegen einen Kurs von **1,15**. Nichts wirft einen Fehler — es
+rechnet Unsinn. Im Auto-Modus hätte es ihn platziert.
+
+**Behoben:** `INIT_PARAMETERS_INCORRECT` plus ein `Alert()`, das nicht im Log versauert. Die
+Meldung nennt die Symbolnamen, die akzeptiert werden (XAUUSD, XAUUSD.r, XAUUSDm, GOLD) —
+eine Verweigerung, die nicht sagt, was man stattdessen tippen soll, verschiebt das Problem
+nur.
+
+### Der Zeitrahmen dagegen ist wirklich egal — und das stand falsch in der Anleitung
+
+`mt5/PC-SETUP.md` schrieb: „Oben den Zeitrahmen auf **M5** stellen. **Pflicht** — der EA
+rechnet auf M5." Der zweite Halbsatz stimmt, der erste folgt nicht daraus: **Jede**
+Kursabfrage im EA fragt ausdrücklich nach `PERIOD_M5`, unabhängig vom Chart. Auf H1 sind die
+Zahlen also **richtig** — sie passen nur nicht zu den Kerzen daneben.
+
+Deshalb dort eine Notiz statt einer Verweigerung. Eine Verweigerung wäre eine Falschaussage
+darüber, was der Code tut. Ein Test hält fest, dass `PERIOD_CURRENT` nirgends vorkommt —
+sobald das kippt, wird die Notiz falsch.
+
+### Und der zweite gemeldete Fehler war keiner
+
+„Einloggen bei MetaTrader 5 geht nicht." Die Titelleiste zeigt die Kontonummer, den Broker
+und ein Demokonto, die Verbindungsbalken unten rechts sind grün mit `3684 / 4 Kb`, und
+Goldkurse laufen. **Das Handelskonto ist verbunden.**
+
+Was nicht ging, war mit hoher Wahrscheinlichkeit das **MQL5-Community-Konto** — ein
+separates Konto auf mql5.com für Market, Signale und das eingebaute VPS. Für den EA wird es
+**nicht** gebraucht, für MT5-eigenes *Virtual Hosting* dagegen schon. Die Unterscheidung
+steht jetzt als Tabelle in `PC-SETUP.md`, weil sie ständig verwechselt wird.
+
+
 ## A29 · Sechs Kommandos antworteten auf einen Tippfehler mit einem Python-Traceback — **behoben**
 
 Ein Robustheitsdurchgang über alle Kommandos mit unsinnigen, aber **plausiblen** Eingaben —

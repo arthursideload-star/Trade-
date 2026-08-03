@@ -133,6 +133,22 @@ Start.
 > mögliche Position wäre über dem 1 %-Risikolimit. Warum das so ist:
 > `python -m metals minimum XAUUSD --equity 55`.
 
+> ### Zwei verschiedene Logins — das wird ständig verwechselt
+>
+> | | Was es ist | Brauchst du es? |
+> |---|---|---|
+> | **Handelskonto** | Die Nummer, die MT5 dir gerade gegeben hat (z. B. `<deine Kontonummer>`), Broker `MetaQuotes-Demo` | **Ja.** Ohne das läuft nichts |
+> | **MQL5-Community-Konto** | Ein separates Konto auf mql5.com, für Market, Signale und das eingebaute VPS | **Nein**, nicht für den EA |
+>
+> Wenn „das Einloggen nicht geht", ist es fast immer das **zweite**. Der EA braucht es
+> nicht. Erkennen kannst du das an der **Titelleiste**: Steht dort deine Kontonummer und
+> `MetaQuotes-Demo`, ist das Handelskonto verbunden — fertig.
+>
+> **Für den VPS wird es allerdings gebraucht:** Das eingebaute *Virtual Hosting* in MT5
+> (Knopf **VPS** unten rechts) setzt ein MQL5-Community-Konto voraus. Dafür dann auf
+> [mql5.com](https://www.mql5.com) registrieren. Ein gemieteter Windows-VPS braucht es
+> nicht — siehe [VPS-SETUP.md](./VPS-SETUP.md).
+
 Unten rechts in MT5 muss jetzt eine Verbindung mit Zahlen (kb/s) stehen. Steht dort „Keine
 Verbindung", stimmt etwas mit dem Internet nicht.
 
@@ -161,7 +177,31 @@ doppelklicken → oben auf **Kompilieren** (oder **F7**).
 
 Unten muss stehen: **`0 errors, 0 warnings`**.
 
-- Steht das da → weiter.
+> ### ⚠ Die Falle: F7, nicht F5
+>
+> **F7 = Kompilieren. F5 = im Debug-Modus starten.** Die Tasten liegen nebeneinander und
+> tun völlig verschiedene Dinge.
+>
+> Drückst du **F5**, startet MetaEditor eine Debug-Sitzung: Es öffnet MetaTrader, legt einen
+> Chart mit dem **Debug-Standardsymbol** an — meist **EURUSD, H1** — und hängt den EA
+> **dort** an. Nicht auf den Chart, den du offen hattest.
+>
+> Du erkennst es an drei Stellen:
+> - MetaEditor-Titelleiste sagt **„MetaEditor (Debugging)"**
+> - unten im MetaEditor ist der Reiter **Debug** aktiv statt **Fehler**
+> - oben rechts im Chart steht **„GoldScalpAssistant (Debugging)"**, und die Titelleiste
+>   von MT5 endet auf **`[EURUSD,H1]`**
+>
+> **Das ist der Grund, wenn „der Bot immer das Falsche öffnet".**
+>
+> Rauskommen: in MetaEditor **Umschalt+F5** (Debuggen beenden), dann in MT5 den falschen
+> Chart schließen. Danach normal mit **F7** kompilieren und weiter bei Schritt 5.
+>
+> Seit dieser Erfahrung **verweigert der EA den Start auf einem Nicht-Gold-Symbol** — er
+> zeigt eine Meldung und lädt sich nicht. Vorher hat er auf EURUSD einfach weitergerechnet
+> und sein Panel gezeichnet, als wäre alles in Ordnung ([A30](../docs/REPO-AUDIT.md)).
+
+- Steht `0 errors, 0 warnings` da → weiter.
 - Kommen Fehler mit Zeilennummern → **abfotografieren und mir schicken**. Ich kann MQL5 hier
   nicht kompilieren, das ist also der erste echte Test der Datei. Fehler sind an dieser
   Stelle normal und in Minuten behoben.
@@ -171,7 +211,11 @@ Unten muss stehen: **`0 errors, 0 warnings`**.
 1. **Ansicht → Marktübersicht** → **XAUUSD** suchen
    (heißt bei manchen Brokern `GOLD`, `XAUUSD.r` oder `XAUUSDm` — dann eben so)
 2. Rechtsklick darauf → **Chartfenster**
-3. Oben den Zeitrahmen auf **M5** stellen. **Pflicht** — der EA rechnet auf M5.
+3. Oben den Zeitrahmen auf **M5** stellen. Der EA rechnet ohnehin auf M5 — alle
+   Kursabfragen im Code fragen ausdrücklich nach M5, egal was der Chart zeigt. Auf
+   einem H1-Chart wären die Zahlen also **richtig**, sie passen nur nicht zu den
+   Kerzen, die du siehst. Der EA sagt das dann auch. M5 ist trotzdem richtig, damit
+   Panel und Chart dasselbe erzählen.
 4. Links im **Navigator** unter *Expert Advisors* den **GoldScalpAssistant** auf den Chart
    ziehen
 5. Im Fenster: Reiter **Allgemein** → Haken bei **Algo-Trading erlauben** → **OK**
@@ -242,6 +286,10 @@ belegt ist. Der Weg dorthin steht dann in [VPS-SETUP.md](./VPS-SETUP.md).
 | Datei heißt `.mq5.txt` | Windows hat `.txt` angehängt. Im Explorer umbenennen, Dateiendungen ggf. über *Ansicht → Dateinamenerweiterungen* einblenden |
 | MetaEditor zeigt die Datei nicht | Falscher Ordner. In MT5 **Datei → Datenverzeichnis öffnen**, dann `MQL5\Experts` — nicht irgendein anderer Experts-Ordner |
 | Trauriges Gesicht 😞 am Chart | *Algo-Trading erlauben* nicht angehakt, oder der Knopf in der Symbolleiste ist nicht grün |
+| EA hängt auf **EURUSD, H1** statt XAUUSD | **F5 statt F7** gedrückt — Debug-Modus. Siehe den Kasten in Schritt 4. Umschalt+F5, falschen Chart schließen, mit F7 neu kompilieren |
+| Meldung „REFUSED: this EA is built for gold" | Genau richtig — der EA hängt auf einem Nicht-Gold-Chart und weigert sich. Auf einen XAUUSD-Chart ziehen |
+| Panel passt nicht zu den Kerzen | Chart steht nicht auf M5. Die Zahlen stimmen trotzdem, sie beziehen sich nur auf M5 |
+| „Einloggen geht nicht" | Meist das MQL5-Community-Konto, nicht das Handelskonto. Für den EA nicht nötig — siehe den Kasten in Schritt 2 |
 | Panel erscheint nicht | EA nicht auf den Chart gezogen, oder Algo-Trading rot |
 | Panel zeigt dauernd `AVOID` | Wochenende, Rollover (21–23 UTC) oder Markt geschlossen. Richtig so |
 | Panel `PRIME`, aber nichts passiert | Kein Setup. Nichtstun ist der Normalfall |

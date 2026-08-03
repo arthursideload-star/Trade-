@@ -889,10 +889,39 @@ int OnInit()
    RebuildDayState(utc);
    AdoptExistingPosition(utc);
 
+   // Refused, not warned about. This used to Print a warning and carry on,
+   // and it was found the way these things always are: the EA ended up on a
+   // EURUSD H1 chart, drew its panel, and looked like it was working.
+   //
+   // Everything here reads _Symbol. On EURUSD that means the ATR bands
+   // (2-12 USD/oz), the 10-dollar round-number grid and the whole sizing
+   // arithmetic run against a price of 1.15. Nothing errors; it simply
+   // computes nonsense, and in Auto mode it would place it.
+   //
+   // A warning in the Experts log is not protection. Nobody reads a log to
+   // find out whether the thing they just started is doing what they think.
    if(StringFind(_Symbol, "XAU") < 0 && StringFind(_Symbol, "GOLD") < 0)
-      Print("WARNING: this EA is built for gold. Symbol is ", _Symbol,
-            " -- the ATR bands, the round-number grid and the session logic "
-            "assume XAU/USD and will be wrong elsewhere.");
+   {
+      PrintFormat("REFUSED: this EA is built for gold and the chart symbol is "
+                  "%s. Every calculation in it -- the ATR bands, the "
+                  "round-number grid, the position sizing -- assumes a price "
+                  "near 4,000 USD per ounce. Put it on a chart whose symbol "
+                  "contains XAU or GOLD (XAUUSD, XAUUSD.r, XAUUSDm, GOLD are "
+                  "all accepted).", _Symbol);
+      Alert("GoldScalpAssistant: falsches Symbol (", _Symbol,
+            "). Bitte auf einen XAUUSD-Chart ziehen.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
+   // The chart timeframe is cosmetic: every CopyRates call below asks for
+   // PERIOD_M5 explicitly, so an H1 chart produces identical numbers. Said
+   // out loud anyway, because a panel describing M5 structure on top of H1
+   // candles is confusing in a way that costs a person ten minutes.
+   if(_Period != PERIOD_M5)
+      Print("NOTE: the chart is not M5. Everything is computed on M5 "
+            "regardless -- the numbers are correct -- but the panel will not "
+            "line up with the candles you are looking at. Switch the chart "
+            "to M5 so the two agree.");
 
    if(!AccountInfoInteger(ACCOUNT_TRADE_EXPERT))
       Print("WARNING: algo trading is disabled for this account. Nothing will "
