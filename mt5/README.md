@@ -1,3 +1,23 @@
+# Die Expert Advisors — Bot direkt in MetaTrader 5
+
+## Es sind zwei, und sie handeln Verschiedenes
+
+Das zu verwechseln ist der naheliegendste Fehler an dieser Stelle, deshalb steht es ganz
+oben:
+
+| Datei | Was sie handelt | Zeitrahmen | Trades/Tag | Anleitung |
+|---|---|---|---|---|
+| `GoldScalpAssistant.mq5` | Setups S2, S4, S5 | M5 | ~1 | [PC-SETUP.md](PC-SETUP.md) |
+| `GoldHalfScalp.mq5` | Halbziel-Taktik | **M1** | **~100** | [HALFSCALP-SETUP.md](HALFSCALP-SETUP.md) |
+
+Sie haben eigene Magic Numbers und eigene Journaldateien, kommen sich also nicht ins Gehege.
+**Für den Anfang trotzdem nur einen laufen lassen** — sonst weißt du bei einem Ergebnis
+nicht, welcher es verursacht hat.
+
+Der Rest dieser Seite beschreibt **`GoldScalpAssistant`**.
+
+---
+
 # GoldScalpAssistant — Bot direkt in MetaTrader 5
 
 Der Assistent als Expert Advisor. Gleiche Setups, gleiche Risikoregeln wie das

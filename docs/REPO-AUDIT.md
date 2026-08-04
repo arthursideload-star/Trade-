@@ -536,6 +536,56 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A37 · Die Vorgaben liefen auseinander, bevor überhaupt jemand handelte — **behoben**
+
+Beim Portieren der Halbziel-Taktik nach MQL5 (`mt5/Experts/GoldHalfScalp.mq5`) fiel auf,
+dass an **drei** Stellen unterschiedliche Vorgaben standen — dieselbe Fehlerklasse wie A33,
+nur diesmal gefunden, bevor sie Zahlen verdorben hat:
+
+| | Signal | Ziel | Auslöser |
+|---|---|---|---|
+| `HalfScalpConfig` (Python) | momentum | 1,0 | 1,0 |
+| `metals halfscalp` (CLI) | momentum | 1,0 | — |
+| `GoldHalfScalp.mq5` (EA) | **reversion** | **2,0** | **0,6** |
+
+Der EA fuhr die gemessene Fassung, Python und CLI die **verlierende Erstbeschreibung**. Wer
+die Strategie mit dem naheliegenden Befehl geprüft hätte, hätte eine andere Strategie
+gemessen als die, die handelt — und zwar die, die an 85 von 85 Tagen verlor.
+
+**Behoben,** und zwar so, dass es nicht wiederkommen kann:
+
+- Die Python-Vorgaben sind jetzt die gemessene Fassung. Eine Vorgabe ist eine Behauptung
+  darüber, was laufen soll; die verlierende Variante als Vorgabe auszuliefern wäre eine
+  falsche.
+- Der CLI **liest** seine Vorgaben aus `HalfScalpConfig`, statt sie danebenzuschreiben.
+  Zwei Zahlen an zwei Orten laufen irgendwann auseinander; eine Zahl an einem Ort nicht.
+- `tests/test_halfscalp_ea.py` vergleicht **jede** Vorgabe des EA gegen ihr Gegenstück in
+  `HalfScalpConfig`, als Tabelle statt Feld für Feld — die A34-Tests nennen die damaligen
+  Werte jetzt ausdrücklich, statt stillschweigend etwas anderes zu messen.
+
+**Und die Frequenz, um die es ging.** Verlangt war ein Trade mindestens alle zehn Minuten.
+Aus einem Raster über 24 Zellen kam `trigger 0.6 / target 2.0` als einzige Zelle mit beidem
+— Frequenz *und* bestem Erwartungswert der qualifizierten. Weil A18 genau davor warnt
+(„fünf von sechs besten Werten waren der größte von vier Stichproben"), auf 30 Märkten
+gegengeprüft, die an der Auswahl nicht beteiligt waren:
+
+| | Erwartungswert | Frequenz |
+|---|---|---|
+| **gewählt: trigger 0,6** | **+0,0284 R** [+0,0172 … +0,0397] | alle **8,5 min** |
+| trigger 0,8 | +0,0314 R [+0,0198 … +0,0429] | alle 9,5 min |
+| trigger 1,0 | **+0,0412 R** [+0,0293 … +0,0531] | alle 11,4 min |
+
+Die Wahl hält out of sample. **Sie ist aber nicht gratis:** Der langsamere Auslöser verdient
+je Trade rund 0,013 R mehr und pro Stunde minimal mehr. Die Frequenzanforderung kostet
+also etwas, und dieser Absatz ist die Stelle, an der ihr Preis steht statt später
+wiederentdeckt zu werden.
+
+**Ein Zähler fehlte außerdem.** Eine am Datenende noch offene Position tauchte in keinem
+Zähler auf, wodurch `Trades + Ablehnungen` um eins unter `signals_seen` lag. Jetzt
+`left_open`. Eine Buchhaltung, die um eins danebenliegt, ist keine.
+
+---
+
 ## A36 · Der EA rechnete eine Konfidenz und schrieb sie nirgendwohin — **behoben**
 
 Nachtrag zu A33. Dort bekam der EA einen Konfidenzwert und ein Gatter bei 0,60. Damit

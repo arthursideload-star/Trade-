@@ -64,12 +64,16 @@ class TheCostGate(unittest.TestCase):
     """A trade that cannot pay its own spread is refused, not taken."""
 
     def test_a_half_target_under_the_round_trip_is_refused(self):
-        cfg = HalfScalpConfig(spread_usd_oz=5.0, min_edge_multiple=1.5)
+        # 20 USD/oz is absurd on purpose. At the default projection -- twice
+        # the trigger bar -- a merely bad spread still lets the widest bars
+        # through, and a test of the gate should not depend on how wide the
+        # widest bar in one seed happens to be.
+        cfg = HalfScalpConfig(spread_usd_oz=20.0, min_edge_multiple=1.5)
         m1 = generate(bars=3_000, timeframe="1m", seed=7)
         result = run(cfg, m1)
         self.assertGreater(
             result.refused_cost, 0,
-            "at a 5.00 USD/oz spread every M1 half-target is under water; "
+            "at a 20.00 USD/oz spread every M1 half-target is under water; "
             "refusing none of them means the gate is not wired up")
         self.assertEqual(
             result.n, 0,
@@ -126,7 +130,7 @@ class WhatWasMeasured(unittest.TestCase):
     # which were the defaults at the time. Both defaults have since changed
     # (A35), so these tests state the old ones explicitly rather than
     # silently measuring something else and still calling it A34.
-    A34 = dict(spread_model="flat", session_filter=False)
+    A34 = dict(spread_model="flat", session_filter=False, trigger_atr=1.0)
 
     def test_the_literal_specification_loses(self):
         """Momentum, stop at the full projection, target one measured move.
@@ -318,7 +322,7 @@ class RefusalCountersAreComparable(unittest.TestCase):
         m1 = generate(bars=6_000, timeframe="1m", seed=7)
         result = run(HalfScalpConfig(session_filter=True), m1)
         accounted = (result.n + result.refused_cost + result.refused_stop
-                     + result.refused_session)
+                     + result.refused_session + result.left_open)
         self.assertEqual(
             accounted, result.signals_seen,
             "every signal must end up either traded or in exactly one refusal "

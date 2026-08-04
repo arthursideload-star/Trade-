@@ -432,3 +432,29 @@ class TestHalfscalpRefusesAmbiguousHistory(unittest.TestCase):
         out = run_command(["halfscalp", "--spread", "0.20",
                            "--file", "/nope.csv", "--tz", "utc"])
         self.assertIn("could not load", out)
+
+
+class TestHalfscalpCliMatchesTheModule(unittest.TestCase):
+    """The CLI must not carry its own copy of the defaults.
+
+    It did, and the effect was exactly A33 in miniature: `python -m metals
+    halfscalp` simulated momentum with a target of one measured move -- the
+    version that lost on 85 of 85 days -- while the EA traded reversion at
+    twice the target. Somebody checking the strategy by running the obvious
+    command would have measured a different strategy.
+    """
+
+    def test_every_default_comes_from_halfscalpconfig(self):
+        from metals.halfscalp import HalfScalpConfig
+
+        cfg = HalfScalpConfig()
+        args = build_parser().parse_args(["halfscalp", "--spread", "0.20"])
+        for attr in ("signal", "trigger_atr", "target_multiple",
+                     "take_fraction", "stop_fraction", "max_hold_minutes",
+                     "cooldown_minutes", "spread_model"):
+            with self.subTest(setting=attr):
+                self.assertEqual(getattr(args, attr), getattr(cfg, attr))
+
+    def test_the_session_filter_default_is_on(self):
+        args = build_parser().parse_args(["halfscalp", "--spread", "0.20"])
+        self.assertFalse(args.all_hours)

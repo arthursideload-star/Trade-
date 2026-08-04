@@ -154,6 +154,27 @@ Halbziel-Taktik nicht scharf laufen — sie lässt sich nur messen.
 
 Diese Entscheidung gehört dir. Sie betrifft jede andere Strategie im Repo mit.
 
+## Sie läuft jetzt in MetaTrader
+
+Seit dem 05.08.2026 gibt es sie als eigenen EA: **`GoldHalfScalp.mq5`**.
+Anleitung: `mt5/HALFSCALP-SETUP.md`
+
+| | |
+|---|---|
+| Zeitrahmen | M1 |
+| Erwartete Frequenz | **alle 8–9 Minuten** ein Trade in guten Fenstern |
+| Risiko je Trade | **0,25 %** (nicht 1 % — bei ~100 Trades am Tag wäre das ein Fünftel des Kontos) |
+| Tagesverlustgrenze | 5 %, dann ist Schluss |
+| Kontotyp | **Nur Demo.** Der EA verweigert den Start auf Echtgeld |
+
+**Warum nur Demo:** Es gibt keinen Beleg, der Echtgeld rechtfertigen würde. Die gemessene
+Kante hängt am Rundzahl-Magneten des Simulators (siehe oben). Ein Schalter dafür existiert,
+und wenn du ihn umlegst, weißt du wenigstens, dass du es getan hast.
+
+**Die Fassung im EA ist nicht deine Erstbeschreibung.** Sie hält gegen den Impuls statt ihm
+zu folgen, und steckt das Ziel doppelt so weit. Deine Erstfassung verlor an 85 von 85 Tagen
+— sie als Vorgabe auszuliefern wäre gewesen, die verlierende Variante zu verschicken.
+
 ## Selbst nachrechnen
 
 ```bash

@@ -1245,26 +1245,41 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Maerkte je Variante bei --ablate")
     pe.set_defaults(func=cmd_persistence)
 
+    # Every default here is read from HalfScalpConfig rather than repeated.
+    # Repeating them is how `python -m metals halfscalp` came to simulate the
+    # losing first version while the EA traded the measured one -- the same
+    # split between "what is published" and "what runs" as A33.
+    from .halfscalp import HalfScalpConfig as _HS
+    _hs = _HS()
+
     hs = sub.add_parser("halfscalp",
                         help="viele kurze Trades, bei der Haelfte des Ziels "
                              "geschlossen")
     hs.add_argument("--signal", choices=("momentum", "reversion"),
-                    default="momentum",
+                    default=_hs.signal,
                     help="momentum folgt dem Impuls, reversion handelt dagegen")
-    hs.add_argument("--target", type=float, default=1.0, dest="target_multiple",
+    hs.add_argument("--trigger", type=float, default=_hs.trigger_atr,
+                    dest="trigger_atr",
+                    help="Groesse des ausloesenden Balkens in ATR")
+    hs.add_argument("--target", type=float, default=_hs.target_multiple,
+                    dest="target_multiple",
                     help="Projektion als Vielfaches des Impulses")
-    hs.add_argument("--take", type=float, default=0.5, dest="take_fraction",
+    hs.add_argument("--take", type=float, default=_hs.take_fraction,
+                    dest="take_fraction",
                     help="Anteil der Projektion, bei dem geschlossen wird")
-    hs.add_argument("--stop", type=float, default=1.0, dest="stop_fraction",
+    hs.add_argument("--stop", type=float, default=_hs.stop_fraction,
+                    dest="stop_fraction",
                     help="Stop als Anteil derselben Projektion")
-    hs.add_argument("--hold", type=int, default=10, dest="max_hold_minutes")
-    hs.add_argument("--cooldown", type=int, default=1, dest="cooldown_minutes")
+    hs.add_argument("--hold", type=int, default=_hs.max_hold_minutes,
+                    dest="max_hold_minutes")
+    hs.add_argument("--cooldown", type=int, default=_hs.cooldown_minutes,
+                    dest="cooldown_minutes")
     hs.add_argument("--spread", type=float, required=True,
                     help="Spread in USD je Unze — Pflicht, weil er auf "
                          "diesem Zeithorizont ueber das Vorzeichen entscheidet")
     hs.add_argument("--slippage", type=float, default=0.5)
     hs.add_argument("--spread-model", choices=("flat", "session"),
-                    default="session", dest="spread_model",
+                    default=_hs.spread_model, dest="spread_model",
                     help="'session' berechnet den Rollover-Spread, wenn er "
                          "anfaellt; 'flat' mittelt ihn weg und schmeichelt")
     hs.add_argument("--all-hours", action="store_true",
@@ -1355,7 +1370,8 @@ def cmd_halfscalp(args: argparse.Namespace) -> int:
 
     cfg = HalfScalpConfig(
         symbol=args.symbol,
-        signal=args.signal, target_multiple=args.target_multiple,
+        signal=args.signal, trigger_atr=args.trigger_atr,
+        target_multiple=args.target_multiple,
         take_fraction=args.take_fraction, stop_fraction=args.stop_fraction,
         max_hold_minutes=args.max_hold_minutes,
         cooldown_minutes=args.cooldown_minutes,

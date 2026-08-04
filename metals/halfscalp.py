@@ -96,10 +96,25 @@ class HalfScalpConfig:
     start_equity: float = 1_000.0
 
     # --- what counts as an opportunity ------------------------------------
-    signal: str = "momentum"
+    # "reversion", not "momentum". The literal specification followed the
+    # push and lost on 85 of 85 simulated days (A34); all nine momentum
+    # variants in the grid were negative. A default is a claim about what
+    # should run, and shipping the losing one as the default would be the
+    # A33 mistake again -- two code paths that were supposed to be one.
+    signal: str = "reversion"
     # The triggering bar must be at least this many ATRs. Below roughly one
     # ATR a bar is noise and the "projection" projects noise.
-    trigger_atr: float = 1.0
+    #
+    # 0.60 rather than 1.00, and the reason is a requirement rather than a
+    # measurement. Out of sample on 30 markets that took no part in choosing
+    # it:  0.6 -> +0.0284 R [+0.0172 .. +0.0397], a trade every 8.5 minutes
+    #      1.0 -> +0.0412 R [+0.0293 .. +0.0531], a trade every 11.4 minutes
+    # The slower setting earns more per trade and marginally more per hour.
+    # 0.6 is the default because it is the one that delivers a trade at
+    # least every ten minutes, which is what was asked for. The price of
+    # that requirement is roughly 0.013 R per trade and it is written here
+    # rather than left for someone to rediscover.
+    trigger_atr: float = 0.60
     # ... and must have closed this decisively within its own range. 0.70
     # means the close sits in the outer 30%.
     close_position_min: float = 0.70
@@ -107,7 +122,11 @@ class HalfScalpConfig:
     # --- the target, and the half of it that gets taken -------------------
     # The projection is a measured move: the triggering impulse, continued.
     # `target_multiple` scales it, 1.0 being "as far again as it just came".
-    target_multiple: float = 1.0
+    #
+    # 2.0, because the spread is fixed and the risk is not: doubling the
+    # projection roughly halves the cost per R. At 1.0 the same strategy
+    # measured +0.0056 R with a band across zero.
+    target_multiple: float = 2.0
     # THE rule the user asked for. 0.5 = bank at half the projection.
     take_fraction: float = 0.5
     # The stop, as a fraction of the same projection.
@@ -227,6 +246,10 @@ class RunResult:
     refused_cost: int = 0
     refused_stop: int = 0
     refused_session: int = 0
+    # A position still open when the data ran out. Not a trade -- it has no
+    # outcome -- but it consumed a signal, so without this the counters do
+    # not add up to signals_seen and the arithmetic is quietly one short.
+    left_open: int = 0
     config: HalfScalpConfig = field(default_factory=HalfScalpConfig)
     minutes_covered: int = 0
 
@@ -428,6 +451,8 @@ def run(cfg: HalfScalpConfig | None = None,
             "cost_in": cost / 2.0,
         }
 
+    if open_trade is not None:
+        result.left_open = 1
     result.minutes_covered = (len(m1) - 20) * per_bar
     return result
 
