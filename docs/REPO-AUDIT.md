@@ -536,6 +536,158 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A34 · Die Halbziel-Taktik: 64 % Trefferquote, 85 von 85 Tagen im Minus
+
+Am 04.08.2026 hat der Nutzer die Strategie beschrieben, um die es ihm eigentlich geht:
+
+> Der Bot guckt sich durchgehend den Chart an. Sobald er eine Möglichkeit sieht, nimmt er
+> sie. Dann macht er sich ein Ziel — wie weit es gehen würde — und **bei der Hälfte dieses
+> Ziels schließt er den Trade schon wieder, damit die Sicherheit sehr hoch ist.** Er setzt
+> sich auch einen Stop. Trades im Rahmen von 1–10 Minuten, dann analysiert er wieder 1–10
+> Minuten und macht einen neuen.
+
+Gebaut als `metals/halfscalp.py`, genau so, ohne Gegenrede. Die Gegenrede erledigt die
+Messung.
+
+### Das Ergebnis der wörtlichen Fassung
+
+Momentum-Signal, Stop bei der vollen Projektion, Ziel = ein gemessener Zug, 5 Simulations­
+märkte à 20.000 M1-Balken:
+
+| | |
+|---|---|
+| Trades je Tag | **152** (schlechtester Tag 198) |
+| Durchschnittliche Haltedauer | 4,5 Minuten |
+| **Trefferquote** | **64,1 %** |
+| Erwartungswert | **−0,110 R je Trade** |
+| Ergebnis über 2.604 Trades | −287,6 R |
+| **davon Spread und Slippage** | **−292,5 R** |
+| Verlusttage | **85 von 85** |
+| Bester Tag | **−1,17 R** |
+
+**Der beste von 85 Tagen war ein Verlusttag.** Das ist keine Pechsträhne, das ist Arithmetik.
+
+### Warum eine hohe Trefferquote hier nichts wert ist
+
+Die Taktik nimmt die **Hälfte** des Ziels, stoppt aber bei der **vollen** Projektion. Sie
+riskiert also zwei, um eins zu gewinnen. Das Auszahlungsverhältnis liegt bei **0,39** — und
+damit liegt die Trefferquote, die für die schwarze Null nötig ist, bei:
+
+```
+1 / (1 + 0,39) = 71,9 %
+```
+
+Gemessen wurden 64,1 %. Die Lücke von acht Punkten *ist* der Verlust.
+
+Das Frühschließen erhöht die Trefferquote wirklich — genau wie erwartet. Es erhöht
+gleichzeitig die Latte, die zu überspringen ist, und zwar um mehr. **Das ist die
+Fehlerform, die sich von innen wie Erfolg anfühlt:** zwei von drei Trades gewinnen, und das
+Konto fällt trotzdem.
+
+`RunResult.breakeven_win_rate` rechnet diese Schwelle mit und der Bericht druckt sie neben
+die beobachtete. Ohne diese Zahl nebeneinander ist „64 % Trefferquote" eine Werbeaussage.
+
+### Die zweite Zahl: der Spread ist der Gegner, nicht der Markt
+
+Ergebnis −287,6 R, Kosten −292,5 R. **Vor Kosten ist die Strategie fast exakt bei null.**
+Der gesamte Verlust ist der Spread, 152-mal am Tag bezahlt.
+
+Das ist auf diesem Zeithorizont keine Nebenrechnung, sondern die Hauptrechnung: Die Kosten
+je Trade in R sind `Spread / Stop-Abstand`. Bei einem M1-Ziel von 1,5 $/oz, halbiert auf
+0,75 $/oz, frisst ein Round-Trip von 0,30 $/oz **40 % des Bruttoergebnisses** — bei jedem
+einzelnen Trade, gewonnen wie verloren.
+
+Deshalb weist `halfscalp` Trades **ab**, deren Halbziel den Round-Trip nicht um den Faktor
+1,5 schlägt, und zählt sie (`refused_cost`). Ein Trade, der seinen eigenen Spread nicht
+verdienen kann, hat keine kleine Kante, sondern eine negative.
+
+### Was die Taktik rettet — und was nicht
+
+Ein Raster über Signalrichtung, Stop-Anteil und Zielweite, 5 Märkte je Zelle:
+
+| Signal | Stop | Ziel | Trades/Tag | Treffer | nötig | E[R] |
+|---|---:|---:|---:|---:|---:|---:|
+| momentum | 1,0 | 1,0 | 186 | 64,5 % | 72,2 % | −0,107 |
+| momentum | 1,0 | 2,0 | 125 | 53,8 % | 57,4 % | −0,031 |
+| **alle neun Momentum-Zellen** | | | | | | **negativ** |
+| reversion | 1,0 | 1,0 | 189 | 69,8 % | 72,1 % | −0,032 |
+| **reversion** | **1,0** | **2,0** | **128** | **61,5 %** | **56,4 %** | **+0,045** |
+| reversion | 0,75 | 2,0 | 133 | 59,0 % | 57,2 % | +0,022 |
+
+Zwei Dinge stehen da:
+
+1. **Momentum verliert in allen neun Konfigurationen.** Der Bot, der einem Impuls folgt,
+   zahlt auf diesem Zeithorizont nur Spread.
+2. **Die Zielweite ist der Hebel, nicht der Stop.** Von Ziel 1,0 auf 2,0 halbieren sich die
+   Kosten je R — weil der Spread fest ist und das Risiko wächst. Das kostet Frequenz
+   (189 → 128 Trades/Tag) und Haltedauer.
+
+Die beste gefundene Fassung schafft **+4,66 R am Tag** [+3,59 … +5,73], schlechtester Tag
+−4,26 R, größter Rückgang −10,8 R, 20 Verlusttage von 85.
+
+### Der Ablationstest — und diesmal ist die Antwort eine andere
+
+Nach A27 wird keine Kante mehr behauptet, ohne die Merkmale des Generators einzeln
+abzuschalten. Über 40 Eintagesmärkte je Variante:
+
+| Variante | wörtliche Fassung | beste Fassung |
+|---|---:|---:|
+| alles an | −0,1083 | **+0,0329** [+0,019 … +0,047] |
+| ohne Rückkehr (`reversion`) | −0,1106 | **+0,0412** [+0,027 … +0,055] |
+| ohne Rundzahl-Magnet | −0,0825 | **−0,0130** [−0,028 … +0,002] |
+| ohne Liquiditäts-Sweep | −0,1103 | +0,0387 [+0,025 … +0,053] |
+| ohne Sprünge | −0,1037 | +0,0347 [+0,021 … +0,049] |
+| keines davon | −0,0705 | **−0,0111** [−0,026 … +0,004] |
+
+**Die wörtliche Fassung verliert in jeder Variante** — auch wenn *alle* erzeugten Merkmale
+aus sind. Sie verliert also nicht an der Marktstruktur, sondern an den Kosten. Das ist ein
+robust negatives Ergebnis, kein Simulatorartefakt.
+
+**Die beste Fassung überlebt das Abschalten der Rückkehr** — und wird sogar besser. Das ist
+bemerkenswert, weil die Hauptstrategie an genau dieser Stelle gestorben ist (A27: von
++0,0988 auf +0,0071). Was sie *nicht* überlebt, ist das Abschalten des **Rundzahl-Magneten**:
++0,033 → −0,013, Band nicht mehr über null.
+
+**Die Kante sitzt also im Rundzahl-Magneten.** Und hier gehört die Einschränkung hin, sonst
+wird aus einem Befund eine Werbeaussage: `round_magnet = 0.1` steht im Generator, **weil
+jemand geglaubt hat, dass Gold sich so verhält.** Das wieder herauszumessen ist ein
+Zirkelschluss. Der Unterschied zu A27 ist trotzdem real — `reversion` ist eine
+Rechenschutzplanke ohne Marktbehauptung, `round_magnet` ist eine *Modellierung eines
+behaupteten Effekts*. Das macht den Befund interessanter, nicht bewiesen.
+
+Entschieden wird das an echten Golddaten, nicht hier.
+
+### Der Konflikt mit den eigenen Regeln — nicht stillschweigend gelöst
+
+`metals/exits.py` setzt `MAX_TRADES_PER_DAY = 4`. Diese Strategie braucht **104 bis 152**.
+
+Das ist kein Tippfehler, den man wegräumt. Die Projektregel lautet: *„Risikolimits gehören
+in den Code, nicht in Konfigurationsdateien — Änderungen sollen einen Commit erfordern."*
+Also wurde `MAX_TRADES_PER_DAY` **nicht angefasst**. `metals/halfscalp.py` ist ein
+Messmodul, das die Regel nicht durchbricht, weil es nichts handelt.
+
+Solange diese Zahl bei 4 steht, kann die Halbziel-Taktik nicht scharf laufen. Sie auf 150 zu
+setzen ist eine Entscheidung mit Folgen für jede andere Strategie im Repo und gehört dem
+Nutzer, nicht dem Werkzeug.
+
+### Was hier ausdrücklich nicht behauptet wird
+
+- Nicht, dass die Taktik funktioniert. Die wörtliche Fassung verliert nachweislich.
+- Nicht, dass die beste gefundene Fassung funktioniert. Sie ist auf demselben Simulator
+  gefunden worden, auf dem sie gemessen wird, und ihre Kante hängt an einem
+  Modellparameter.
+- Nicht, dass die Signaldefinition die richtige ist. „Eine Möglichkeit sehen" wurde als
+  *entschiedener Balken von mindestens einem ATR* umgesetzt. Das ist **eine** Lesart, sie
+  stammt von mir, und eine andere Definition kann andere Zahlen liefern.
+
+Was behauptet wird: Die Kombination aus Halbziel und vollem Stop verlangt eine
+Trefferquote um 72 %, und der Spread ist auf diesem Zeithorizont der größte einzelne
+Posten. Beides ist Arithmetik und hängt nicht am Simulator.
+
+Nachrechnen: `python -m metals halfscalp --spread 0.20`
+
+---
+
 ## A31 · S2 konnte nicht auslösen — nicht selten, sondern nie — **behoben**
 
 Aus einer zweiten Bildschirmaufnahme vom 04.08.2026. Der Nutzer meldete: „er läuft ja jetzt

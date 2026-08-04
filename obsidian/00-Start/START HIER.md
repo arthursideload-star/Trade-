@@ -32,6 +32,7 @@ Kompilieren.
 | Frage | Wo |
 |---|---|
 | Was macht der Bot eigentlich? | [[Die Hauptstrategie]] |
+| Und die Taktik mit den vielen kurzen Trades? | [[Die Halbziel-Taktik]] |
 | Was darf ich nicht tun? | [[Die Regeln]] |
 | Was hat der Bot getan? | [[05-Trades]] → [[Alle Trades]] |
 | Warum habe ich das damals so entschieden? | [[06-Entscheidungen]] |

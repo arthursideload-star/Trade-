@@ -1245,6 +1245,28 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Maerkte je Variante bei --ablate")
     pe.set_defaults(func=cmd_persistence)
 
+    hs = sub.add_parser("halfscalp",
+                        help="viele kurze Trades, bei der Haelfte des Ziels "
+                             "geschlossen")
+    hs.add_argument("--signal", choices=("momentum", "reversion"),
+                    default="momentum",
+                    help="momentum folgt dem Impuls, reversion handelt dagegen")
+    hs.add_argument("--target", type=float, default=1.0, dest="target_multiple",
+                    help="Projektion als Vielfaches des Impulses")
+    hs.add_argument("--take", type=float, default=0.5, dest="take_fraction",
+                    help="Anteil der Projektion, bei dem geschlossen wird")
+    hs.add_argument("--stop", type=float, default=1.0, dest="stop_fraction",
+                    help="Stop als Anteil derselben Projektion")
+    hs.add_argument("--hold", type=int, default=10, dest="max_hold_minutes")
+    hs.add_argument("--cooldown", type=int, default=1, dest="cooldown_minutes")
+    hs.add_argument("--spread", type=float, required=True,
+                    help="Spread in USD je Unze — Pflicht, weil er auf "
+                         "diesem Zeithorizont ueber das Vorzeichen entscheidet")
+    hs.add_argument("--slippage", type=float, default=0.5)
+    hs.add_argument("--bars", type=int, default=20_000)
+    hs.add_argument("--seed", type=int, default=7)
+    hs.set_defaults(func=cmd_halfscalp)
+
     b = sub.add_parser("backtest", help="run the scalping setups over history")
     b.add_argument("symbol", nargs="?", default="XAUUSD")
     b.add_argument("--source", choices=("sim", "live", "file"), default="sim",
@@ -1306,6 +1328,26 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_halfscalp(args: argparse.Namespace) -> int:
+    """Many short trades, banked at half the projection."""
+    from .halfscalp import HalfScalpConfig, report, run
+    from .simulate import generate
+
+    cfg = HalfScalpConfig(
+        signal=args.signal, target_multiple=args.target_multiple,
+        take_fraction=args.take_fraction, stop_fraction=args.stop_fraction,
+        max_hold_minutes=args.max_hold_minutes,
+        cooldown_minutes=args.cooldown_minutes,
+        spread_usd_oz=args.spread, slippage_fraction=args.slippage,
+    )
+    m1 = generate(bars=args.bars, timeframe="1m", seed=args.seed)
+    print(report(run(cfg, m1)))
+    print()
+    print("Simulierter Markt. Was das misst und was nicht: Befund A34 in "
+          "docs/REPO-AUDIT.md.")
+    return 0
 
 
 def cmd_persistence(args: argparse.Namespace) -> int:

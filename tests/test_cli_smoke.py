@@ -54,9 +54,9 @@ class TestEverySubcommandIsReachable(unittest.TestCase):
         self.assertEqual(
             set(sub.choices),
             {"analyse", "backtest", "challenge", "check", "claims", "dayrange",
-             "journal", "microscalp", "minimum", "paper", "persistence",
-             "quote", "ratio", "rules", "setups", "size", "sources", "stop",
-             "train", "vault", "verdict"},
+             "halfscalp", "journal", "microscalp", "minimum", "paper",
+             "persistence", "quote", "ratio", "rules", "setups", "size",
+             "sources", "stop", "train", "vault", "verdict"},
             "a command was added or removed without updating this test, "
             "which is the file that decides whether it gets smoke coverage")
 
@@ -87,6 +87,9 @@ SMOKE_ARGS: dict[str, list[str]] = {
     "journal": ["journal"],
     "paper": ["paper", "--summary"],
     "persistence": ["persistence", "--bars", "2000"],
+    # --spread is required on purpose: at a 1-10 minute horizon it decides
+    # the sign of the expectancy, so there is deliberately no default.
+    "halfscalp": ["halfscalp", "--spread", "0.20", "--bars", "2000"],
     # No file: the refusal path is the one that runs offline, and it is the
     # path a user hits first.
     "verdict": ["verdict"],
