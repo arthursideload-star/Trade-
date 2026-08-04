@@ -279,3 +279,55 @@ class DetectorsFireOnGeneratedData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EverySetupFiresThroughTheRealCallPath(unittest.TestCase):
+    """The same question asked through the engine that actually calls them.
+
+    The hand-built markets above and the direct scan below both drive the
+    detectors themselves. That is one call path, and it is not the one the
+    bot uses: `metals.backtest.run` builds its own level map, supplies its
+    own ATR and passes M1 where it has it. A detector can pass every test in
+    this file and still never fire in the engine, because the engine hands it
+    different inputs.
+
+    This distinction is not hypothetical. The 39,000-bar scan that found A31
+    reported S1 and S3 at zero as well, and those two zeros were artefacts of
+    the scan's level map rather than defects -- the same run through the
+    engine gave S1 177 trades and S3 eleven. A finding that cannot tell a
+    dead detector from a badly-driven one is not a finding, so the engine
+    gets its own test.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from metals.backtest import BacktestConfig, run as run_backtest
+        m5 = generate(bars=6_000, seed=7)
+        cfg = BacktestConfig(min_confidence=0.0, max_trades_per_day=50,
+                             session_filter=False, cooldown_bars=0)
+        cls.result = run_backtest(m5, cfg, data_source="sim")
+        cls.by_setup = {}
+        for trade in cls.result.trades:
+            cls.by_setup[trade.setup_id] = cls.by_setup.get(trade.setup_id, 0) + 1
+
+    def test_the_engine_produced_trades_at_all(self):
+        self.assertGreater(self.result.n, 20,
+                           "the harness itself is broken, so nothing below "
+                           "would mean anything")
+
+    def test_no_setup_is_structurally_incapable_of_trading(self):
+        """A31, stated as the invariant it broke.
+
+        With the confidence filter open and the session and cooldown limits
+        lifted, every setup the catalogue offers must be able to reach a
+        trade. A zero here means the setup cannot fire at all -- which is
+        what S2 did, silently, while 989 tests passed.
+        """
+        for setup_id in ("S1", "S2", "S3", "S4", "S5"):
+            with self.subTest(setup=setup_id):
+                self.assertGreater(
+                    self.by_setup.get(setup_id, 0), 0,
+                    f"{setup_id} produced no trade in {self.result.bars_tested} "
+                    f"bars with every filter opened up. Before the A31 fix S2 "
+                    f"scored zero here and the condition it needed was "
+                    f"unsatisfiable.")

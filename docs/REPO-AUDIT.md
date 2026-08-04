@@ -871,8 +871,26 @@ Programm zulässt:
 **Was diese Tabelle nicht sagt:** S1 und S3 stehen ebenfalls bei 0, aber das ist ein Mangel
 der Messung, kein Befund. S1 verlangt eine M1-Bestätigung, und die Messung hat `m1=None`
 übergeben; S3 braucht Vortageshochs und -tiefs, die die aus M5 gebaute Levelkarte nicht
-enthält. Beide Nullen sind Werkzeugfehler und werden hier ausdrücklich **nicht** als Defekt
-geführt. Die Null bei S2 ist es, weil sie unabhängig davon am Lehrbuchmarkt reproduziert.
+enthält. Die Null bei S2 ist ein Defekt, weil sie unabhängig davon am Lehrbuchmarkt
+reproduziert.
+
+**Nachgeprüft, weil eine Vermutung als Entlastung nicht reicht.** Nach S2 durfte „das ist
+nur die Messung" nicht ungeprüft stehenbleiben. Derselbe Markt durch die **Engine**
+(`metals.backtest.run`, die ihre eigene Levelkarte baut und M1 mitliefert), mit
+geöffnetem Konfidenzfilter und ohne Sessions- und Abklinggrenzen:
+
+| Setup | Trades |
+|---|---:|
+| S1 | 177 |
+| S3 | 11 |
+
+Beide leben. Der Verdacht war richtig, aber er war ein Verdacht — und ein Befund, der einen
+toten Detektor nicht von einem schlecht angesteuerten unterscheiden kann, ist keiner.
+
+Deshalb steht diese Frage jetzt als Test da (`EverySetupFiresThroughTheRealCallPath`): Jedes
+Setup des Katalogs muss über den Weg, den der Bot tatsächlich nimmt, mindestens einen Trade
+erreichen. Das ist der Test, der A31 gefunden hätte — die handgebauten Märkte prüfen die
+Detektoren, dieser prüft sie **so, wie sie aufgerufen werden**.
 
 ### Was das für die Beobachtung des Nutzers bedeutet
 
