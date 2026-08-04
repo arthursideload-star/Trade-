@@ -33,6 +33,16 @@ Five checks, in the order in which a failure makes the rest pointless:
 
 Then one verdict, in plain words, that is allowed to say "do not install
 this".
+
+What this command does NOT cover
+--------------------------------
+The half-target tactic in `metals/halfscalp.py` -- many short trades banked
+at half their projection (A34). It is a third strategy, it trades on M1
+rather than M5, and nothing measured here says anything about it. The
+closing note in `render()` says so on every run, because a command that
+calls itself the verdict has to be explicit about what it did not judge:
+a reader who sees five green checks and installs an unjudged strategy has
+been misled by an omission rather than by a claim.
 """
 
 from __future__ import annotations
@@ -329,5 +339,17 @@ def render(v: Verdict) -> str:
     lines.append("=" * 74)
     for line in v.reasoning:
         lines.append(f"  {line}")
+    lines.append("")
+    lines.append("-" * 74)
+    lines.append("  NICHT GEPRUEFT: die Halbziel-Taktik (viele kurze Trades,")
+    lines.append("  bei der Haelfte des Ziels geschlossen). Sie ist eine "
+                 "dritte")
+    lines.append("  Strategie und handelt auf M1, nicht M5. Ein Urteil ueber "
+                 "die")
+    lines.append("  Tagesspanne und ueber S1-S6 ist keins ueber sie.")
+    lines.append("")
+    lines.append("    python -m metals halfscalp --file <M1-datei> "
+                 "--tz <zone> \\")
+    lines.append("                               --spread <dein spread>")
     lines.append("")
     return "\n".join(lines)

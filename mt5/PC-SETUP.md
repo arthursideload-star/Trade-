@@ -80,6 +80,18 @@ naheliegendste Fehler an dieser Stelle. Schritt 5 misst die Setups S1–S6, die 
 [PAPIER-LAUF.md](../docs/PAPIER-LAUF.md) und [URTEIL.md](../docs/URTEIL.md) sprechen — sie
 ist im EA als Setup „DR" **standardmäßig ausgeschaltet**.
 
+**Und es gibt eine dritte Strategie, die hier gar nicht geprüft wird.** Die Halbziel-Taktik
+— viele kurze Trades, bei der Hälfte des Ziels geschlossen — handelt auf M1 statt M5. Das
+Urteil oben sagt über sie **nichts**. Der Befehl steht unter der Empfehlung mit dabei:
+
+```bash
+python -m metals halfscalp --file <M1-datei> --tz <zone> --spread <dein spread>
+```
+
+Fünf grüne Haken und dann eine ungeprüfte Strategie installieren wäre der Fehler, den
+diese Zeilen verhindern sollen. Was bisher über sie bekannt ist: [[Die Halbziel-Taktik]]
+im Tresor, Befunde A34 und A35.
+
 ### Und was du dann tust
 
 | Empfehlung | Was sie bedeutet |

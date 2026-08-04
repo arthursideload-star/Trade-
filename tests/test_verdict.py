@@ -230,3 +230,27 @@ class TestTheCommandRefusesRatherThanGuessing(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheVerdictNamesWhatItDidNotJudge(unittest.TestCase):
+    """A command called "the verdict" must be explicit about its scope.
+
+    There are three strategies in this repository and this command measures
+    two. A reader who sees five green checks and installs the third has been
+    misled by an omission, which is the harder kind to notice than a wrong
+    claim -- nothing on the page is false.
+    """
+
+    def test_every_render_says_the_half_target_tactic_is_not_covered(self):
+        v = Verdict()
+        v.recommendation = "NOCH NICHT INSTALLIEREN"
+        text = render(v)
+        self.assertIn("NICHT GEPRUEFT", text)
+        self.assertIn("Halbziel", text)
+
+    def test_it_points_at_the_command_that_would_judge_it(self):
+        v = Verdict()
+        v.recommendation = "INSTALLIEREN"
+        text = render(v)
+        self.assertIn("metals halfscalp", text)
+        self.assertIn("--tz", text)
