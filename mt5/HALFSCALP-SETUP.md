@@ -50,7 +50,7 @@ Prüfen, dass sie vollständig ist:
 wc -l GoldHalfScalp.mq5
 ```
 
-Es muss **977** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
+Es muss **1042** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
 kopieren.
 
 > Unter Windows hängt der Editor gern `.txt` an. Die Datei muss auf `.mq5` enden. Notfalls
@@ -175,5 +175,16 @@ in der Symbolleiste ausschalten — das stoppt beide EAs sofort.
 **Offene Positionen bleiben offen.** Der EA hängt Stop und Ziel beim Öffnen an die Order, es
 liegt also beides beim Broker und wirkt weiter. Der **Zeitstop** dagegen ist das Einzige,
 was der EA selbst erledigt — läuft er nicht mehr, schließt nichts mehr nach zehn Minuten.
+
+## Zwei Dinge, die du nicht tun solltest
+
+**Nicht nebenher XAUUSD von Hand handeln.** Auf einem Netting-Konto gibt es je Symbol nur
+*eine* Position — deine und die des EA würden verrechnet, und dann stimmt weder sein Stop
+noch seine Buchführung. Gib ihm ein Konto für sich.
+
+**Den Terminal-Neustart musst du nicht fürchten.** Der EA liest beim Start die Trades des
+laufenden Tages aus der Historie zurück: Tagesverlustgrenze und Trade-Decke zählen weiter,
+statt bei null anzufangen. Eine Grenze, die ein Neustart löscht, wäre keine — und auf einem
+VPS sind Neustarts normal.
 
 Siehe auch: `docs/REPO-AUDIT.md` (A34, A35) · `obsidian/01-Strategie/Die Halbziel-Taktik.md`

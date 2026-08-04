@@ -462,3 +462,84 @@ class TheSetupGuideStaysTrue(unittest.TestCase):
                 self.assertIn(shown, self.guide,
                               f"{const} is {m.group(1)} in the code but the "
                               f"guide does not show {shown}")
+
+
+class EveryNameResolvesToSomething(unittest.TestCase):
+    """Stronger than "the helpers I remembered to list are defined".
+
+    Every name called in the file must be either defined in the file or on
+    the explicit list of MQL5 API calls below. A typo in a helper name would
+    otherwise sail past every other check here and fail in MetaEditor, on
+    the user's machine, at the point where the feedback loop is a screenshot
+    over chat.
+
+    The list doubles as documentation: it is the entire MQL5 surface this EA
+    depends on. Adding to it should be a deliberate act, which is the point.
+    """
+
+    MQL5_API = {
+        # Account, symbol and market data
+        "AccountInfoDouble", "AccountInfoInteger", "SymbolInfoDouble",
+        "SymbolInfoInteger", "CopyBuffer", "CopyRates", "iATR", "iTime",
+        # Time
+        "TimeGMT", "TimeTradeServer", "TimeToString", "TimeToStruct",
+        "StructToTime",
+        # Positions and history
+        "PositionsTotal", "PositionGetTicket", "PositionGetDouble",
+        "PositionGetInteger", "PositionGetString", "PositionSelectByTicket",
+        "HistorySelect", "HistorySelectByPosition", "HistoryDealsTotal",
+        "HistoryDealGetTicket", "HistoryDealGetDouble",
+        "HistoryDealGetInteger", "HistoryDealGetString",
+        # CTrade methods, called as trade.X(...)
+        "Buy", "Sell", "PositionClose", "ResultRetcode",
+        "ResultRetcodeDescription", "SetDeviationInPoints",
+        "SetExpertMagicNumber", "SetMarginMode", "SetTypeFillingBySymbol",
+        # Files
+        "FileOpen", "FileClose", "FileSeek", "FileTell", "FileWriteString",
+        # Strings and numbers
+        "StringFormat", "StringFind", "StringReplace", "StringToLower",
+        "DoubleToString", "NormalizeDouble", "MathAbs", "MathMax", "MathFloor",
+        # Chart objects
+        "ObjectCreate", "ObjectDelete", "ObjectFind", "ObjectSetInteger",
+        "ObjectSetString",
+        # Misc
+        "Print", "PrintFormat", "Alert", "GetLastError", "ZeroMemory",
+        "ArraySetAsSeries", "IndicatorRelease",
+    }
+
+    KEYWORDS = {"if", "for", "while", "switch", "return", "sizeof", "catch"}
+
+    @classmethod
+    def setUpClass(cls):
+        with open(EA_PATH, encoding="utf-8") as fh:
+            cls.code = _strip_comments_and_strings(fh.read())
+        cls.defined = set(re.findall(
+            r"^\s*(?:void|int|bool|double|string|datetime|ulong|Setup|"
+            r"SessionQuality)\s+(\w+)\s*\(", cls.code, re.M))
+        cls.called = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", cls.code))
+
+    def test_the_lifecycle_functions_were_found_by_the_scan(self):
+        """If the scan cannot see these, it is not seeing the file."""
+        for fn in ("OnInit", "OnTick", "OnDeinit"):
+            self.assertIn(fn, self.defined)
+
+    def test_no_call_goes_to_a_name_that_does_not_exist(self):
+        unknown = self.called - self.defined - self.MQL5_API - self.KEYWORDS
+        self.assertEqual(
+            unknown, set(),
+            f"called but neither defined in the file nor a known MQL5 call: "
+            f"{sorted(unknown)}. Either it is a typo, or it is a genuine API "
+            f"call that belongs on the list above.")
+
+    def test_no_helper_is_defined_and_then_never_used(self):
+        """Dead code in a file nobody can compile is worse than dead code."""
+        entry_points = {"OnInit", "OnTick", "OnDeinit"}
+        unused = self.defined - self.called - entry_points
+        self.assertEqual(unused, set(), f"defined but never called: "
+                                        f"{sorted(unused)}")
+
+    def test_the_api_list_has_no_stale_entries(self):
+        """A list that outlives its calls stops describing the dependency."""
+        stale = self.MQL5_API - self.called
+        self.assertEqual(stale, set(), f"on the API list but never called: "
+                                       f"{sorted(stale)}")

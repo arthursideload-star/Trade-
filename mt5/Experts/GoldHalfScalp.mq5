@@ -488,17 +488,82 @@ double LotsForRisk(const double stop_distance, const double risk_money,
 // SECTION 7 -- DAY STATE
 //====================================================================
 
+datetime StartOfDayUtc(const datetime utc)
+{
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   dt.hour = 0; dt.min = 0; dt.sec = 0;
+   return StructToTime(dt);
+}
+
+//--- Rebuilt from the deal history, not merely zeroed.
+//---
+//--- The obvious version -- set the counters to zero and today's equity as
+//--- the starting point -- has a hole big enough to drive through: restart
+//--- the terminal after a 4% losing day and both limits begin again from
+//--- nothing. A risk limit that a restart clears is not a limit, and
+//--- restarts are routine on a VPS.
+//---
+//--- So today's own deals are counted back. The `start_equity > 0` in the
+//--- guard matters too: MqlDateTime.day_of_year is zero-based, so on the
+//--- first of January the zeroed struct would otherwise look like a day
+//--- that had already been rebuilt.
 void RebuildDayState(const datetime utc)
 {
    MqlDateTime dt;
    TimeToStruct(utc, dt);
-   if(day.day_of_year == dt.day_of_year) return;
+   if(day.day_of_year == dt.day_of_year && day.start_equity > 0.0) return;
+
    day.day_of_year  = dt.day_of_year;
    day.trades_taken = 0;
-   day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
    day.halted       = false;
-   PrintFormat("new trading day. Equity %.2f, limits: %.1f%% loss, %d trades.",
-               day.start_equity, DAILY_LOSS_LIMIT_PCT, MAX_TRADES_PER_DAY);
+
+   const datetime from_server = StartOfDayUtc(utc) + ServerOffsetSeconds();
+   if(!HistorySelect(from_server, TimeTradeServer() + 60))
+   {
+      day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      PrintFormat("new trading day, history unavailable. Equity %.2f, "
+                  "limits: %.1f%% loss, %d trades.",
+                  day.start_equity, DAILY_LOSS_LIMIT_PCT, MAX_TRADES_PER_DAY);
+      return;
+   }
+
+   double realised = 0.0;
+   const int deals = HistoryDealsTotal();
+   for(int i = 0; i < deals; i++)
+   {
+      const ulong ticket = HistoryDealGetTicket(i);
+      if(ticket == 0) continue;
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) != InpMagic) continue;
+      if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol) continue;
+
+      const long entry_type = HistoryDealGetInteger(ticket, DEAL_ENTRY);
+      if(entry_type == DEAL_ENTRY_IN)
+      {
+         day.trades_taken++;
+         continue;
+      }
+      if(entry_type != DEAL_ENTRY_OUT) continue;
+      realised += HistoryDealGetDouble(ticket, DEAL_PROFIT)
+                + HistoryDealGetDouble(ticket, DEAL_SWAP)
+                + HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+   }
+
+   //--- Equity at the start of the day, derived backwards from what has
+   //--- been realised since. Not exact if something else trades the same
+   //--- account, which is one more reason to give this EA one to itself.
+   day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY) - realised;
+   if(day.start_equity <= 0.0)
+      day.start_equity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   if(day.trades_taken > 0)
+      PrintFormat("recovered day state: %d trade(s) already taken today, "
+                  "realised %.2f. Limits continue from there, not from zero.",
+                  day.trades_taken, realised);
+   else
+      PrintFormat("new trading day. Equity %.2f, limits: %.1f%% loss, "
+                  "%d trades.", day.start_equity, DAILY_LOSS_LIMIT_PCT,
+                  MAX_TRADES_PER_DAY);
 }
 
 //--- Returns true when the day is over, whatever the chart says.
