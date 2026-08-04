@@ -134,6 +134,13 @@ input group "=== Filters ==="
 input int           InpAtrPeriod       = 14;    // ATR period (M5)
 input int           InpNewsBlackoutMin = 30;    // Minutes around the data windows
 input bool          InpBlockNewsWindow = true;  // Apply the news blackout
+//--- A33. This gate did not exist. metals/backtest.py has filtered every
+//--- signal at min_confidence = 0.60 since the parameter sweep, so every
+//--- published backtest number describes a filtered strategy -- while the
+//--- EA took whatever fired. The default matches BacktestConfig so that the
+//--- backtest, the paper run and the live EA are once again describing the
+//--- same thing, which is the whole premise of the parity tests.
+input double        InpMinConfidence   = 0.60;  // Minimum setup confidence
 
 //====================================================================
 // SECTION 3 -- GLOBALS
@@ -1226,6 +1233,7 @@ struct Setup
    bool     is_long;
    double   entry;
    double   structural_level;
+   double   confidence;      // A33: the EA had no such field and no gate
    string   evidence;
    string   failure_mode;
 };
@@ -1275,6 +1283,19 @@ void LookForSetup(const datetime utc)
    if(!s.found)
    {
       Note("no setup. Most bars are not an opportunity.");
+      return;
+   }
+
+   //--- A33. The confidence gate the backtest has always applied and the EA
+   //--- never did. DR carries no confidence score of its own, so it is not
+   //--- subject to this -- gating it on a field that is always zero would
+   //--- switch the strategy off, which is exactly the bug this fixes.
+   if(s.id != "DR" && s.confidence < InpMinConfidence)
+   {
+      Note(StringFormat(
+         "%s seen at confidence %.2f, below the %.2f minimum. Skipped -- the "
+         "backtest that produced the published numbers filtered it too.",
+         s.id, s.confidence, InpMinConfidence));
       return;
    }
 
@@ -1392,8 +1413,19 @@ Setup DetectS2(const double atr_value)
    ArraySetAsSeries(r, true);
    if(CopyRates(_Symbol, PERIOD_M5, 1, 6, r) < 6) return s;
 
+   //--- r[0] is the breakout bar, so it is NOT part of the pullback and it
+   //--- has to close with the trend. Counting it into the pullback was the
+   //--- A31 defect: the trigger is the pullback's highest high, so r[0]
+   //--- would have had to close above its own high. `broke` could never be
+   //--- true and S2 never fired -- not rarely, never. The Python detector
+   //--- had the same off-by-one; both were fixed together.
+   const bool with_trend = up ? (r[0].close > r[0].open)
+                              : (r[0].close < r[0].open);
+   if(!with_trend) return s;
+
+   //--- The pullback is the run of counter-trend bars ending at r[1].
    int counter = 0;
-   for(int i = 0; i < 5; i++)
+   for(int i = 1; i < 5; i++)
    {
       const bool is_counter = up ? (r[i].close < r[i].open)
                                  : (r[i].close > r[i].open);
@@ -1402,9 +1434,9 @@ Setup DetectS2(const double atr_value)
    }
    if(counter == 0 || counter > 3) return s;
 
-   double trigger = up ? r[0].high : r[0].low;
-   double extreme = up ? r[0].low  : r[0].high;
-   for(int i = 1; i < counter; i++)
+   double trigger = up ? r[1].high : r[1].low;
+   double extreme = up ? r[1].low  : r[1].high;
+   for(int i = 2; i <= counter; i++)
    {
       trigger = up ? MathMax(trigger, r[i].high) : MathMin(trigger, r[i].low);
       extreme = up ? MathMin(extreme, r[i].low)  : MathMax(extreme, r[i].high);
@@ -1413,9 +1445,15 @@ Setup DetectS2(const double atr_value)
    const bool broke = up ? (r[0].close > trigger) : (r[0].close < trigger);
    if(!broke) return s;
 
+   //--- Mirrors detect_s2() in metals/scalping.py exactly.
+   double conf = 0.58 + MathMin(0.12, MathAbs(slope) * 0.10)
+                      - 0.05 * (counter - 1);
+   conf = MathMax(0.0, MathMin(0.90, conf));
+
    s.found            = true;
    s.id               = "S2";
    s.name             = "Pullback Window Break";
+   s.confidence       = conf;
    s.is_long          = up;
    s.entry            = up ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                            : SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -1470,9 +1508,24 @@ Setup DetectS5(const double atr_value)
    const bool in_zone = is_long ? (r[0].low <= third) : (r[0].high >= third);
    if(!in_zone) return s;
 
+   //--- Mirrors detect_s5() in metals/scalping.py. Both sides used to return
+   //--- the bare base confidence 0.57, which is below the 0.60 filter, so
+   //--- the backtest silently traded S5 zero times while the EA traded it
+   //--- unfiltered (A32). Strength of the impulse raises it, depth of the
+   //--- retracement lowers it.
+   const double impulse_strength =
+      MathMax(0.0, MathMin(1.0, (range / atr_value - 1.5) / 1.5));
+   const double span  = range / 3.0;
+   const double depth = (span <= 0.0) ? 0.0
+      : MathMax(0.0, MathMin(1.0, is_long ? (third - r[0].low) / span
+                                          : (r[0].high - third) / span));
+   const double conf = MathMax(0.0, MathMin(0.90,
+      0.57 + 0.10 * impulse_strength - 0.08 * depth));
+
    s.found            = true;
    s.id               = "S5";
    s.name             = "Momentum Continuation";
+   s.confidence       = conf;
    s.is_long          = is_long;
    s.entry            = is_long ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                                 : SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -1496,14 +1549,20 @@ Setup DetectS4(const double atr_value)
 
    MqlRates r[];
    ArraySetAsSeries(r, true);
-   if(CopyRates(_Symbol, PERIOD_M5, 1, 13, r) < 13) return s;
+   //--- 36 bars because Python counts touches over m5.tail(36). Reading 12
+   //--- here made the EA's touch test three times more permissive than the
+   //--- backtest's, which is the same class of defect as A31/A32: two code
+   //--- paths that were supposed to be one.
+   if(CopyRates(_Symbol, PERIOD_M5, 1, 36, r) < 36) return s;
 
    const double handle = MathRound(r[0].close / 10.0) * 10.0;
    if(MathAbs(r[0].close - handle) > atr_value * 1.5) return s;
 
-   const double run = MathAbs(r[0].close - r[12].open);
+   //--- Python's run is over m5.tail(12): last bar's close against the OPEN
+   //--- of the twelfth-from-last bar, which is r[11], not r[12].
+   const double run = MathAbs(r[0].close - r[11].open);
    if(run < atr_value * 2.0) return s;
-   const bool approaching_up = (r[0].close > r[12].open);
+   const bool approaching_up = (r[0].close > r[11].open);
 
    const double range = r[0].high - r[0].low;
    if(range <= 0.0) return s;
@@ -1520,13 +1579,30 @@ Setup DetectS4(const double atr_value)
    if(!approaching_up && !rejected_up)   return s;
 
    int touches = 0;
-   for(int i = 0; i < 12; i++)
+   for(int i = 0; i < 36; i++)
       if(r[i].low <= handle && r[i].high >= handle) touches++;
    if(touches >= 3) return s;
+
+   //--- Port of pin_bar()'s strength in metals/patterns.py plus the
+   //--- _level_adjust() step, fed into detect_s4()'s confidence. The gates
+   //--- above (wick >= 0.6 ATR, wick > 2x the other, body < 45% of range)
+   //--- are already pin_bar's gates verbatim, so the score ports exactly.
+   const double wick      = approaching_up ? upper : lower;
+   const double body_frac = body / range;
+   double strength = MathMin(0.9, 0.35 + (wick / atr_value) * 0.20
+                                       + (0.45 - body_frac) * 0.4);
+   const double pad = handle * 0.12 / 100.0;
+   const bool touched = (r[0].low - pad <= handle && handle <= r[0].high + pad);
+   strength = touched ? MathMin(0.95, strength * 1.15) : strength * 0.55;
+
+   double conf = 0.55 + (strength - 0.5) * 0.25;
+   if(touches == 2) conf -= 0.12;   // the next attempt usually goes through
+   conf = MathMax(0.0, MathMin(0.90, conf));
 
    s.found            = true;
    s.id               = "S4";
    s.name             = "Round Number Fade";
+   s.confidence       = conf;
    s.is_long          = !approaching_up;
    s.entry            = s.is_long ? SymbolInfoDouble(_Symbol, SYMBOL_ASK)
                                   : SymbolInfoDouble(_Symbol, SYMBOL_BID);

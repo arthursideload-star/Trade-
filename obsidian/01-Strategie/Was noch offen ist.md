@@ -44,4 +44,21 @@ Er entscheidet in einer Tagessitzung über das **Vorzeichen** des Erwartungswert
 ist `--spread` im ganzen Projekt Pflicht und wird nirgends vorbelegt.
 [[Was der Spread zum falschen Zeitpunkt kostet]]
 
+## 6. Was S2 und S5 verdienen, ist ungemessen
+
+Beide Setups liefen bis zum 04.08.2026 faktisch nie — S2 konnte nicht auslösen, S5 fiel
+komplett durch den Konfidenzfilter (A31, A32). Seit der Behebung handeln sie: rund ein
+Trade pro Tag im Simulator statt einem alle zehn Tage.
+
+**Häufigkeit ist aber kein Ertrag.** Ein Setup, das zehnmal so oft handelt und dabei
+verliert, ist zehnmal schlechter. Bevor S2 auf ein echtes Konto darf, braucht es dieselbe
+Behandlung wie die Tagesspanne: `paper --review` über genug Sitzungen, Konfidenzbänder, und
+den Ablationstest aus A27 — der bei der Hauptstrategie gezeigt hat, dass die gemessene Kante
+im Wesentlichen ein Simulator-Parameter war. Es gibt keinen Grund anzunehmen, dass S2 davor
+gefeit ist.
+
+Solange das offen ist, gehört der EA auf ein **Demokonto**.
+
+---
+
 Siehe auch: [[Die Hauptstrategie]] · `docs/REPO-AUDIT.md`

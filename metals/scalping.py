@@ -457,9 +457,20 @@ def detect_s2(symbol: str, m5: CandleSeries, spread: float,
                f"EMA stack {'up' if up else 'down'}, 21-EMA slope "
                f"{slope:+.2f}x ATR over 5 bars")
 
-    # Count the counter-trend pullback.
+    last = m5.last
+
+    # The last bar is the *breakout* bar, so it is not part of the pullback
+    # and it has to close with the trend. Counting it into the pullback was
+    # the A31 defect: the trigger is the highest high of the pullback, so a
+    # last bar inside its own pullback would have had to close above its own
+    # high. `broke` was unsatisfiable and S2 never fired -- not rarely, never.
+    with_trend = (last.close > last.open) if up else (last.close < last.open)
+    if not with_trend:
+        return None
+
+    # Count the counter-trend pullback that ends at the bar before this one.
     counter = 0
-    for c in reversed(m5.candles):
+    for c in reversed(m5.candles[:-1]):
         is_counter = (c.close < c.open) if up else (c.close > c.open)
         if is_counter:
             counter += 1
@@ -472,12 +483,11 @@ def detect_s2(symbol: str, m5: CandleSeries, spread: float,
                        f"is a reversal in progress, not a pause")
         return None
 
-    pullback = m5.candles[-counter:]
+    pullback = m5.candles[-1 - counter:-1]
     trigger = max(c.high for c in pullback) if up else min(c.low for c in pullback)
     machine.to(Phase.WINDOW_OPEN, m5.last.ts,
                f"{counter}-bar pullback, trigger at {trigger:g}")
 
-    last = m5.last
     broke = last.close > trigger if up else last.close < trigger
     if not broke:
         return None
@@ -665,9 +675,27 @@ def detect_s5(symbol: str, m5: CandleSeries, m1: CandleSeries | None,
     entry = (m1.last.close if m1 and len(m1) else last.close)
     stop = _scalp_stop(direction, origin, a, entry, multiple=0.3)
 
+    # A32. Returning `spec.base_confidence` verbatim made S5's confidence the
+    # constant 0.57, and the backtest's default min_confidence is 0.60. A
+    # constant below a threshold is not a filter, it is an off switch: every
+    # backtest in this repo that claimed to cover S5 covered zero S5 trades,
+    # while the EA -- which had no confidence gate at all -- traded it
+    # unfiltered. Both halves of that mismatch are fixed; this is the half
+    # that gives the setup a confidence which can actually move, from the two
+    # pieces of evidence it has already computed.
+    impulse_strength = min(1.0, max(0.0, (impulse.range / a - 1.5) / 1.5))
+    span = (third - origin) if direction == "long" else (origin - third)
+    if span <= 0:
+        depth = 0.0
+    elif direction == "long":
+        depth = min(1.0, max(0.0, (third - last.low) / span))
+    else:
+        depth = min(1.0, max(0.0, (last.high - third) / span))
+    confidence = spec.base_confidence + 0.10 * impulse_strength - 0.08 * depth
+
     return ScalpSignal(
         "S5", spec.name, get_spec(symbol).symbol, direction,
-        entry, stop, spec.base_confidence, a, spread,
+        entry, stop, max(0.0, min(0.90, confidence)), a, spread,
         machine.log,
         [f"impulse {impulse.range / a:.1f}x ATR", note],
         ["if a high-impact release landed in the last 30 minutes this setup "

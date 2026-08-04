@@ -292,7 +292,47 @@ belegt ist. Der Weg dorthin steht dann in [VPS-SETUP.md](./VPS-SETUP.md).
 | „Einloggen geht nicht" | Meist das MQL5-Community-Konto, nicht das Handelskonto. Für den EA nicht nötig — siehe den Kasten in Schritt 2 |
 | Panel erscheint nicht | EA nicht auf den Chart gezogen, oder Algo-Trading rot |
 | Panel zeigt dauernd `AVOID` | Wochenende, Rollover (21–23 UTC) oder Markt geschlossen. Richtig so |
-| Panel `PRIME`, aber nichts passiert | Kein Setup. Nichtstun ist der Normalfall |
+| Panel `PRIME`, aber nichts passiert | Kein Setup. Nichtstun ist der Normalfall — aber siehe den Kasten unten, wie lange „normal" ist |
 | Kein XAUUSD in der Marktübersicht | Rechtsklick → *Alle anzeigen* |
 | „cannot size" im Experten-Reiter | Konto zu klein für die Stop-Distanz. Demokonto mit 1 000 USD nehmen |
 | Keine `GoldScalpAssistant.csv` | Kommt erst beim ersten erkannten Setup. Geduld — in ruhigen Stunden dauert das |
+
+---
+
+## Wie oft der Bot überhaupt etwas tut
+
+Diese Frage kam auf, weil der Bot 15 Minuten lief und nichts passierte. Das war damals
+**kein Geduldsproblem, sondern ein Fehler** — S2 konnte konstruktionsbedingt nie auslösen
+und S5 fiel vollständig durch den Konfidenzfilter (siehe A31–A33 in
+`docs/REPO-AUDIT.md`). Beides ist behoben.
+
+Gemessen über je 60 simulierte Handelstage, drei Seeds, Setups S2/S4/S5:
+
+| Seed | vorher | nachher |
+|---|---:|---:|
+| 7 | 6 Trades (0,10/Tag) | **57 Trades (0,95/Tag)** |
+| 99 | 8 Trades (0,13/Tag) | **81 Trades (1,35/Tag)** |
+| 4242 | 9 Trades (0,15/Tag) | **75 Trades (1,25/Tag)** |
+
+**Was diese Zahlen sind und was nicht.** Sie stammen aus dem simulierten Markt, nicht aus
+echten Gold-Daten, und sie sagen nur, **wie oft** gehandelt wird — nichts darüber, ob das
+Geld verdient. Dafür ist `python -m metals verdict` zuständig, und dessen Antwort steht in
+`docs/URTEIL.md`. Gemessen wird außerdem im gemeinsamen Backtest, in dem auch S1 und S3 um
+dieselben Balken konkurrieren; der EA handelt nur S2/S4/S5 und kommt deshalb eher auf mehr
+als auf weniger.
+
+**Die praktische Erwartung: rund ein Trade pro Tag.** Wenn du eine Stunde zusiehst, ist
+„nichts" das wahrscheinlichste Ergebnis. Wenn ein **ganzer Handelstag** ohne einen einzigen
+Eintrag im Experten-Reiter vergeht, stimmt etwas nicht — dann lohnt der Blick ins Log.
+
+**Der EA sagt dir jetzt, wenn er etwas gesehen und verworfen hat.** Im Experten-Reiter
+steht dann eine Zeile wie:
+
+```
+S5 seen at confidence 0.58, below the 0.60 minimum. Skipped -- the backtest
+that produced the published numbers filtered it too.
+```
+
+Das ist der Normalfall und kein Fehler. Der Wert ist über `InpMinConfidence` einstellbar,
+Voreinstellung 0,60 — dieselbe Zahl, mit der der Backtest rechnet. **Wer sie senkt,
+handelt eine andere Strategie als die gemessene.**

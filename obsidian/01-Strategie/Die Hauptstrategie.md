@@ -62,4 +62,13 @@ Erwartungswert null — nicht halbiert, null.
 ist bei ihm **ausgeschaltet** (`InpUseDayRange`). Das zu verwechseln ist der naheliegendste
 Fehler im ganzen Projekt — `metals verdict` misst deshalb beide getrennt und nummeriert sie.
 
+Genauer: der EA handelt **S2, S4 und S5** — nicht S1, obwohl S1 im Simulator mit Abstand am
+häufigsten auslöst. Bis zum 04.08.2026 waren davon zwei faktisch tot: S2 konnte
+konstruktionsbedingt nie auslösen, S5 fiel vollständig durch den Konfidenzfilter. Behoben,
+nachzulesen als A31–A33 in `docs/REPO-AUDIT.md`.
+
+**Was daraus für dieses Blatt folgt:** Jede Zahl über S2 oder S5, die vor diesem Datum
+entstanden ist, beschreibt eine leere Menge. Nicht „ungenau" — leer. Was die beiden Setups
+verdienen, ist eine offene Frage, siehe [[Was noch offen ist]].
+
 Siehe auch: [[Die Regeln]] · [[Was noch offen ist]] · [[START HIER]]

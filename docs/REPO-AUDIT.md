@@ -536,6 +536,162 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A31 · S2 konnte nicht auslösen — nicht selten, sondern nie — **behoben**
+
+Aus einer zweiten Bildschirmaufnahme vom 04.08.2026. Der Nutzer meldete: „er läuft ja jetzt
+auch, das Doofe ist nur, es passiert nix, er macht keine Trades, ich habe ihn so 10–15
+Minuten laufen lassen".
+
+Der erste Verdacht war Ungeduld — 15 Minuten sind bei einem Scalper wenig. Der Verdacht war
+falsch. Die Aussage „es passiert nix" ist **strukturell wahr**.
+
+### Der Befund
+
+`detect_s2` zählt die Gegenbewegung rückwärts ab dem **letzten** Balken:
+
+```python
+for c in reversed(m5.candles):          # beginnt bei m5.last
+    ...
+pullback = m5.candles[-counter:]        # enthält damit m5.last
+trigger  = max(c.high for c in pullback)
+broke    = m5.last.close > trigger      # ... > seinem eigenen High
+```
+
+Der Ausbruchsbalken wurde in seine eigene Gegenbewegung hineingezählt. Der Auslöser ist das
+höchste Hoch der Gegenbewegung, also `trigger >= last.high >= last.close`. Die Bedingung
+`broke` ist **nicht erfüllbar**. Dasselbe in der MQL5-Fassung, Zeile für Zeile: `r[0]` stand
+sowohl im Zählfenster als auch im Vergleich.
+
+### Der Beleg
+
+Ein Markt, der genau der Beschreibung im Docstring folgt — EMA-Stapel mit Steigung,
+zweibalkige Gegenbewegung, ein Balken, der 2,00 $ über deren Hoch schließt:
+
+```
+textbook S2 market -> detect_s2 returns: None
+last bar close 4170.5   pullback trigger 4168.5
+```
+
+Und über **39.000 Balken** aus fünf Simulationsläufen (Seeds 7, 99, 4242, 1, 2), ohne
+Spread-Gatter und ohne Konfidenzfilter, also unter den mildesten Bedingungen, die das
+Programm zulässt:
+
+| Setup | Signale | Konfidenz |
+|---|---:|---|
+| **S2** | **0** | — |
+| S4 | 162 | 0,445–0,663 |
+| **S5** | **1.916** | **exakt 0,570, jedes Mal** |
+
+**Was diese Tabelle nicht sagt:** S1 und S3 stehen ebenfalls bei 0, aber das ist ein Mangel
+der Messung, kein Befund. S1 verlangt eine M1-Bestätigung, und die Messung hat `m1=None`
+übergeben; S3 braucht Vortageshochs und -tiefs, die die aus M5 gebaute Levelkarte nicht
+enthält. Beide Nullen sind Werkzeugfehler und werden hier ausdrücklich **nicht** als Defekt
+geführt. Die Null bei S2 ist es, weil sie unabhängig davon am Lehrbuchmarkt reproduziert.
+
+### Was das für die Beobachtung des Nutzers bedeutet
+
+Der EA handelt S2, S4 und S5. S2 konnte nie auslösen. S5 wurde vom Konfidenzfilter des
+Backtests vollständig verworfen (→ A32). Übrig blieb S4 mit gemessenen **0,10–0,15 Trades
+pro Tag** — ein Trade etwa alle 240 Stunden. Die Wahrscheinlichkeit, in 15 Minuten etwas zu
+sehen, lag bei rund **0,1 %**, über einen vollen Achtstundentag bei **3 %**.
+
+Der Nutzer hat nicht zu kurz zugesehen. Es war nichts da.
+
+**Behoben** in beiden Fassungen: Der letzte Balken ist der Ausbruchsbalken, muss selbst mit
+dem Trend schließen und steht außerhalb der Gegenbewegung. Am selben Lehrbuchmarkt löst S2
+jetzt mit Konfidenz 0,65 aus.
+
+Über je 60 simulierte Handelstage, Setups S2/S4/S5, sonst unveränderte Voreinstellungen:
+
+| Seed | vorher | nachher | davon S2 |
+|---|---:|---:|---:|
+| 7 | 6 (0,10/Tag) | **57 (0,95/Tag)** | 50 |
+| 99 | 8 (0,13/Tag) | **81 (1,35/Tag)** | 64 |
+| 4242 | 9 (0,15/Tag) | **75 (1,25/Tag)** | 66 |
+
+Rund Faktor zehn, und der Zuwachs kommt fast vollständig aus S2 — dem Setup, das vorher
+nicht existieren konnte.
+
+**Was hier ausdrücklich nicht behauptet wird:** Dass der Bot dadurch besser wird. Gemessen
+ist die Häufigkeit, nicht der Erwartungswert. Ein Setup, das zehnmal so oft ein Verlust­
+geschäft eingeht, ist zehnmal schlechter. Die Frage, was S2 verdient, ist durch diesen
+Befund überhaupt erst *stellbar* geworden — beantwortet ist sie nicht, und alle
+S2-Zahlen aus der Zeit davor beschreiben eine leere Menge.
+
+### Warum 989 grüne Tests das nicht gefunden haben
+
+Weil alle vorhandenen Tests bei einem Signal *anfingen* und prüften, ob es korrekt
+weiterverarbeitet wird. Keiner fragte, ob überhaupt eines entstehen kann. Neu ist deshalb
+`tests/test_detector_liveness.py` mit zwei Fragen je Detektor:
+
+1. Löst ein Markt aus, der nach der eigenen Beschreibung des Setups gebaut ist?
+2. Kann irgendeines der Signale den voreingestellten Konfidenzfilter überhaupt passieren?
+
+Frage 2 hätte A32 gefangen, Frage 1 diesen Befund. Beide Fragen sind billig und keine wurde
+je gestellt.
+
+---
+
+## A32 · S5s Konfidenz war eine Konstante unterhalb der Schwelle — **behoben**
+
+`detect_s5` gab `spec.base_confidence` unverändert zurück: **0,57**, immer. Der
+voreingestellte Filter in `metals/backtest.py` liegt bei **0,60**.
+
+Eine Konstante unterhalb einer Schwelle ist kein Filter, sondern ein **Ausschalter**. Über
+39.000 Balken: 1.916 Signale, Minimum 0,570, Maximum 0,570, davon **null** oberhalb der
+Schwelle.
+
+Die Konsequenz ist unangenehm konkret: **Jeder Backtest dieses Projekts, der mit der
+Voreinstellung gelaufen ist, hat S5 null Mal gehandelt** — auch die, die S5 in ihrer
+Setup-Liste führen. Die 0,60 stammen aus einem Parametersweep, der über Trefferquoten
+argumentiert hat, nicht darüber, welche Setups er dabei stillschweigend abschaltet.
+
+**Behoben.** S5 rechnet seine Konfidenz jetzt aus den zwei Belegen, die es ohnehin schon
+ermittelt hat: der Stärke des Impulsbalkens (1,5–3,0 × ATR) und der Tiefe des Rücklaufs.
+Gemessen an zwei gebauten Märkten:
+
+| Fall | Konfidenz | Filter bei 0,60 |
+|---|---:|---|
+| 4,0 × ATR Impuls, Rücklauf berührt das nahe Drittel gerade | **0,666** | passiert |
+| 2,4 × ATR Impuls, Rücklauf bis an den Ursprung | **0,544** | verworfen |
+
+Die Schwelle trennt jetzt etwas. Vorher trennte sie alles von nichts.
+
+**Was hier bewusst nicht behauptet wird:** Dass die neue Formel S5 besser macht. Sie macht
+S5 *messbar* — die Frage, ob S5 einen Erwartungswert hat, ist damit erst wieder stellbar,
+nicht beantwortet. Alle S5-Zahlen aus der Zeit vor diesem Befund sind keine S5-Zahlen.
+
+---
+
+## A33 · Der EA hatte gar keinen Konfidenzfilter — **behoben**
+
+Das Gegenstück zu A32, und der Grund, warum A32 so lange unsichtbar bleiben konnte.
+
+`grep -c confidence mt5/Experts/GoldScalpAssistant.mq5` → **0**. Die `Setup`-Struktur hatte
+kein solches Feld, kein Detektor rechnete einen Wert, und an der Vergabestelle stand keine
+Prüfung. Der Backtest filterte bei 0,60, der EA nahm, was kam.
+
+Damit war die Projektregel aus `CLAUDE.md` — *„Backtest, Paper und Live nutzen identischen
+Code. Nur der Exchange-Adapter wird getauscht."* — genau an der Stelle gebrochen, an der sie
+zählt: Die veröffentlichten Zahlen beschrieben eine gefilterte Strategie, gehandelt wurde
+eine ungefilterte.
+
+**Behoben.** Die `Setup`-Struktur trägt ein `confidence`-Feld, S2, S4 und S5 rechnen es mit
+denselben Formeln wie die Python-Seite, und `InpMinConfidence` (Voreinstellung 0,60, wie
+`BacktestConfig`) verwirft darunter. DR ist ausgenommen und begründet: Die Tagesspanne führt
+keinen eigenen Konfidenzwert, ein Gatter auf ein immer leeres Feld hätte die Strategie
+abgeschaltet — also genau der Fehler, den dieser Befund behebt.
+
+Beim Portieren fielen zwei weitere Abweichungen in `DetectS4` auf, gleiche Fehlerklasse:
+
+- Die Berührungen des runden Kurses wurden über **12** Balken gezählt, in Python über **36**.
+  Der EA war damit dreimal nachsichtiger als der Backtest.
+- Der Anlauf verglich gegen `r[12].open`; `m5.tail(12)` in Python meint `r[11].open`.
+
+Beide angeglichen.
+
+---
+
 ## A30 · Der EA lief auf EURUSD und zeichnete sein Panel, als wäre alles in Ordnung — **behoben**
 
 Aus einer Bildschirmaufnahme vom 03.08.2026, 01:20 Uhr. Der Nutzer meldete, „der Bot öffnet
