@@ -536,6 +536,140 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A36 · Der EA rechnete eine Konfidenz und schrieb sie nirgendwohin — **behoben**
+
+Nachtrag zu A33. Dort bekam der EA einen Konfidenzwert und ein Gatter bei 0,60. Damit
+entstand sofort eine neue Frage, die niemand beantworten konnte:
+
+**Verdienen die Trades über der Schwelle mehr als die darunter?**
+
+Ohne diese Antwort ist die Zahl Dekoration. Eine Schwelle rechtfertigt sich dadurch, dass
+sie sortiert — und das ist eine überprüfbare Behauptung, keine Geschmacksfrage. Das Journal
+hatte für sie keine Spalte.
+
+**Behoben** auf beiden Seiten:
+
+- `confidence` als **letzte** Spalte in `COLUMNS` und in `JournalHeader()`. Letzte, weil
+  `parse_row` jedes Feld mit `.get` liest: ein Journal, das vor dieser Änderung entstanden
+  ist, lädt weiter und meldet einfach keine Konfidenz. Ein Test hält genau diesen Fall fest.
+- `ManagedPosition.confidence` speichert den Wert beim Einstieg. Aus demselben Grund wie
+  `risk_money`: beim Ausstieg ist er nicht mehr rekonstruierbar. Eine nach einem Neustart
+  übernommene Position kennt ihren Wert nicht und schreibt keinen.
+- `metals journal` bekommt eine Tabelle **BY CONFIDENCE** in drei Bändern. Drei, nicht
+  sieben: bei den Trade-Zahlen, die dieses Projekt realistisch erreicht, wären
+  Fünf-Punkte-Schubladen ein bis zwei Trades groß und die Tabelle eine Rangliste von
+  Rauschen.
+- Die Notiz unter der Tabelle nennt die Erwartung ausdrücklich — steigende mittlere R-Spalte
+  von oben nach unten — **und** den Fall, dass sie ausbleibt: dann gehört die Schwelle
+  abgeschafft, nicht nachjustiert.
+
+Dazu eine Feinheit, die beim Bauen auffiel: `_group` beschriftet leere Werte mit
+„(unattributed)". Für Setups ist das richtig — der Trade ist passiert und sein Ergebnis
+zählt. Für die Konfidenz wäre es falsch: die Spalte ist jünger als die Zeilen, also stünde
+dort eine Schublade für eine Frage, die nie gestellt wurde, direkt neben Schubladen, die sie
+beantworten. `drop_unlabelled=True` lässt sie weg.
+
+**Was das noch nicht ist:** eine Antwort. Es ist die Möglichkeit, eine zu bekommen. Vor
+`MIN_TRADES_FOR_A_BREAKDOWN` geschlossenen Trades sagt die Tabelle ausdrücklich, dass sie
+nichts belegt.
+
+Und das Konfidenzgatter selbst schreibt jetzt eine Journal-Zeile statt nur einer
+Log-Meldung — neben dem S6-Spread-Gatter, mit denselben Spalten. Ein Gatter, das nur
+druckt, lässt sich hinterher nicht danach fragen, wie oft es gegriffen hat; genau das ist
+die Frage, wenn der EA eine Woche lang still bleibt.
+
+---
+
+## A35 · Ein Spread für den ganzen Tag hat die Kante vervierfacht — **behoben**
+
+Direkte Fortsetzung von A34. Dort wurde die Halbziel-Taktik mit **einem** Spread über den
+ganzen Tag gerechnet — so, wie es jede Engine in diesem Repo bisher getan hat.
+
+Für die Tagesspanne-Strategie mit vier Trades im London/NY-Fenster ist das ungefähr fair.
+Für eine Taktik mit **128 Trades am Tag** ist es das nicht: Ein Bot, der durchgehend auf den
+Chart schaut, schaut auch durch den Rollover. Und `XAUUSD_SPEC` sagt dazu:
+
+| | USD/oz |
+|---|---:|
+| typisch (Überlappung) | 0,20 |
+| **Rollover** | **5,00** |
+| um eine Nachricht herum | 10,00 |
+
+**Fünfundzwanzigfach.** Diese Zahl stand die ganze Zeit im Repo und wurde von `halfscalp`
+nicht gelesen.
+
+### Was das ausmacht
+
+Gepaart über 24 Märkte à 8.000 M1-Balken — gepaart, weil die Streuung *zwischen* Märkten
+jeden Regler überdeckt (die Lehre aus A13):
+
+| | Erwartungswert je Trade |
+|---|---|
+| flacher Spread, rund um die Uhr | **+0,0429** [+0,0354 … +0,0504] |
+| Spread nach Session, rund um die Uhr | **+0,0104** [+0,0027 … +0,0182] |
+| Spread nach Session, nur PRIME/GOOD | **+0,0287** [+0,0191 … +0,0382] |
+
+Und als gepaarte Differenz, Markt für Markt:
+
+| | |
+|---|---|
+| Kosten der ehrlichen Abrechnung | **−0,0325** [−0,0343 … −0,0306] |
+| Nutzen des Sessionfilters | **+0,0182** [+0,0122 … +0,0243] |
+
+**Der flache Spread hat die Kante auf das Vierfache aufgeblasen.** Beide Differenzen haben
+enge Bänder weit weg von der Null — das ist kein Rauschen.
+
+In einem ersten, kleineren Lauf über nur fünf Märkte lag die Session-Variante bei
++0,0105 **[−0,0001 … +0,0212]**, das Band berührte also die Null. Mit 24 Märkten liegt es
+darüber. Beide Läufe stehen hier, weil das Weglassen des ersten die Aussage stärker aussehen
+ließe, als sie ist.
+
+### Behoben, und zwar an den Vorgaben
+
+```python
+spread_model: str = "session"     # war implizit "flat"
+session_filter: bool = True       # war implizit aus
+```
+
+Eine Vorgabe entscheidet, was ein beiläufiger Lauf berichtet, und ist damit selbst eine
+Behauptung. Die Kombination flach + rund um die Uhr behauptete das Vierfache. Wer sie
+zurückdreht, soll das über `--spread-model flat --all-hours` tun — sichtbar, nicht als
+Standardfall.
+
+Dazu zwei Genauigkeiten, die erst durch den variablen Spread überhaupt einen Unterschied
+machen:
+
+- **Die Hälfte des Round-Trips wird beim Einstieg gezahlt, die Hälfte beim Ausstieg.** Ein
+  Trade, der in der Überlappung geöffnet und nach Rollover-Beginn geschlossen wird, zahlt
+  beides. Ein gemittelter Wert hätte genau diesen Fall verdeckt.
+- **Das Kostengatter wirkt als automatischer Sessionfilter.** Bei einem Rollover-Spread von
+  5,00 $/oz schafft kein M1-Halbziel den Faktor 1,5, also lehnt `refused_cost` diese Trades
+  von selbst ab — 790 Stück im Lauf ohne Filter. Der ausdrückliche Filter ist trotzdem
+  besser, weil er auch die *mittelteuren* Stunden ausschließt, in denen das Gatter noch
+  durchlässt.
+
+### Die schwächste Zahl in diesem Befund, ausdrücklich benannt
+
+Die Aufschläge je Sessionqualität sind **nicht** alle belegt:
+
+| Qualität | Faktor | Herkunft |
+|---|---:|---|
+| PRIME | 1,00 | Definition — die 0,20 beschreiben genau dieses Fenster |
+| GOOD | 1,25 | **geschätzt**, innerhalb der 0,20–0,40-Spanne aus `SPREAD_NOTE` |
+| MARGINAL | 2,00 | **geschätzt**, oberes Ende derselben Spanne |
+| AVOID | aus `thin_spread_usd_oz` | Spec, mit Quellenangabe in `specs.py` |
+
+Zwei der vier Zeilen sind Schätzungen von mir. Sie stehen im Modulkopf als solche und sind
+das Erste, was durch eine Ablesung am eigenen Broker ersetzt gehört.
+
+**Was das nicht ändert:** Die Kante hängt weiterhin am Rundzahl-Magneten des Simulators
+(A34). Ein ehrlicherer Spread macht aus einer Simulatormessung keine Aussage über echtes
+Gold — er nimmt ihr nur die Übertreibung.
+
+Nachrechnen: `python -m metals halfscalp --spread 0.20 --signal reversion --target 2.0`
+
+---
+
 ## A34 · Die Halbziel-Taktik: 64 % Trefferquote, 85 von 85 Tagen im Minus
 
 Am 04.08.2026 hat der Nutzer die Strategie beschrieben, um die es ihm eigentlich geht:

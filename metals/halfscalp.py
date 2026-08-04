@@ -41,6 +41,7 @@ spread is not a trade with a small edge; it is a trade with a negative one.
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -57,6 +58,34 @@ from .specs import get_spec
 # whether the direction of the edge is a property of the market or of the
 # generator -- the two answers are distinguishable here and nowhere else.
 SIGNALS = ("momentum", "reversion")
+
+# How the spread is charged.
+#
+# "flat" charges one number all day. That is what every engine in this repo
+# did until now, and for a strategy taking four trades inside the London/NY
+# overlap it is roughly fair. For one taking a hundred and fifty a day it is
+# not: a bot that watches the chart continuously watches it through the
+# rollover too, and XAUUSD_SPEC puts the rollover spread at 5.00 USD/oz
+# against a typical 0.20 -- twenty-five times.
+#
+# "session" charges what the session actually costs, derived from the same
+# spec constants the rest of the project quotes.
+SPREAD_MODELS = ("flat", "session")
+
+# Multipliers on the spec's typical spread, by session quality.
+#
+# Provenance, because it differs by row and that matters more than the
+# numbers: PRIME is 1.00 by definition -- the spec's typical figure describes
+# the overlap. AVOID uses the spec's own `thin_spread_usd_oz`, which carries a
+# source note in specs.py. **GOOD and MARGINAL are estimates**, placed inside
+# the 0.20-0.40 band that SPREAD_NOTE quotes for standard conditions. They are
+# the weakest numbers in this module and the first thing to replace with a
+# reading off your own broker.
+_QUALITY_SPREAD: dict[str, float] = {
+    "prime": 1.00,
+    "good": 1.25,
+    "marginal": 2.00,
+}
 
 
 @dataclass(frozen=True)
@@ -91,10 +120,24 @@ class HalfScalpConfig:
     # --- timing -----------------------------------------------------------
     max_hold_minutes: int = 10
     cooldown_minutes: int = 1
+    # Refuse to open outside PRIME and GOOD windows. "Watch the chart
+    # continuously" and "trade whenever it is open" are different
+    # instructions, and the second one costs money -- the spread outside
+    # those windows is two to twenty-five times the overlap figure.
+    #
+    # On by default because it is worth a measured +0.0182 R per trade
+    # [+0.0122 .. +0.0243], paired over 24 markets (A35). Watching stays
+    # continuous either way; only the opening of positions is restricted.
+    session_filter: bool = True
 
     # --- costs ------------------------------------------------------------
     spread_usd_oz: float = 0.20
     slippage_fraction: float = 0.5
+    # "flat" or "session" -- see SPREAD_MODELS. "session" by default: the flat
+    # model reported this strategy at +0.0429 R per trade where charging by
+    # session gives +0.0104, a fourfold inflation (A35). A default that
+    # flatters is the failure this repository keeps writing findings about.
+    spread_model: str = "session"
     # The half-target must clear the round-trip cost by this factor or the
     # trade is refused. 1.5 is deliberately modest; at 1.0 the strategy is
     # trading for the broker.
@@ -106,11 +149,52 @@ class HalfScalpConfig:
     def __post_init__(self) -> None:
         if self.signal not in SIGNALS:
             raise ValueError(f"signal must be one of {SIGNALS}")
+        if self.spread_model not in SPREAD_MODELS:
+            raise ValueError(f"spread_model must be one of {SPREAD_MODELS}")
 
     @property
     def cost_per_unit(self) -> float:
         """Round-trip cost in USD/oz, same model as metals/backtest.py."""
         return self.spread_usd_oz * (1 + self.slippage_fraction)
+
+    def spread_at(self, moment: datetime) -> float:
+        """What the spread costs at this moment, in USD/oz.
+
+        Under "flat" the answer never changes, which is the assumption this
+        module inherited and the one most likely to flatter it.
+        """
+        if self.spread_model == "flat":
+            return self.spread_usd_oz
+        quality = _quality_at(moment)
+        spec = get_spec(self.symbol)
+        if quality in _QUALITY_SPREAD:
+            return self.spread_usd_oz * _QUALITY_SPREAD[quality]
+        # AVOID: rollover, deep Asia, Friday late. The spec's own thin figure,
+        # scaled if the caller is modelling a broker with a different base.
+        base = spec.typical_spread_usd_oz or self.spread_usd_oz
+        return spec.thin_spread_usd_oz * (self.spread_usd_oz / base)
+
+    def cost_at(self, moment: datetime) -> float:
+        return self.spread_at(moment) * (1 + self.slippage_fraction)
+
+
+# classify() does daylight-saving arithmetic per call, and this module asks it
+# once per bar over tens of thousands of bars. Five-minute granularity is
+# finer than any session boundary in sessions.py and turns the call into a
+# dictionary lookup.
+_QUALITY_CACHE: dict[tuple, str] = {}
+
+
+def _quality_at(moment: datetime) -> str:
+    from .sessions import classify
+
+    key = (moment.year, moment.month, moment.day, moment.hour,
+           moment.minute // 5)
+    cached = _QUALITY_CACHE.get(key)
+    if cached is None:
+        cached = classify(moment).quality.value
+        _QUALITY_CACHE[key] = cached
+    return cached
 
 
 @dataclass
@@ -142,6 +226,7 @@ class RunResult:
     signals_seen: int = 0
     refused_cost: int = 0
     refused_stop: int = 0
+    refused_session: int = 0
     config: HalfScalpConfig = field(default_factory=HalfScalpConfig)
     minutes_covered: int = 0
 
@@ -261,9 +346,15 @@ def run(cfg: HalfScalpConfig | None = None,
     if len(m1) < 30:
         return result
 
-    spec = get_spec(cfg.symbol)
     atr_series = atr(m1.highs, m1.lows, m1.closes, 14)
-    cost = cfg.cost_per_unit
+
+    # The cooldown is stated in minutes but applied as a bar count, so it has
+    # to be converted rather than used raw. On M1 the two happen to coincide,
+    # which is exactly why this was worth writing down: the moment the module
+    # is pointed at a 5m file, an uncorrected `i + cooldown_minutes` would
+    # wait five times too long and quietly change the strategy.
+    per_bar = _minutes_per_bar(m1)
+    cooldown_bars = max(1, math.ceil(cfg.cooldown_minutes / per_bar))
 
     open_trade: dict | None = None
     cooldown_until = 0
@@ -271,13 +362,17 @@ def run(cfg: HalfScalpConfig | None = None,
     for i in range(20, len(m1)):
         bar = m1[i]
         result.bars_tested += 1
+        # Charged at the moment of the trade, not averaged over the day. The
+        # difference is the whole point of the "session" model: a strategy
+        # this frequent meets the rollover spread whether it planned to or not.
+        cost = cfg.cost_at(bar.ts)
 
         # --- manage an open position first --------------------------------
         if open_trade is not None:
             closed = _try_close(open_trade, bar, cfg, cost, result)
             if closed:
                 open_trade = None
-                cooldown_until = i + cfg.cooldown_minutes
+                cooldown_until = i + cooldown_bars
             continue
 
         if i < cooldown_until:
@@ -291,6 +386,14 @@ def run(cfg: HalfScalpConfig | None = None,
         if direction is None:
             continue
         result.signals_seen += 1
+
+        # Checked after detection rather than before, so that this counts
+        # refused *signals* and is comparable with refused_cost beside it in
+        # the report. Checking first was cheaper and counted refused bars --
+        # two different units printed as if they were one.
+        if cfg.session_filter and _quality_at(bar.ts) not in ("prime", "good"):
+            result.refused_session += 1
+            continue
 
         projection = _projection(cfg, bar, direction, a)
         take_distance = projection * cfg.take_fraction
@@ -318,9 +421,14 @@ def run(cfg: HalfScalpConfig | None = None,
             "direction": direction, "entry": entry, "stop": stop,
             "take": take, "projection": projection,
             "risk": stop_distance, "opened_at": bar.ts, "opened_i": i,
+            # Half the round trip is paid entering, half leaving. Under the
+            # session model those two can be different numbers -- a trade
+            # opened in the overlap and closed after the rollover starts pays
+            # both, which is exactly the case a single average would hide.
+            "cost_in": cost / 2.0,
         }
 
-    result.minutes_covered = (len(m1) - 20) * _minutes_per_bar(m1)
+    result.minutes_covered = (len(m1) - 20) * per_bar
     return result
 
 
@@ -352,7 +460,8 @@ def _try_close(trade: dict, bar: Candle, cfg: HalfScalpConfig,
     move = (price - trade["entry"]) if direction == "long" \
         else (trade["entry"] - price)
     gross_r = move / risk if risk else 0.0
-    net_r = gross_r - (cost / risk if risk else 0.0)
+    paid = trade["cost_in"] + cost / 2.0
+    net_r = gross_r - (paid / risk if risk else 0.0)
 
     result.trades.append(HalfTrade(
         direction=direction, opened_at=trade["opened_at"], closed_at=bar.ts,
@@ -376,12 +485,14 @@ def report(result: RunResult) -> str:
         f"{cfg.cooldown_minutes} min cooldown",
         f"  Spread          {cfg.spread_usd_oz:.2f} USD/oz "
         f"(+{cfg.slippage_fraction:.0%} slippage = "
-        f"{cfg.cost_per_unit:.2f} round trip)",
+        f"{cfg.cost_per_unit:.2f} round trip), charged {cfg.spread_model}",
         "",
         f"  Bars            {result.bars_tested}",
         f"  Signals seen    {result.signals_seen}",
         f"  Refused: cost   {result.refused_cost}   "
         f"(half-target under {cfg.min_edge_multiple:g}x the round trip)",
+        f"  Refused: window {result.refused_session}   "
+        f"(session filter {'on' if cfg.session_filter else 'off'})",
         f"  Trades          {result.n}",
     ]
     if result.trades_per_day is not None:

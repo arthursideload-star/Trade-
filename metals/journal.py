@@ -71,6 +71,13 @@ COLUMNS = (
     "r_multiple",      # close rows only, the outcome that matters
     "pnl",             # account currency
     "minutes_held",
+    # Appended last, deliberately: parse_row reads every field with .get, so
+    # a journal written before this column existed still loads and simply
+    # reports no confidence. Added because the EA started computing a
+    # confidence in A33 and a score nobody can check against outcomes is
+    # decoration -- the whole point of a threshold is that the trades above
+    # it do better than the trades below it, and that is a measurable claim.
+    "confidence",
 )
 
 SIGNAL = "signal"
@@ -121,6 +128,7 @@ class Entry:
     r_multiple: float | None = None
     pnl: float | None = None
     minutes_held: float | None = None
+    confidence: float | None = None
 
     @property
     def is_win(self) -> bool:
@@ -182,6 +190,7 @@ def parse_row(row: dict[str, str]) -> Entry:
         r_multiple=_as_float(row.get("r_multiple", "")),
         pnl=_as_float(row.get("pnl", "")),
         minutes_held=_as_float(row.get("minutes_held", "")),
+        confidence=_as_float(row.get("confidence", "")),
     )
 
 
@@ -339,12 +348,25 @@ class Bucket:
         return lo > 0 and self.n >= 2
 
 
-def _group(entries: list[Entry], key) -> dict[str, Bucket]:
+def _group(entries: list[Entry], key,
+           drop_unlabelled: bool = False) -> dict[str, Bucket]:
+    """Bucket the closed trades by whatever `key` returns.
+
+    `drop_unlabelled` exists for the confidence breakdown. A trade with no
+    setup recorded still belongs in the setup table under "(unattributed)" --
+    the trade happened and its result counts. A trade with no *confidence*
+    is different: the column post-dates the EA that wrote the row, so
+    "(unattributed)" would be a bucket named for a question that was never
+    asked, sitting next to buckets that answer it.
+    """
     out: dict[str, Bucket] = {}
     for e in entries:
         if e.kind != CLOSE or e.r_multiple is None:
             continue
-        label = key(e) or "(unattributed)"
+        raw = key(e)
+        if drop_unlabelled and not raw:
+            continue
+        label = raw or "(unattributed)"
         out.setdefault(label, Bucket(label)).r_multiples.append(e.r_multiple)
     return out
 
@@ -360,6 +382,7 @@ class Summary:
     by_session: dict[str, Bucket]
     by_exit: dict[str, Bucket]
     by_direction: dict[str, Bucket]
+    by_confidence: dict[str, Bucket]
     skipped: dict[str, int]
     first: datetime | None
     last: datetime | None
@@ -451,6 +474,39 @@ class Summary:
         return out
 
 
+def _confidence_band(entry: Entry) -> str:
+    """Coarse bands, because fine ones invent precision the sample lacks.
+
+    Five-point buckets over a score that runs from roughly 0.55 to 0.90 give
+    seven cells; at the trade counts this project will realistically have,
+    that is one or two trades each and a league table of noise. Three bands
+    is the most the data can carry, and even that needs
+    MIN_TRADES_FOR_A_BREAKDOWN before it means anything.
+    """
+    # Outside (0, 1] the value is not a reading. Zero in particular is what a
+    # setup without a score writes, and bucketing it as "0.60-0.65" would put
+    # unscored trades in the low-confidence band and make the score look
+    # worse than it is -- a wrong answer to the one question this table asks.
+    if entry.confidence is None or not 0.0 < entry.confidence <= 1.0:
+        return ""
+    if entry.confidence < 0.65:
+        return "0.60-0.65"
+    if entry.confidence < 0.70:
+        return "0.65-0.70"
+    return "0.70+"
+
+
+CONFIDENCE_NOTE = (
+    "Die Frage dieser Tabelle: VERDIENEN DIE TRADES MIT HOHER KONFIDENZ\n"
+    "MEHR ALS DIE MIT NIEDRIGER? Wenn nicht, ist die Zahl Dekoration und\n"
+    "die Schwelle sortiert nichts -- dann gehoert sie abgeschafft, nicht\n"
+    "nachjustiert. Ein Regler, der nichts trennt, wird nicht besser,\n"
+    "wenn man ihn verschiebt.\n"
+    "Zu erwarten ist eine steigende Spalte `mean R` von oben nach unten.\n"
+    "Ueberlappen sich die Baender, ist die Frage noch offen."
+)
+
+
 def summarise(entries: list[Entry]) -> Summary:
     trades = [e for e in entries if e.kind == CLOSE and e.r_multiple is not None]
     signals = [e for e in entries if e.kind == SIGNAL]
@@ -468,6 +524,7 @@ def summarise(entries: list[Entry]) -> Summary:
         by_session=_group(entries, lambda e: e.session),
         by_exit=_group(entries, lambda e: e.exit_reason),
         by_direction=_group(entries, lambda e: e.direction),
+        by_confidence=_group(entries, _confidence_band, drop_unlabelled=True),
         skipped=skipped,
         first=min(stamps) if stamps else None,
         last=max(stamps) if stamps else None,
@@ -663,9 +720,11 @@ def render(summary: Summary) -> str:
     out += _bucket_table("BY SESSION", s.by_session, enough)
     out += _bucket_table("BY EXIT", s.by_exit, enough, EXIT_NOTE)
     out += _bucket_table("BY DIRECTION", s.by_direction, enough)
+    out += _bucket_table("BY CONFIDENCE", s.by_confidence, enough,
+                         CONFIDENCE_NOTE)
 
     buckets = (len(s.by_setup) + len(s.by_session) + len(s.by_exit)
-               + len(s.by_direction))
+               + len(s.by_direction) + len(s.by_confidence))
     if buckets > 1:
         risk = multiple_comparison_risk(buckets)
         out.append("")
@@ -711,6 +770,7 @@ def append(path: str, entry: Entry) -> None:
             "" if entry.taken is None else ("1" if entry.taken else "0"),
             entry.skip_reason, entry.exit_reason,
             _fmt(entry.r_multiple), _fmt(entry.pnl), _fmt(entry.minutes_held),
+            _fmt(entry.confidence),
         ])
 
 

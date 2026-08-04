@@ -122,6 +122,12 @@ class WhatWasMeasured(unittest.TestCase):
         self.assertGreater(len(rs), 200, "sample too small to mean anything")
         return sum(rs) / len(rs)
 
+    # A34 was measured under the flat spread and with no session filter,
+    # which were the defaults at the time. Both defaults have since changed
+    # (A35), so these tests state the old ones explicitly rather than
+    # silently measuring something else and still calling it A34.
+    A34 = dict(spread_model="flat", session_filter=False)
+
     def test_the_literal_specification_loses(self):
         """Momentum, stop at the full projection, target one measured move.
 
@@ -132,13 +138,13 @@ class WhatWasMeasured(unittest.TestCase):
         """
         expectancy = self._expectancy(
             HalfScalpConfig(signal="momentum", stop_fraction=1.0,
-                            target_multiple=1.0))
+                            target_multiple=1.0, **self.A34))
         self.assertLess(
             expectancy, 0,
             "the literal specification measured negative; if it now measures "
             "positive, something changed that needs explaining, not merging")
 
-    def test_moving_the_stop_with_the_target_is_what_turns_it_around(self):
+    def test_widening_the_target_is_what_turns_it_around(self):
         """The fix that keeps the user's intent intact.
 
         Banking early is kept. What changes is that the projection is widened
@@ -146,14 +152,90 @@ class WhatWasMeasured(unittest.TestCase):
         """
         literal = self._expectancy(
             HalfScalpConfig(signal="reversion", stop_fraction=1.0,
-                            target_multiple=1.0))
+                            target_multiple=1.0, **self.A34))
         wider = self._expectancy(
             HalfScalpConfig(signal="reversion", stop_fraction=1.0,
-                            target_multiple=2.0))
+                            target_multiple=2.0, **self.A34))
         self.assertGreater(
             wider, literal,
             "widening the projection must reduce the cost per R; if it does "
             "not, the cost model is not being applied per trade")
+
+
+class TheSpreadIsChargedWhenItIsPaid(unittest.TestCase):
+    """A35. A strategy this frequent meets the rollover whether it meant to.
+
+    The flat model reported four times the edge the session model reports.
+    These tests hold the mechanism in place; the magnitudes live in the audit.
+    """
+
+    MARKETS = [generate(bars=8_000, timeframe="1m", seed=s)
+               for s in (7, 99, 4242)]
+
+    def _expectancy(self, cfg: HalfScalpConfig) -> float:
+        rs = [t.net_r for m in self.MARKETS for t in run(cfg, m).trades]
+        self.assertGreater(len(rs), 100)
+        return sum(rs) / len(rs)
+
+    def test_rollover_costs_more_than_the_overlap(self):
+        cfg = HalfScalpConfig(spread_model="session", spread_usd_oz=0.20)
+        overlap = datetime(2026, 3, 3, 14, 0, tzinfo=timezone.utc)
+        rollover = datetime(2026, 3, 3, 22, 0, tzinfo=timezone.utc)
+        self.assertGreater(
+            cfg.spread_at(rollover), cfg.spread_at(overlap) * 5,
+            "XAUUSD_SPEC puts the rollover spread at 5.00 against a typical "
+            "0.20; if these are close, the session model is not reading it")
+
+    def test_the_flat_model_ignores_the_clock(self):
+        cfg = HalfScalpConfig(spread_model="flat", spread_usd_oz=0.20)
+        for hour in (2, 14, 22):
+            moment = datetime(2026, 3, 3, hour, tzinfo=timezone.utc)
+            self.assertAlmostEqual(cfg.spread_at(moment), 0.20)
+
+    def test_charging_by_session_lowers_the_measured_edge(self):
+        """The finding, as a direction rather than a magnitude."""
+        base = dict(signal="reversion", stop_fraction=1.0,
+                    target_multiple=2.0, session_filter=False)
+        flat = self._expectancy(HalfScalpConfig(spread_model="flat", **base))
+        session = self._expectancy(
+            HalfScalpConfig(spread_model="session", **base))
+        self.assertLess(
+            session, flat,
+            "charging the real session spread cannot make a strategy that "
+            "trades around the clock look better")
+
+    def test_the_session_filter_recovers_part_of_it(self):
+        base = dict(signal="reversion", stop_fraction=1.0,
+                    target_multiple=2.0, spread_model="session")
+        unfiltered = self._expectancy(
+            HalfScalpConfig(session_filter=False, **base))
+        filtered = self._expectancy(
+            HalfScalpConfig(session_filter=True, **base))
+        self.assertGreater(filtered, unfiltered)
+
+    def test_the_defaults_are_the_realistic_ones(self):
+        """The defaults decide what a casual run reports, so they are a claim.
+
+        A default of flat-and-around-the-clock reported four times the edge.
+        If someone flips these back, it should be a decision with a diff.
+        """
+        cfg = HalfScalpConfig()
+        self.assertEqual(cfg.spread_model, "session")
+        self.assertTrue(cfg.session_filter)
+
+    def test_a_trade_pays_the_spread_of_its_own_exit(self):
+        """Half the round trip on the way in, half on the way out.
+
+        A trade opened in the overlap and closed after the rollover begins
+        pays both, which a single averaged figure would hide.
+        """
+        cfg = HalfScalpConfig(spread_model="session", session_filter=False)
+        result = run(cfg, generate(bars=6_000, timeframe="1m", seed=7))
+        costs = {round(t.gross_r - t.net_r, 6) for t in result.trades}
+        self.assertGreater(
+            len(costs), 1,
+            "every trade paid the same cost, so the per-bar spread is not "
+            "reaching the trade accounting")
 
 
 class ConfigurationIsHonest(unittest.TestCase):
@@ -182,3 +264,67 @@ class ConfigurationIsHonest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TimingIsInMinutesNotBars(unittest.TestCase):
+    """The cooldown is stated in minutes and applied as a bar count.
+
+    On M1 the two coincide, which is why the conversion was easy to omit and
+    impossible to notice. The moment the module is pointed at a coarser file
+    an uncorrected count waits several times too long, which is a different
+    strategy wearing the same configuration.
+    """
+
+    def _cooldown_gap(self, timeframe: str, minutes: int) -> int:
+        step = {"1m": 1, "5m": 5}[timeframe]
+        m1 = generate(bars=3_000, timeframe=timeframe, seed=7)
+        cfg = HalfScalpConfig(cooldown_minutes=minutes, session_filter=False,
+                              spread_model="flat")
+        trades = run(cfg, m1).trades
+        self.assertGreater(len(trades), 5)
+        gaps = [int((b.opened_at - a.closed_at).total_seconds() // 60)
+                for a, b in zip(trades, trades[1:])]
+        return min(gaps), step
+
+    def test_a_one_minute_cooldown_does_not_become_five_on_five_minute_bars(self):
+        gap_m1, _ = self._cooldown_gap("1m", 1)
+        gap_m5, step = self._cooldown_gap("5m", 1)
+        self.assertLessEqual(
+            gap_m5, step,
+            "a 1-minute cooldown on 5m bars must wait one bar, not five; "
+            "a raw `i + cooldown_minutes` waits five bars = 25 minutes")
+
+    def test_the_cooldown_is_never_shorter_than_one_bar(self):
+        m1 = generate(bars=2_000, timeframe="5m", seed=7)
+        cfg = HalfScalpConfig(cooldown_minutes=0, session_filter=False,
+                              spread_model="flat")
+        trades = run(cfg, m1).trades
+        self.assertGreater(len(trades), 2)
+        for a, b in zip(trades, trades[1:]):
+            self.assertGreater(
+                b.opened_at, a.closed_at,
+                "two positions must never overlap, whatever the cooldown says")
+
+
+class RefusalCountersAreComparable(unittest.TestCase):
+    """The two refusal counters print side by side, so they must share units.
+
+    refused_session once counted bars while refused_cost counted signals.
+    Printed adjacently that reads as "the window rejected 4,445 and the cost
+    rejected 790", which was never a comparison anyone could make.
+    """
+
+    def test_both_counters_count_signals(self):
+        m1 = generate(bars=6_000, timeframe="1m", seed=7)
+        result = run(HalfScalpConfig(session_filter=True), m1)
+        accounted = (result.n + result.refused_cost + result.refused_stop
+                     + result.refused_session)
+        self.assertEqual(
+            accounted, result.signals_seen,
+            "every signal must end up either traded or in exactly one refusal "
+            "counter; a mismatch means a counter is measuring something else")
+
+    def test_the_window_refuses_nothing_when_the_filter_is_off(self):
+        m1 = generate(bars=6_000, timeframe="1m", seed=7)
+        result = run(HalfScalpConfig(session_filter=False), m1)
+        self.assertEqual(result.refused_session, 0)

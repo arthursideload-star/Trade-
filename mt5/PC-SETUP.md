@@ -336,3 +336,14 @@ that produced the published numbers filtered it too.
 Das ist der Normalfall und kein Fehler. Der Wert ist über `InpMinConfidence` einstellbar,
 Voreinstellung 0,60 — dieselbe Zahl, mit der der Backtest rechnet. **Wer sie senkt,
 handelt eine andere Strategie als die gemessene.**
+
+Diese Zeile landet auch im Journal, nicht nur im Log. Nach ein paar Wochen beantwortet
+
+```bash
+python -m metals journal --file GoldScalpAssistant.csv
+```
+
+in der Tabelle **BY CONFIDENCE** die Frage, ob die Schwelle überhaupt etwas sortiert:
+Laufen Trades über 0,70 wirklich besser als die bei 0,60? Wenn nicht, gehört die Zahl
+abgeschafft statt nachjustiert. Vorher — unter 30 abgeschlossenen Trades — sagt die
+Tabelle selbst, dass sie nichts belegt.

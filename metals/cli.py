@@ -1263,8 +1263,24 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Spread in USD je Unze — Pflicht, weil er auf "
                          "diesem Zeithorizont ueber das Vorzeichen entscheidet")
     hs.add_argument("--slippage", type=float, default=0.5)
+    hs.add_argument("--spread-model", choices=("flat", "session"),
+                    default="session", dest="spread_model",
+                    help="'session' berechnet den Rollover-Spread, wenn er "
+                         "anfaellt; 'flat' mittelt ihn weg und schmeichelt")
+    hs.add_argument("--all-hours", action="store_true",
+                    help="auch ausserhalb der guten Fenster handeln — "
+                         "gemessen teuer, siehe A35")
     hs.add_argument("--bars", type=int, default=20_000)
     hs.add_argument("--seed", type=int, default=7)
+    hs.add_argument("--file", default=None,
+                    help="heruntergeladene Historie statt Simulator — die "
+                         "einzige Art, die Simulator-Einschraenkung aus A34 "
+                         "loszuwerden")
+    hs.add_argument("--tz", default=None,
+                    help="Zeitzone der Datei — Pflicht bei --file")
+    hs.add_argument("--symbol", default="XAUUSD")
+    hs.add_argument("--file-timeframe", default="1m", dest="file_timeframe",
+                    help="Zeitrahmen der Datei; M1 ist der Entwurfsfall")
     hs.set_defaults(func=cmd_halfscalp)
 
     b = sub.add_parser("backtest", help="run the scalping setups over history")
@@ -1335,18 +1351,57 @@ def cmd_halfscalp(args: argparse.Namespace) -> int:
     from .halfscalp import HalfScalpConfig, report, run
     from .simulate import generate
 
+    from .sources.history import HistoryError, load
+
     cfg = HalfScalpConfig(
+        symbol=args.symbol,
         signal=args.signal, target_multiple=args.target_multiple,
         take_fraction=args.take_fraction, stop_fraction=args.stop_fraction,
         max_hold_minutes=args.max_hold_minutes,
         cooldown_minutes=args.cooldown_minutes,
         spread_usd_oz=args.spread, slippage_fraction=args.slippage,
+        spread_model=args.spread_model,
+        session_filter=not args.all_hours,
     )
-    m1 = generate(bars=args.bars, timeframe="1m", seed=args.seed)
-    print(report(run(cfg, m1)))
+
+    if args.file:
+        if not args.tz:
+            print("--file braucht --tz. Es gibt bewusst keine Vorgabe: die "
+                  "falsche Zeitzone verschiebt jede Sessionregel lautlos —\n"
+                  "und diese Strategie haengt an den Sessions, weil der "
+                  "Rollover-Spread das Fuenfundzwanzigfache ist.\n"
+                  "  Dukascopy / EODHD / Twelve Data -> utc\n"
+                  "  HistData                        -> us_eastern_no_dst\n"
+                  "  MetaTrader / Kaggle-Export      -> broker_gmt2 / broker_gmt3",
+                  file=sys.stderr)
+            return 1
+        try:
+            series, load_report = load(args.file, args.tz, args.symbol,
+                                       args.file_timeframe)
+        except HistoryError as exc:
+            print(f"could not load {args.file}: {exc}", file=sys.stderr)
+            return 1
+        print(load_report.render())
+        print()
+        if args.file_timeframe != "1m":
+            print(f"Hinweis: die Datei ist {args.file_timeframe}, entworfen "
+                  f"ist die Taktik fuer M1. Haltedauer und Abklingzeit werden "
+                  f"auf Balken umgerechnet,\naber ein 1-10-Minuten-Trade "
+                  f"laesst sich auf groeberen Balken nicht abbilden.")
+            print()
+        print(report(run(cfg, series)))
+        print()
+        print("Echte Historie — hier gilt die Simulator-Einschraenkung aus "
+              "A34 NICHT. Was hier steht, ist eine Aussage ueber Gold.")
+        return 0
+
+    print(report(run(cfg, generate(bars=args.bars, timeframe="1m",
+                                   seed=args.seed))))
     print()
-    print("Simulierter Markt. Was das misst und was nicht: Befund A34 in "
-          "docs/REPO-AUDIT.md.")
+    print("Simulierter Markt. Die gemessene Kante haengt am Rundzahl-Magneten "
+          "des Generators — Befund A34 in docs/REPO-AUDIT.md.\n"
+          "Mit `--file <datei> --tz <zone>` laeuft dieselbe Rechnung auf "
+          "echter Historie, und erst die beantwortet die Frage.")
     return 0
 
 

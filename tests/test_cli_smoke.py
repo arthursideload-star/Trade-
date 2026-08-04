@@ -411,3 +411,24 @@ class TestNoCommandAnswersATypoWithATraceback(unittest.TestCase):
     def test_a_zero_balance_explains_why_that_cannot_work(self):
         out = run_command(["stop", "--equity", "0"])
         self.assertIn("R1", out)
+
+
+class TestHalfscalpRefusesAmbiguousHistory(unittest.TestCase):
+    """--file without --tz. Same rule as persistence and verdict.
+
+    Sharper here than anywhere else in the project: this strategy is priced
+    by session, so a wrong timezone does not merely shift a filter -- it
+    charges the wrong spread on every trade, and the rollover spread is
+    twenty-five times the overlap one.
+    """
+
+    def test_a_history_file_without_a_timezone_is_refused(self):
+        out = run_command(["halfscalp", "--spread", "0.20",
+                           "--file", "/nope.csv"])
+        self.assertIn("--tz", out)
+        self.assertIn("Rollover", out)
+
+    def test_a_missing_file_says_so_rather_than_raising(self):
+        out = run_command(["halfscalp", "--spread", "0.20",
+                           "--file", "/nope.csv", "--tz", "utc"])
+        self.assertIn("could not load", out)

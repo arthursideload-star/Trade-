@@ -185,6 +185,12 @@ struct ManagedPosition
    //--- readable from the position.
    double   risk_money;
    string   session;
+   //--- The confidence the setup carried when it opened. Kept here for the
+   //--- same reason as risk_money: it cannot be recovered at exit, and
+   //--- without it the journal can record that a trade won but not whether
+   //--- the score that let it through was worth anything. A position adopted
+   //--- after a restart has no known score and records none.
+   double   confidence;
 };
 ManagedPosition managed;
 
@@ -587,7 +593,7 @@ string JournalHeader()
    return "timestamp,kind,symbol,setup,direction,session,mode," +
           "entry,stop,target1,target2,atr,spread,risk_per_unit," +
           "lots,taken,skip_reason,exit_reason,r_multiple,pnl," +
-          "minutes_held";
+          "minutes_held,confidence";
 }
 
 bool journalBroken = false;   // stop retrying after a write failure
@@ -672,7 +678,8 @@ void JournalSignal(const string setup_id, const bool is_long,
                    const double stop, const double t1, const double t2,
                    const double atr_value, const double spread,
                    const double risk_per_unit, const double lots,
-                   const bool taken, const string skip_reason)
+                   const bool taken, const string skip_reason,
+                   const double confidence)
 {
    //--- A signal that was acted on is never suppressed: it corresponds to a
    //--- real position and must pair up with its close row.
@@ -680,15 +687,20 @@ void JournalSignal(const string setup_id, const bool is_long,
       SignalIsARepeat(setup_id + (is_long ? "|L|" : "|S|") + skip_reason))
       return;
 
+   //--- The confidence column is written empty rather than 0.000 when the
+   //--- setup carries no score. DR does not, and a literal zero would be
+   //--- read as a real reading and bucketed with the low-confidence trades.
+   const string conf_text = (confidence > 0.0 ? Num(confidence, 3) : "");
+
    JournalAppend(StringFormat(
-      "%s,signal,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,,,,",
+      "%s,signal,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,,,,,%s",
       IsoUtc(ServerToUtc(TimeTradeServer())), _Symbol, CsvSafe(setup_id),
       (is_long ? "long" : "short"), session,
       (InpMode == MODE_ADVISOR ? "advisor" : "auto"),
       Num(entry, _Digits), Num(stop, _Digits), Num(t1, _Digits),
       Num(t2, _Digits), Num(atr_value), Num(spread, _Digits),
       Num(risk_per_unit), Num(lots), (taken ? "1" : "0"),
-      CsvSafe(skip_reason)));
+      CsvSafe(skip_reason), conf_text));
 }
 
 //--- A position closed. The R multiple is the only column that matters for
@@ -702,15 +714,19 @@ void JournalClose(const double profit, const double r_multiple,
    const string direction =
       (managed.initial_stop < managed.entry) ? "long" : "short";
 
+   //--- Empty, not 0.000, when the setup carried no score -- see JournalSignal.
+   const string conf_text =
+      (managed.confidence > 0.0 ? Num(managed.confidence, 3) : "");
+
    JournalAppend(StringFormat(
-      "%s,close,%s,%s,%s,%s,%s,%s,%s,,,,,%s,%s,,,%s,%s,%s,%s",
+      "%s,close,%s,%s,%s,%s,%s,%s,%s,,,,,%s,%s,,,%s,%s,%s,%s,%s",
       IsoUtc(ServerToUtc(TimeTradeServer())), _Symbol,
       CsvSafe(managed.setup_id), direction, managed.session,
       (InpMode == MODE_ADVISOR ? "advisor" : "auto"),
       Num(managed.entry, _Digits), Num(managed.initial_stop, _Digits),
       Num(managed.risk_per_unit), Num(managed.initial_volume),
       CsvSafe(exit_reason), Num(r_multiple, 3),
-      Num(profit), Num(minutes_held, 0)));
+      Num(profit), Num(minutes_held, 0), conf_text));
 }
 
 //====================================================================
@@ -1286,19 +1302,9 @@ void LookForSetup(const datetime utc)
       return;
    }
 
-   //--- A33. The confidence gate the backtest has always applied and the EA
-   //--- never did. DR carries no confidence score of its own, so it is not
-   //--- subject to this -- gating it on a field that is always zero would
-   //--- switch the strategy off, which is exactly the bug this fixes.
-   if(s.id != "DR" && s.confidence < InpMinConfidence)
-   {
-      Note(StringFormat(
-         "%s seen at confidence %.2f, below the %.2f minimum. Skipped -- the "
-         "backtest that produced the published numbers filtered it too.",
-         s.id, s.confidence, InpMinConfidence));
-      return;
-   }
-
+   //--- A33's confidence gate lives inside ExecuteOrAdvise, next to the S6
+   //--- spread gate, so that its refusals reach the journal with the same
+   //--- columns as every other refusal.
    ExecuteOrAdvise(s, atr_value, session_label);
 }
 
@@ -1686,6 +1692,26 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    const double spread_pct = spread / risk_per_unit * 100.0;
    const string session_word = SessionWord(ServerToUtc(TimeTradeServer()));
 
+   //--- A33 confidence gate. Placed here rather than at the detector so that
+   //--- a refusal is journalled with its stop, spread and risk like every
+   //--- other gate -- a gate that only prints leaves no way to ask later how
+   //--- often it fired, which is the question that matters if the EA goes
+   //--- quiet for a week.
+   if(s.id != "DR" && s.confidence < InpMinConfidence)
+   {
+      Note(StringFormat(
+         "%s seen at confidence %.2f, below the %.2f minimum. Skipped -- the "
+         "backtest that produced the published numbers filtered it too.",
+         s.id, s.confidence, InpMinConfidence));
+      JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
+                    EMPTY_VALUE, EMPTY_VALUE, atr_value, spread,
+                    risk_per_unit, EMPTY_VALUE, false,
+                    StringFormat("confidence %.2f below the %.2f minimum",
+                                 s.confidence, InpMinConfidence),
+                    s.confidence);
+      return;
+   }
+
    if(spread_pct > MAX_SPREAD_PCT_OF_STOP)
    {
       Note(StringFormat(
@@ -1694,7 +1720,8 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
          spread, spread_pct, risk_per_unit, MAX_SPREAD_PCT_OF_STOP));
       JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
                     EMPTY_VALUE, EMPTY_VALUE, atr_value, spread,
-                    risk_per_unit, EMPTY_VALUE, false, "S6 spread gate");
+                    risk_per_unit, EMPTY_VALUE, false, "S6 spread gate",
+                    s.confidence);
       return;
    }
 
@@ -1725,7 +1752,8 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
                     first_target, runner_target, atr_value, spread,
                     risk_per_unit, EMPTY_VALUE, false,
-                    "position size below the broker minimum at 1% risk");
+                    "position size below the broker minimum at 1% risk",
+                    s.confidence);
       return;
    }
 
@@ -1763,7 +1791,8 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
       //--- the EA would have done, to be compared against what you did.
       JournalSignal(s.id, s.is_long, session_word, s.entry, stop,
                     first_target, runner_target, atr_value, spread,
-                    risk_per_unit, lots, false, "advisor mode -- not traded");
+                    risk_per_unit, lots, false, "advisor mode -- not traded",
+                    s.confidence);
       return;
    }
 
@@ -1781,7 +1810,8 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
                     first_target, runner_target, atr_value, spread,
                     risk_per_unit, lots, false,
                     StringFormat("order rejected: %d %s", trade.ResultRetcode(),
-                                 trade.ResultRetcodeDescription()));
+                                 trade.ResultRetcodeDescription()),
+                    s.confidence);
       return;
    }
 
@@ -1816,10 +1846,11 @@ void ExecuteOrAdvise(const Setup &s, const double atr_value,
    managed.setup_id          = s.id;
    managed.risk_money        = risk_money;
    managed.session           = session_word;
+   managed.confidence        = s.confidence;
 
    JournalSignal(s.id, s.is_long, session_word, managed.entry, stop,
                  first_target, runner_target, atr_value, spread,
-                 risk_per_unit, lots, true, "");
+                 risk_per_unit, lots, true, "", s.confidence);
 
    day.trades_taken++;
    PrintFormat("opened #%I64u, %d of %d trades today",

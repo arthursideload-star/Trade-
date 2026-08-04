@@ -27,12 +27,13 @@ T0 = datetime(2026, 7, 27, 13, 0, tzinfo=UTC)
 
 
 def close_entry(r: float, *, setup="S2", session="prime", minutes=0,
-                exit_reason="target", direction="long") -> Entry:
+                exit_reason="target", direction="long",
+                confidence=None) -> Entry:
     return Entry(
         timestamp=T0 + timedelta(minutes=minutes),
         kind=CLOSE, symbol="XAUUSD", setup=setup, direction=direction,
         session=session, mode="auto", r_multiple=r, exit_reason=exit_reason,
-        pnl=r * 100.0, minutes_held=20.0,
+        pnl=r * 100.0, minutes_held=20.0, confidence=confidence,
     )
 
 
@@ -437,3 +438,77 @@ class TestTheLearningDocStaysTrue(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfidenceIsRecordedAndChecked(unittest.TestCase):
+    """The column added when the EA started scoring its setups (A33).
+
+    A confidence score that nobody can compare against outcomes is
+    decoration. The point of a threshold is that trades above it do better
+    than trades below it, and that is a measurable claim -- so the journal
+    has to be able to measure it.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.dir.name, "journal.csv")
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_confidence_survives_the_round_trip(self):
+        append(self.path, close_entry(1.2, confidence=0.72))
+        (e,) = load(self.path)
+        self.assertAlmostEqual(e.confidence, 0.72)
+
+    def test_a_journal_written_before_the_column_existed_still_loads(self):
+        """The reason the column is appended last rather than inserted.
+
+        Anyone already running the EA has a file without it. That file must
+        keep working and simply report no confidence.
+        """
+        old_header = ",".join(COLUMNS[:-1])
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write(old_header + "\n")
+            fh.write("2026-07-27T13:00:00Z,close,XAUUSD,S2,long,prime,auto,"
+                     ",,,,,,,,,,target,1.50,150,20\n")
+        (e,) = load(self.path)
+        self.assertAlmostEqual(e.r_multiple, 1.5)
+        self.assertIsNone(e.confidence)
+
+    def test_trades_are_grouped_into_confidence_bands(self):
+        entries = [close_entry(1.0, confidence=0.61, minutes=1),
+                   close_entry(1.0, confidence=0.66, minutes=2),
+                   close_entry(1.0, confidence=0.80, minutes=3)]
+        bands = summarise(entries).by_confidence
+        self.assertEqual(set(bands), {"0.60-0.65", "0.65-0.70", "0.70+"})
+
+    def test_a_trade_without_a_confidence_is_not_given_a_band(self):
+        """Silence must not be rendered as a bucket named for nothing."""
+        bands = summarise([close_entry(1.0)]).by_confidence
+        self.assertEqual(bands, {})
+
+    def test_the_report_asks_whether_the_score_earns_its_keep(self):
+        entries = [close_entry(1.0, confidence=0.80, minutes=i)
+                   for i in range(3)]
+        text = render(summarise(entries))
+        self.assertIn("BY CONFIDENCE", text)
+        self.assertIn("Dekoration", text)
+
+    def test_an_unscored_setup_is_not_bucketed_as_low_confidence(self):
+        """DR carries no confidence and writes 0. That is not a reading.
+
+        Bucketing it as "0.60-0.65" would fill the low band with trades that
+        were never scored and make the score look worse than it is -- a wrong
+        answer to the only question the table exists to ask.
+        """
+        entries = [close_entry(-1.0, confidence=0.0, minutes=1),
+                   close_entry(1.0, confidence=0.72, minutes=2)]
+        bands = summarise(entries).by_confidence
+        self.assertEqual(set(bands), {"0.70+"})
+
+    def test_a_nonsense_confidence_is_not_bucketed_either(self):
+        for bogus in (-0.5, 1.4, 99.0):
+            with self.subTest(confidence=bogus):
+                bands = summarise([close_entry(1.0, confidence=bogus)])
+                self.assertEqual(bands.by_confidence, {})

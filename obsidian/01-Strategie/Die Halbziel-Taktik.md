@@ -67,8 +67,14 @@ Dagegenhalten funktioniert besser.
 wird, halbieren sich die Kosten je Trade — der Spread ist ja fest, das Risiko wächst mit.
 
 Die beste gefundene Fassung: dagegenhalten, Ziel doppelt so weit, weiter bei der Hälfte
-schließen. Alle Zahlen unten: Stand 04.08.2026, Befund A34 in `docs/REPO-AUDIT.md`,
-nachzurechnen mit `python -m metals halfscalp`.
+schließen. Alle Zahlen unten: Stand 04.08.2026, Befund A34 in `docs/REPO-AUDIT.md`.
+
+Nachzurechnen — und der Befehl braucht die alten Vorgaben, weil sie inzwischen ehrlicher
+sind (siehe Nachtrag):
+
+```bash
+python -m metals halfscalp --spread 0.20 --spread-model flat --all-hours
+```
 
 | | wörtlich | beste Fassung |
 |---|---:|---:|
@@ -80,6 +86,44 @@ nachzurechnen mit `python -m metals halfscalp`.
 
 **Deine Grundidee bleibt darin erhalten.** Früh sichern, Stop dabei. Nur die Strecke wird
 weiter gesteckt, damit der Spread nicht mehr die Hauptrolle spielt.
+
+## Nachtrag: der Spread war noch zu freundlich gerechnet
+
+Die Zahlen oben rechnen mit **einem** Spread für den ganzen Tag — 0,20 $. So hat es das
+ganze Projekt bisher gemacht.
+
+Bei vier Trades im besten Fenster ist das ungefähr richtig. Bei **128 Trades am Tag** nicht:
+Wer durchgehend auf den Chart schaut, schaut auch durch den Rollover. Und da steht im
+Repo seit langem:
+
+| | $/Unze |
+|---|---:|
+| normal | 0,20 |
+| **Rollover (21–23 Uhr UTC)** | **5,00** |
+| um eine Nachricht herum | 10,00 |
+
+**Fünfundzwanzigmal so teuer.** Neu gerechnet, 24 Märkte, Stand 04.08.2026:
+
+| | Erwartungswert |
+|---|---:|
+| ein Spread für alles, rund um die Uhr | +0,043 R |
+| **echter Spread je Stunde, rund um die Uhr** | **+0,010 R** |
+| echter Spread, nur in guten Fenstern | **+0,029 R** |
+
+**Der eine flache Spread hat die Kante auf das Vierfache aufgeblasen.**
+
+Zwei Dinge sind daraus geworden, und beide sind jetzt die Vorgabe:
+
+1. Der Spread wird berechnet, **wenn er anfällt** — nicht gemittelt.
+2. Der Bot **eröffnet** nur in guten Fenstern. Er schaut weiter durchgehend zu; er handelt
+   nur nicht mehr um drei Uhr nachts.
+
+Punkt 2 allein ist +0,018 R je Trade wert (Stand 04.08.2026, Befund A35). Das ist mehr als
+die halbe Kante.
+
+> Nebenbei: Das Kostengatter hat den Rollover von selbst abgefangen — bei 5,00 $ Spread
+> schafft kein Halbziel den nötigen Abstand. Der Filter ist trotzdem besser, weil er auch
+> die *mittelteuren* Stunden erwischt.
 
 ## Und jetzt die Einschränkung, die dazugehört
 
