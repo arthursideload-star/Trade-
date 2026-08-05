@@ -33,10 +33,36 @@ getan hast.
 In MetaTrader oben links steht dein Konto. Es muss **Demo** sein. Ist es das nicht, legst du
 über **Datei → Konto eröffnen** ein Demokonto an.
 
-**Mindestens 2 000 USD Guthaben.** Nicht aus Vorsicht, sondern aus Arithmetik: Der EA
-riskiert 0,25 % je Trade. Bei 1 000 USD sind das 2,50 USD, und ein typischer Stop von
-2–3 USD je Unze passt dann nicht mehr in die kleinste handelbare Position. Der EA sagt das
-dann auch ins Log — aber dann handelt er eben nicht.
+**Nimm 10 000 USD.** Das ist die Vorgabe bei MetaQuotes-Demokonten und kostet nichts.
+
+Der Grund ist Arithmetik, nicht Vorsicht. Der EA riskiert **0,25 %** je Trade — bei 1 000 USD
+sind das 2,50 USD. Die kleinste handelbare Position auf Gold ist 0,01 Lot = **eine Unze**,
+also darf der Stop höchstens 2,50 USD je Unze weit sein. Gemessen über 4 433 simulierte
+Trades liegt er im Median bei **7,08**:
+
+| Konto | Budget je Trade | davon bezahlbar | Trades/Tag |
+|---:|---:|---:|---:|
+| 1 000 USD | 2,50 $ | **3 %** | ~4 |
+| 2 000 USD | 5,00 $ | 23 % | ~25 |
+| 3 000 USD | 7,50 $ | 55 % | ~59 |
+| 5 000 USD | 12,50 $ | 88 % | ~95 |
+| **10 000 USD** | **25,00 $** | **99 %** | **~107** |
+
+Bei 1 000 USD lehnt der EA also 97 von 100 Signalen ab — und zwar bevorzugt die in den
+volatilen Stunden, in denen er eigentlich handeln soll.
+
+> **Diese Tabelle stammt aus dem Simulator, und der ist auf M1 vermutlich zu wild.** Sein
+> ATR liegt bei rund 2,4 $/oz; echtes Gold bewegt sich auf Minutenbalken üblicherweise
+> weniger. Dann wären die Stops enger und ein kleineres Konto würde reichen. **Belegen kann
+> ich das hier nicht** — es gibt keine echten M1-Golddaten im Container. Entschieden wird es
+> in der ersten Stunde: Der EA schreibt bei jeder Ablehnung ins Log, wie viel Konto der
+> Trade gebraucht hätte.
+>
+> Bei 10 000 USD stellt sich die Frage gar nicht erst.
+
+*(In der Anleitung stand hier vorher „mindestens 2 000 USD". Das war aus dem Ärmel und
+falsch — die 1 000 USD, die für den anderen EA empfohlen sind, gelten dort bei 1 % Risiko,
+also dem Vierfachen.)*
 
 ## Schritt 2 — Datei kopieren
 
@@ -50,7 +76,7 @@ Prüfen, dass sie vollständig ist:
 wc -l GoldHalfScalp.mq5
 ```
 
-Es muss **1054** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
+Es muss **1061** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
 kopieren.
 
 > Unter Windows hängt der Editor gern `.txt` an. Die Datei muss auf `.mq5` enden. Notfalls
@@ -111,7 +137,7 @@ Die drei häufigsten Gründe stehen dort im Klartext:
 | Meldung | Bedeutung |
 |---|---|
 | `refused: half-target ... does not clear ...` | Dein Spread ist zu hoch für diesen Zeithorizont. Das ist ein echtes Ergebnis, kein Fehler |
-| `cannot size: position rounds to ...` | Konto zu klein. 2 000 USD Demo nehmen |
+| `cannot size: position rounds to ...` | Konto zu klein. Die Meldung nennt, wie viel gereicht hätte |
 | `AVOID window (...)` | Falsche Tageszeit |
 
 ---

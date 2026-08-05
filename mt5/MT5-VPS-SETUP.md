@@ -24,6 +24,21 @@ einstellen, dann migrieren.** Andersherum migrierst du einen Zustand, den du nic
 
 ---
 
+## Schritt 0 — Das Demokonto muss groß genug sein
+
+**10 000 USD.** Nicht 1 000 — das ist die Zahl aus der Anleitung für den *anderen* EA, und
+der riskiert 1 % je Trade statt 0,25 %, also das Vierfache.
+
+Bei 1 000 USD hat dieser EA 2,50 $ Budget je Trade. Das reicht gemessen für **3 %** seiner
+Signale; er würde etwa vier statt hundert Trades am Tag machen und die Zehn-Minuten-Vorgabe
+klar verfehlen. Die ganze Tabelle steht in `HALFSCALP-SETUP.md`.
+
+Neues Demokonto: **Datei → Konto eröffnen → MetaQuotes-Demo**, beim Einzahlungsbetrag
+10 000 wählen. Kostet nichts.
+
+> Danach musst du den VPS **erneut migrieren** — er hängt am alten Konto, und ein
+> Kontowechsel ist genau so eine lokale Änderung, die von allein nicht ankommt.
+
 ## Schritt 1 — Den neuen EA lokal installieren
 
 Falls noch nicht geschehen: `mt5/HALFSCALP-SETUP.md`, Schritte 2 und 3. Kurzfassung:

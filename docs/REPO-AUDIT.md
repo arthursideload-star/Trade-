@@ -536,6 +536,63 @@ er steht dann im Kostenmodell der Ledger-Zeile und ist damit angreifbar — im U
 einem, den nie jemand getippt hat.
 
 
+## A38 · Die Kontogröße in der Anleitung war geraten und um das Zehnfache daneben — **behoben**
+
+In `HALFSCALP-SETUP.md` stand „mindestens 2 000 USD Guthaben", begründet mit „ein typischer
+Stop von 2–3 USD je Unze". Beide Zahlen habe ich geschätzt, keine gemessen.
+
+Anlass war die Frage des Nutzers, der 1 000 USD hatte — die Zahl aus der Anleitung für den
+**anderen** EA. Der riskiert 1 % je Trade, dieser 0,25 %. Dasselbe Konto trägt hier also
+ein Viertel.
+
+### Gemessen
+
+Über 4 433 simulierte Trades mit den ausgelieferten Vorgaben:
+
+| Stop-Abstand | USD/oz |
+|---|---:|
+| 25 %-Quantil | 5,16 |
+| **Median** | **7,08** |
+| 75 %-Quantil | 9,74 |
+| 90 %-Quantil | 13,32 |
+
+Nicht 2–3, sondern 7. Die kleinste Position auf Gold ist 0,01 Lot = **eine Unze**, also ist
+der maximal tragbare Stop schlicht das Risikobudget in Dollar:
+
+| Konto | Budget | bezahlbare Signale | Trades/Tag |
+|---:|---:|---:|---:|
+| 1 000 | 2,50 $ | **3 %** | ~4 |
+| 2 000 | 5,00 $ | 23 % | ~25 |
+| 5 000 | 12,50 $ | 88 % | ~95 |
+| 10 000 | 25,00 $ | 99 % | ~107 |
+
+**Die empfohlenen 2 000 USD hätten 77 % aller Signale verworfen** — und bevorzugt die in
+volatilen Stunden, also genau die, für die der Sessionfilter da ist. Der Nutzer hätte den
+Bot gestartet, vier Trades am Tag gesehen statt hundert, und die Ursache wäre eine Zahl in
+meiner Anleitung gewesen.
+
+**Behoben:** 10 000 USD, mit der Tabelle daneben statt einer Behauptung.
+
+### Die Einschränkung, die dazugehört
+
+Die Stopverteilung stammt aus dem Simulator, und dessen M1-Balken sind wahrscheinlich zu
+wild: ATR(14) auf M1 liegt bei **2,38–2,45 $/oz**. Echtes Gold bewegt sich auf
+Minutenbalken üblicherweise weniger, dann wären die Stops enger und ein kleineres Konto
+genug. **Belegen lässt sich das hier nicht** — es gibt keine echten M1-Golddaten im
+Container, und eine Zahl aus dem Gedächtnis wäre wieder genau der Fehler, den dieser
+Befund beschreibt.
+
+Bei 10 000 USD ist die Frage gegenstandslos, deshalb steht sie so in der Anleitung.
+
+### Und die Meldung sagt jetzt, was gereicht hätte
+
+`LotsForRisk` meldete „position rounds to 0.0000 lots, below the broker minimum". Richtig,
+aber nicht handlungsfähig — und die naheliegende Reaktion darauf ist, das Risiko
+hochzudrehen, also die eine falsche. Die Meldung nennt jetzt den Kontostand, der für
+**diesen** Stop nötig gewesen wäre.
+
+---
+
 ## A37 · Die Vorgaben liefen auseinander, bevor überhaupt jemand handelte — **behoben**
 
 Beim Portieren der Halbziel-Taktik nach MQL5 (`mt5/Experts/GoldHalfScalp.mq5`) fiel auf,

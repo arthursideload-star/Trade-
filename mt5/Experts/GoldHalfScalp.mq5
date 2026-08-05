@@ -471,12 +471,19 @@ double LotsForRisk(const double stop_distance, const double risk_money,
 
    if(lots < vol_min)
    {
+      //--- Say what would be enough, not merely that this is not. The
+      //--- number is exact and it is the only thing the reader can act on:
+      //--- widening the risk is the one wrong answer, and a message that
+      //--- stops at "too small" invites it.
+      const double needed = loss_per_lot * vol_min * 100.0
+                          / RISK_PER_TRADE_PCT;
       why = StringFormat(
          "position rounds to %.4f lots, below the broker minimum of %.2f. "
-         "At %.2f%% risk this account cannot take a %.2f stop. That is an "
-         "account-size constraint, not a signal problem -- do not solve it "
-         "by widening risk. A demo with at least 2,000 USD clears it.",
-         lots, vol_min, RISK_PER_TRADE_PCT, stop_distance);
+         "A %.2f stop at %.2f%% risk needs about %.0f in the account; this "
+         "one has %.0f. That is an account-size constraint, not a signal "
+         "problem -- do not solve it by widening risk, open a larger demo.",
+         lots, vol_min, stop_distance, RISK_PER_TRADE_PCT, needed,
+         AccountInfoDouble(ACCOUNT_EQUITY));
       return 0.0;
    }
    if(lots > vol_max) lots = vol_max;
