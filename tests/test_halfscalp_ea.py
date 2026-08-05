@@ -342,6 +342,18 @@ class TheGuardsThatStopItDoingHarm(unittest.TestCase):
         self.assertRegex(self.raw, r"trade\.Buy\([^)]*s\.stop,\s*s\.take")
         self.assertRegex(self.raw, r"trade\.Sell\([^)]*s\.stop,\s*s\.take")
 
+    def test_the_stop_is_also_written_into_the_order_comment(self):
+        """The only way an R multiple survives the trip home from the VPS.
+
+        MetaTrader's own hosting never sends the EA's journal file back, so
+        the broker's deal history is the whole record -- and it stores what a
+        trade made, not what it risked. Without the stop in the comment,
+        metals/sources/mt5report.py has no denominator and every trade
+        arrives without an R.
+        """
+        self.assertIn('StringFormat("HS sl=%s"', self.raw)
+        self.assertRegex(self.raw, r"trade\.Buy\([^)]*comment\)")
+
     def test_an_adopted_position_without_a_stop_is_closed(self):
         self.assertIn("adopted a position with NO stop loss", self.raw)
 

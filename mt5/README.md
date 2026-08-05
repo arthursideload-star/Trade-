@@ -14,6 +14,15 @@ Sie haben eigene Magic Numbers und eigene Journaldateien, kommen sich also nicht
 **Für den Anfang trotzdem nur einen laufen lassen** — sonst weißt du bei einem Ergebnis
 nicht, welcher es verursacht hat.
 
+## Und wo läuft er?
+
+| Wo | Anleitung |
+|---|---|
+| Auf deinem PC | [PC-SETUP.md](PC-SETUP.md) · [HALFSCALP-SETUP.md](HALFSCALP-SETUP.md) |
+| **MetaTrader-eigenes Hosting** (Reiter *VPS*) | **[MT5-VPS-SETUP.md](MT5-VPS-SETUP.md)** |
+| Gemieteter Linux-Server bei Hostinger | [VPS-SETUP.md](VPS-SETUP.md) |
+| Handy | [MOBILE-SETUP.md](MOBILE-SETUP.md) |
+
 Der Rest dieser Seite beschreibt **`GoldScalpAssistant`**.
 
 ---

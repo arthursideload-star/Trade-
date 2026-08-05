@@ -50,7 +50,7 @@ Prüfen, dass sie vollständig ist:
 wc -l GoldHalfScalp.mq5
 ```
 
-Es muss **1042** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
+Es muss **1054** dastehen. Steht dort weniger, ist die Datei abgeschnitten — nochmal
 kopieren.
 
 > Unter Windows hängt der Editor gern `.txt` an. Die Datei muss auf `.mq5` enden. Notfalls

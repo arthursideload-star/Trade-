@@ -1298,6 +1298,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Zeitrahmen der Datei; M1 ist der Entwurfsfall")
     hs.set_defaults(func=cmd_halfscalp)
 
+    imp = sub.add_parser(
+        "import-history",
+        help="MT5-Kontohistorie ins Journalformat umwandeln (fuer den VPS)")
+    imp.add_argument("file", help="Export aus dem Reiter Kontohistorie")
+    imp.add_argument("--out", default="vps-trades.csv",
+                     help="Zieldatei im Journalformat")
+    imp.add_argument("--symbol", default=None,
+                     help="nur dieses Symbol uebernehmen, z. B. XAUUSD")
+    imp.set_defaults(func=cmd_import_history)
+
     b = sub.add_parser("backtest", help="run the scalping setups over history")
     b.add_argument("symbol", nargs="?", default="XAUUSD")
     b.add_argument("--source", choices=("sim", "live", "file"), default="sim",
@@ -1359,6 +1369,25 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_import_history(args: argparse.Namespace) -> int:
+    """Rebuild the journal from a broker export.
+
+    The path that matters once the bot moves to MetaTrader's own VPS: the
+    EA's CSV stays on the VPS, but the trades are on the broker's server and
+    the local terminal can export them.
+    """
+    from .sources.mt5report import ReportError, convert, render, write
+
+    try:
+        conversion = convert(args.file, symbol_filter=args.symbol)
+    except ReportError as exc:
+        print(f"could not read {args.file}: {exc}", file=sys.stderr)
+        return 1
+    write(conversion, args.out)
+    print(render(conversion, args.out))
+    return 0
 
 
 def cmd_halfscalp(args: argparse.Namespace) -> int:

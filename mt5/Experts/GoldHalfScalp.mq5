@@ -748,9 +748,21 @@ void TryToOpen(const datetime utc, const double atr_value)
    //--- managing exits from OnTick is a liability: one disconnected
    //--- minute and a position sits there with no protection. The broker
    //--- holds both sides from the moment of the fill.
+   //--- The stop goes into the order comment as well as onto the order.
+   //--- Not decoration: on MetaTrader's own VPS the EA's journal file stays
+   //--- on the VPS and cannot be read from the PC, so the only record that
+   //--- comes home is the broker's deal history -- and a deal export stores
+   //--- what a trade MADE, never what it RISKED. Without the stop, every
+   //--- trade arrives without an R multiple and drops straight out of the
+   //--- analysis, which is denominated in R throughout.
+   //--- metals/sources/mt5report.py reads this back. Some brokers truncate
+   //--- or replace comments; then the column is simply empty, which is the
+   //--- correct outcome rather than a guessed denominator.
+   const string comment = StringFormat("HS sl=%s", Num(s.stop, _Digits));
+
    const bool ok = s.is_long
-      ? trade.Buy(lots, _Symbol, 0.0, s.stop, s.take, "HS half-target")
-      : trade.Sell(lots, _Symbol, 0.0, s.stop, s.take, "HS half-target");
+      ? trade.Buy(lots, _Symbol, 0.0, s.stop, s.take, comment)
+      : trade.Sell(lots, _Symbol, 0.0, s.stop, s.take, comment);
 
    if(!ok)
    {
